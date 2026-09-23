@@ -1,0 +1,433 @@
+// Gesture recorder: hold BOOT to record the mic, let go and it loops.
+// Tilt nose down to play forward faster, nose up to play backwards.
+// Roll left for a delay whose tail rings out, roll right to stutter the loop (S3).
+// Builds for the ESP32-S3 SuperMini kit (float, PSRAM, 0.96" OLED, joystick,
+// encoder) and the ESP32-C3 SuperMini (Q15, internal RAM, 0.42" OLED).
+//
+// Controls on the kit (BOOT is inside the case, so the encoder push records):
+//   encoder push    hold to record
+//   encoder turn    change the selected setting
+//   joystick long   menu mode on/off
+//   play mode:      click = tilt on/off; X = pitch (GRAIN); Y = speed when tilt is off
+//   menu mode:      flick up/down = previous/next setting; flick left/right = adjust; click = next setting
+// Controls on the C3 (encoder only, BOOT records):
+//   encoder turn    change the selected setting
+//   encoder hold    menu mode on/off (0.5 s)
+//   encoder tap     menu mode: next setting; play mode: tilt on/off
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "driver/i2c_master.h"
+#include "esp_log.h"
+#include "esp_rom_sys.h"
+#include "pins.h"
+#include "audio.h"
+#include "recorder.h"
+#include "imu.h"
+#include "oled.h"
+#include "ui.h"
+#include "usb.h"
+#include "slots.h"
+#include "fx.h"
+#if HAS_CONTROLS
+#include "input.h"
+#endif
+
+static const char *TAG = "main";
+
+#define TILT_USE_ROLL  0
+#define TILT_SIGN      1.0f
+#define TILT_DEAD_DEG  5.0f
+#define TILT_FULL_DEG  45.0f
+#define ROLL_DEAD_DEG  15.0f    // roll: left = delay, right = stutter (swap with ROLL_SIGN -1)
+#define ROLL_FULL_DEG  45.0f
+#define ROLL_SIGN      1.0f
+
+// ---- settings, editable from the encoder ----
+static void apply_settings(void);
+typedef struct {
+    int   mic_db;        // 0..36
+    int   mode;          // REC_MODE_TAPE / REC_MODE_GRAIN
+    int   pitch_st;      // -24..24 semitones (GRAIN)
+    bool  tilt;          // tilt drives the speed
+    float spd_max;       // 0.25..REC_SPEED_LIMIT
+    float spd_min;       // 0..1, the crawl at flat
+    bool  snap;          // quantise speed to octaves and fifths
+    int   grain_ms;      // 20..200
+    int   vol_pct;       // 0..150
+    int   input;         // AUDIO_IN_MIC / AUDIO_IN_USB
+    int   slot;          // 0..SLOT_N-1
+} settings_t;
+
+static settings_t S = { .mic_db = 12, .mode = REC_MODE_TAPE, .pitch_st = 0, .tilt = true,
+                        .spd_max = 2.0f, .spd_min = 0.05f, .snap = false, .grain_ms = 50, .vol_pct = 100,
+                        .input = AUDIO_IN_MIC, .slot = 0 };
+
+enum { P_MIC, P_MODE, P_PITCH, P_TILT, P_SPDMAX, P_SPDMIN, P_SNAP, P_GRAIN, P_VOL, P_INPUT, P_SLOT, P_SAVE, P_LOAD, P_N };
+static const char *param_name[P_N] = { "Mic gain", "Mode", "Pitch", "Tilt", "Speed max", "Speed min", "Snap", "Grain", "Volume", "Input", "Slot", "Save", "Load" };
+static void slot_save(void);
+static void slot_load(void);
+static void midi_send_setting(int p);
+
+#if HAS_CONTROLS
+static void param_adjust(int p, int d)
+{
+    switch (p) {
+    case P_MIC:    S.mic_db += d; if (S.mic_db < 0) S.mic_db = 0; if (S.mic_db > 36) S.mic_db = 36; break;
+    case P_MODE:   S.mode = d > 0 ? REC_MODE_GRAIN : REC_MODE_TAPE; break;
+    case P_PITCH:  S.pitch_st += d; if (S.pitch_st < -24) S.pitch_st = -24; if (S.pitch_st > 24) S.pitch_st = 24; break;
+    case P_TILT:   S.tilt = d > 0; break;
+    case P_SPDMAX: S.spd_max += 0.25f * d; if (S.spd_max < 0.25f) S.spd_max = 0.25f; if (S.spd_max > REC_SPEED_LIMIT) S.spd_max = REC_SPEED_LIMIT; break;
+    case P_SPDMIN: S.spd_min += 0.05f * d; if (S.spd_min < 0) S.spd_min = 0; if (S.spd_min > 1) S.spd_min = 1; break;
+    case P_SNAP:   S.snap = d > 0; break;
+    case P_GRAIN:  S.grain_ms += 10 * d; if (S.grain_ms < 20) S.grain_ms = 20; if (S.grain_ms > 200) S.grain_ms = 200; break;
+    case P_VOL:    S.vol_pct += 5 * d; if (S.vol_pct < 0) S.vol_pct = 0; if (S.vol_pct > 150) S.vol_pct = 150; break;
+    case P_INPUT:  S.input = d > 0 ? AUDIO_IN_USB : AUDIO_IN_MIC; break;
+    case P_SLOT:   S.slot += d; if (S.slot < 0) S.slot = 0; if (S.slot >= SLOT_N) S.slot = SLOT_N - 1; break;
+    case P_SAVE:   if (d > 0) slot_save(); break;
+    case P_LOAD:   if (d > 0) slot_load(); break;
+    }
+    midi_send_setting(p);
+}
+#endif
+
+static void param_text(int p, char *b, size_t n)
+{
+    switch (p) {
+    case P_MIC:    snprintf(b, n, "%d dB", S.mic_db); break;
+    case P_MODE:   snprintf(b, n, "%s", S.mode == REC_MODE_GRAIN ? "GRAIN" : "TAPE"); break;
+    case P_PITCH:  snprintf(b, n, S.mode == REC_MODE_GRAIN ? "%+d st" : "= speed", S.pitch_st); break;
+    case P_TILT:   snprintf(b, n, "%s", S.tilt ? "ON" : "OFF (joy Y)"); break;
+    case P_SPDMAX: snprintf(b, n, "%.2fx", (double)S.spd_max); break;
+    case P_SPDMIN: snprintf(b, n, "%.2fx", (double)S.spd_min); break;
+    case P_SNAP:   snprintf(b, n, "%s", S.snap ? "ON" : "OFF"); break;
+    case P_GRAIN:  snprintf(b, n, "%d ms", S.grain_ms); break;
+    case P_VOL:    snprintf(b, n, "%d%%", S.vol_pct); break;
+    case P_INPUT:  snprintf(b, n, "%s", S.input == AUDIO_IN_USB ? "USB" : "MIC"); break;
+    case P_SLOT:   { int l = slots_length(S.slot); if (l) snprintf(b, n, "%d %.1fs", S.slot + 1, (double)l / REC_SAMPLE_RATE); else snprintf(b, n, "%d empty", S.slot + 1); } break;
+    case P_SAVE:   snprintf(b, n, "-> slot %d", S.slot + 1); break;
+    case P_LOAD:   snprintf(b, n, "<- slot %d", S.slot + 1); break;
+    }
+}
+
+static void slot_save(void)
+{
+    int n = 0; const int16_t *t = recorder_take(&n);
+    if (!t || n <= 0) { ESP_LOGW(TAG, "nothing to save"); return; }
+    slots_save(S.slot, t, n);
+}
+static void slot_load(void)
+{
+    int max = 0; int16_t *b = recorder_load_begin(&max);
+    if (!b) return;
+    int n = slots_load(S.slot, b, max);
+    recorder_load_end(n);
+}
+
+// ---- MIDI map ----
+// out: CC1 pitch angle, CC2 roll, CC3 speed, CC4 loop position, CC5 joy X, CC6 joy Y, CC7 input level;
+//      note 60 record, note 62 playing. in: CC 20 + setting index (scaled 0..127), note 60 = record hold,
+//      note 61 = load slot, note 63 = save slot.
+static int setting_to_127(int p)
+{
+    switch (p) {
+    case P_MIC:    return S.mic_db * 127 / 36;
+    case P_MODE:   return S.mode == REC_MODE_GRAIN ? 127 : 0;
+    case P_PITCH:  return 64 + S.pitch_st * 2;
+    case P_TILT:   return S.tilt ? 127 : 0;
+    case P_SPDMAX: return (int)(S.spd_max / REC_SPEED_LIMIT * 127.0f);
+    case P_SPDMIN: return (int)(S.spd_min * 127.0f);
+    case P_SNAP:   return S.snap ? 127 : 0;
+    case P_GRAIN:  return (S.grain_ms - 20) * 127 / 180;
+    case P_VOL:    return S.vol_pct * 127 / 150;
+    case P_INPUT:  return S.input == AUDIO_IN_USB ? 127 : 0;
+    case P_SLOT:   return S.slot * 16;
+    default:       return 0;
+    }
+}
+static void setting_from_127(int p, int v)
+{
+    switch (p) {
+    case P_MIC:    S.mic_db = v * 36 / 127; break;
+    case P_MODE:   S.mode = v >= 64 ? REC_MODE_GRAIN : REC_MODE_TAPE; break;
+    case P_PITCH:  S.pitch_st = (v - 64) / 2; if (S.pitch_st < -24) S.pitch_st = -24; if (S.pitch_st > 24) S.pitch_st = 24; break;
+    case P_TILT:   S.tilt = v >= 64; break;
+    case P_SPDMAX: S.spd_max = 0.25f + (REC_SPEED_LIMIT - 0.25f) * v / 127.0f; break;
+    case P_SPDMIN: S.spd_min = v / 127.0f; break;
+    case P_SNAP:   S.snap = v >= 64; break;
+    case P_GRAIN:  S.grain_ms = 20 + v * 180 / 127; break;
+    case P_VOL:    S.vol_pct = v * 150 / 127; break;
+    case P_INPUT:  S.input = v >= 64 ? AUDIO_IN_USB : AUDIO_IN_MIC; break;
+    case P_SLOT:   S.slot = v / 16; if (S.slot >= SLOT_N) S.slot = SLOT_N - 1; break;
+    default: break;
+    }
+}
+static void midi_send_setting(int p) { if (p < P_SAVE) usb_midi_send_cc(20 + p, setting_to_127(p)); }
+#if !HAS_CONTROLS
+static inline void midi_send_setting_unused_guard(void) { (void)midi_send_setting; }
+#endif
+static volatile bool midi_rec_hold;
+static void midi_in(uint8_t st, uint8_t d1, uint8_t d2)
+{
+    if (st == 0xB0 && d1 >= 20 && d1 < 20 + P_SAVE) { setting_from_127(d1 - 20, d2); apply_settings(); }
+    else if (st == 0x90 && d2 > 0) {
+        if (d1 == 60) midi_rec_hold = true;
+        else if (d1 == 61) slot_load();
+        else if (d1 == 63) slot_save();
+    } else if (st == 0x80 || (st == 0x90 && d2 == 0)) {
+        if (d1 == 60) midi_rec_hold = false;
+    }
+}
+
+static void apply_settings(void)
+{
+    audio_set_mic_gain_db(S.mic_db);
+    recorder_set_mode(S.mode);
+    recorder_set_grain_ms(S.grain_ms);
+    recorder_set_volume(S.vol_pct / 100.0f);
+    audio_set_input(S.input);
+}
+
+// -1..1 control (tilt angle over TILT_FULL_DEG, or joystick Y) to a speed.
+static float control_to_speed(float u)
+{
+    float mag = fabsf(u), dead = TILT_DEAD_DEG / TILT_FULL_DEG;
+    if (mag < dead) return S.spd_min;
+    float t = (mag - dead) / (1.0f - dead);
+    if (t > 1.0f) t = 1.0f;
+    float curve = t * t * (1.6f - 0.6f * t);
+    float r = S.spd_min + (S.spd_max - S.spd_min) * curve;
+    return u >= 0.0f ? r : -r;
+}
+
+// Octaves and fifths between 1/4 and 4, nearest in the log domain, keeping the sign.
+static float snap_speed(float s)
+{
+    static const float grid[] = { 0.25f, 0.375f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f, 8.0f };
+    float a = fabsf(s);
+    if (a < 0.02f) return s;
+    float best = grid[0], bd = 1e9f;
+    for (unsigned i = 0; i < sizeof grid / sizeof grid[0]; i++) {
+        float d = fabsf(a - grid[i]) / grid[i];
+        if (d < bd) { bd = d; best = grid[i]; }
+    }
+    return s < 0 ? -best : best;
+}
+
+static void i2c_recover(void)
+{
+    gpio_config_t io = { .pin_bit_mask = (1ULL << PIN_I2C_SDA) | (1ULL << PIN_I2C_SCL),
+                         .mode = GPIO_MODE_INPUT_OUTPUT_OD, .pull_up_en = GPIO_PULLUP_ENABLE };
+    gpio_config(&io);
+    gpio_set_level(PIN_I2C_SDA, 1); gpio_set_level(PIN_I2C_SCL, 1);
+    esp_rom_delay_us(20);
+    for (int i = 0; i < 9 && gpio_get_level(PIN_I2C_SDA) == 0; i++) {
+        gpio_set_level(PIN_I2C_SCL, 0); esp_rom_delay_us(10);
+        gpio_set_level(PIN_I2C_SCL, 1); esp_rom_delay_us(10);
+    }
+    gpio_set_level(PIN_I2C_SDA, 0); esp_rom_delay_us(10);
+    gpio_set_level(PIN_I2C_SCL, 1); esp_rom_delay_us(10);
+    gpio_set_level(PIN_I2C_SDA, 1); esp_rom_delay_us(10);
+    gpio_reset_pin(PIN_I2C_SDA); gpio_reset_pin(PIN_I2C_SCL);
+}
+
+static i2c_master_bus_handle_t i2c_start(void)
+{
+    i2c_recover();
+    i2c_master_bus_handle_t bus = NULL;
+    i2c_master_bus_config_t cfg = {
+        .clk_source = I2C_CLK_SRC_DEFAULT, .i2c_port = I2C_NUM_0,
+        .sda_io_num = PIN_I2C_SDA, .scl_io_num = PIN_I2C_SCL,
+        .glitch_ignore_cnt = 7, .flags.enable_internal_pullup = true,
+    };
+    ESP_ERROR_CHECK(i2c_new_master_bus(&cfg, &bus));
+    return bus;
+}
+
+static const char *state_name(int s)
+{
+    return s == REC_RECORDING ? "REC" : s == REC_PLAYING ? "PLAY" : "IDLE";
+}
+
+static float meter_in, meter_out;                    // decaying peak meters for the screen and MIDI
+static int   clip_hold;
+#if OLED_ENABLE
+static float param_frac(int p) { return p >= P_SAVE ? -1.0f : setting_to_127(p) / 127.0f; }
+#endif
+
+void app_main(void)
+{
+    vTaskDelay(pdMS_TO_TICKS(300));
+    ESP_LOGI(TAG, "gesture recorder on %s: hold BOOT to record, tilt to play", CONFIG_IDF_TARGET);
+
+    gpio_config_t btn = { .pin_bit_mask = 1ULL << PIN_BOOT, .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
+    gpio_config(&btn);
+#if PIN_AMP_SD >= 0
+    gpio_config_t amp = { .pin_bit_mask = 1ULL << PIN_AMP_SD, .mode = GPIO_MODE_OUTPUT };
+    gpio_config(&amp);
+    gpio_set_level(PIN_AMP_SD, 1);
+#endif
+
+    i2c_master_bus_handle_t bus = i2c_start();
+    bool has_imu = imu_init(bus);
+#if !REC_FIXED_POINT
+    fx_init();
+#endif
+#if OLED_ENABLE
+    oled_init(bus);
+#endif
+#if HAS_CONTROLS
+    input_init();
+#endif
+    audio_i2s_init();
+    if (!recorder_init()) { ESP_LOGE(TAG, "halt"); while (1) vTaskDelay(1000); }
+    slots_init();
+    apply_settings();
+    audio_run();
+#if HAS_USB
+    bool keep_console = false;
+#if HAS_CONTROLS
+    keep_console = gpio_get_level(PIN_ENC_SW) == 0;      // encoder held at power-on: stay on the Serial/JTAG console
+#endif
+    if (keep_console) ESP_LOGW(TAG, "encoder held at boot: USB MIDI/audio off, console kept");
+    else { vTaskDelay(pdMS_TO_TICKS(200)); ESP_LOGI(TAG, "switching the USB port to MIDI + audio + CDC console"); usb_start(); }
+#endif
+
+    int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0;
+    bool held = false, menu = false;
+    float roll = 0, pitch = 0, speed_cmd = 1.0f, pitch_ratio = 1.0f, joy_pitch_st = 0;
+#if HAS_CONTROLS
+    input_ev_t in = { 0 };
+#endif
+
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        tick++;
+
+        usb_midi_poll(midi_in);
+        bool down = gpio_get_level(PIN_BOOT) == 0 || midi_rec_hold;
+#if HAS_CONTROLS
+        input_poll(&in);
+#if HAS_JOY
+        down = down || in.pressed;                            // the encoder push records too
+#endif
+#endif
+        held_n = down ? (held_n < 3 ? held_n + 1 : 3) : (held_n > 0 ? held_n - 1 : 0);
+        bool now = held_n == 3 ? true : held_n == 0 ? false : held;
+        if (now != held) { held = now; recorder_set_record(held); }
+
+#if HAS_CONTROLS
+#if HAS_JOY
+        if (in.joy_long) { menu = !menu; ESP_LOGI(TAG, "%s mode", menu ? "menu" : "play"); }
+#else
+        if (in.hold) { menu = !menu; ESP_LOGI(TAG, "%s mode", menu ? "menu" : "play"); }
+        if (in.tap) {
+            if (menu) { param = (param + 1) % P_N; char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%d/%d %s %s", param + 1, P_N, param_name[param], v); }
+            else { S.tilt = !S.tilt; ESP_LOGI(TAG, "tilt %s", S.tilt ? "on" : "off"); }
+        }
+#endif
+        if (in.enc) { param_adjust(param, in.enc); apply_settings(); char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%s %s", param_name[param], v); if (!menu) toast = 1500; }
+        if (menu) {
+            if (in.flick_d || in.joy_click) param = (param + 1) % P_N;
+            if (in.flick_u) param = (param + P_N - 1) % P_N;
+            if (in.flick_r) { param_adjust(param, +1); apply_settings(); }
+            if (in.flick_l) { param_adjust(param, -1); apply_settings(); }
+            joy_pitch_st = 0.0f;
+        } else {
+            if (in.joy_click) { S.tilt = !S.tilt; ESP_LOGI(TAG, "tilt %s", S.tilt ? "on" : "off"); }
+            joy_pitch_st = in.has_joy ? 12.0f * in.jx : 0.0f;
+        }
+#endif
+
+        if (tick % 2 == 0) {                                 // 50 Hz control rate
+            if (has_imu) imu_poll(&roll, &pitch);
+            float u;
+            if (S.tilt && has_imu) u = (TILT_USE_ROLL ? roll : pitch) * TILT_SIGN / TILT_FULL_DEG;
+#if HAS_CONTROLS
+            else if (in.has_joy && !menu) u = in.jy;   // no joystick: has_joy is false
+#endif
+            else u = 1.0f;
+            speed_cmd = (!S.tilt && !has_imu) ? 1.0f : control_to_speed(u);
+#if !REC_FIXED_POINT
+            {   // roll: left of the dead zone feeds the delay, right of it grabs a stutter
+                float r = has_imu ? roll * ROLL_SIGN : 0.0f;
+                float a = fabsf(r) < ROLL_DEAD_DEG ? 0.0f : (fabsf(r) - ROLL_DEAD_DEG) / (ROLL_FULL_DEG - ROLL_DEAD_DEG);
+                if (a > 1.0f) a = 1.0f;
+                fx_set_delay(r < 0 ? a : 0.0f);
+                fx_set_stutter(r > 0 ? a : 0.0f);
+            }
+#endif
+            if (S.snap) speed_cmd = snap_speed(speed_cmd);
+            recorder_set_speed(speed_cmd);
+            float st = (float)S.pitch_st + joy_pitch_st;
+            pitch_ratio = exp2f(st / 12.0f);
+            recorder_set_pitch(pitch_ratio);
+
+            if (usb_connected()) {                            // MIDI out: only what changed
+                static int last[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+                int v[8] = { 0 };
+                v[1] = (int)(64 + pitch * 64.0f / 90.0f); v[2] = (int)(64 + roll * 64.0f / 90.0f);
+                v[3] = (int)(64 + speed_cmd * 63.0f / REC_SPEED_LIMIT); v[4] = (int)(recorder_position() * 127.0f);
+#if HAS_CONTROLS
+                v[5] = (int)(64 + in.jx * 63.0f); v[6] = (int)(64 + in.jy * 63.0f);
+#endif
+                v[7] = (int)(meter_in * 127.0f);
+                for (int c = 1; c < 8; c++) {
+                    if (v[c] < 0) v[c] = 0;
+                    if (v[c] > 127) v[c] = 127;
+                    int d = v[c] - last[c]; if (d < 0) d = -d;
+                    // a deadband of 2 keeps sensor noise off the wire; the ends always get through
+                    if (d >= 2 || (v[c] != last[c] && (v[c] == 0 || v[c] == 127))) { last[c] = v[c]; usb_midi_send_cc(c, v[c]); }
+                }
+            }
+        }
+
+        int s = recorder_state();
+        if (s != last_state) {
+            if (s == REC_RECORDING) usb_midi_send_note(60, 100, true);
+            else if (last_state == REC_RECORDING) usb_midi_send_note(60, 0, false);
+            if (s == REC_PLAYING) usb_midi_send_note(62, 100, true);
+            else if (last_state == REC_PLAYING) usb_midi_send_note(62, 0, false);
+            last_state = s;
+            if (s == REC_PLAYING) ESP_LOGI(TAG, "%s  loop %.2f s", state_name(s), (double)recorder_loop_seconds());
+            else ESP_LOGI(TAG, "%s", state_name(s));
+        }
+        int slot = audio_mic_slot();
+        if (slot != last_slot) { last_slot = slot; ESP_LOGI(TAG, "mic data in the %s slot", slot ? "RIGHT" : "LEFT"); }
+
+        {   // meters decay between reads
+            float ip = audio_in_peak(), op = audio_out_peak();
+            meter_in = ip > meter_in ? ip : meter_in * 0.9f;
+            meter_out = op > meter_out ? op : meter_out * 0.9f;
+            if (audio_in_clips() > 0) clip_hold = 50; else if (clip_hold > 0) clip_hold--;
+        }
+        if (toast > 0) toast -= 10;
+#if OLED_ENABLE
+        if (tick % 5 == 0 && oled_present()) {
+            char pv[24]; param_text(param, pv, sizeof pv);
+            ui_t u = {
+                .state = s, .mode = S.mode, .speed_now = recorder_speed_now(), .speed_cmd = speed_cmd, .spd_max = S.spd_max,
+                .pitch_ratio = pitch_ratio, .tilt_pitch = TILT_USE_ROLL ? roll : pitch, .tilt_roll = TILT_USE_ROLL ? pitch : roll,
+                .has_imu = has_imu, .tilt_on = S.tilt, .pos = recorder_position(), .rec_fill = recorder_record_fill(),
+                .loop_s = recorder_loop_seconds(), .max_s = recorder_max_seconds(), .meter_in = meter_in, .meter_out = meter_out,
+                .clip = clip_hold > 0, .cpu = audio_cpu_percent(), .menu = menu, .param = param, .param_n = P_N,
+                .param_name = param_name[param], .param_val = pv, .param_frac = param_frac(param), .toast_ms = toast,
+            };
+#if HAS_CONTROLS
+            u.has_joy = in.has_joy;
+#endif
+#if !REC_FIXED_POINT
+            u.fx_delay = fx_delay_active(); u.fx_stutter = fx_stutter_active();
+#endif
+            ui_draw(&u);
+        }
+#endif
+        if (tick % 100 == 0)
+            ESP_LOGI(TAG, "%-4s %s speed %+5.2f (cmd %+5.2f) pitch %.2f pos %3d%%  pitch %+5.1f roll %+5.1f  mic %ddB  cpu %2d%%",
+                     state_name(s), S.mode == REC_MODE_GRAIN ? "GRN" : "TAPE", (double)recorder_speed_now(), (double)speed_cmd,
+                     (double)pitch_ratio, (int)(recorder_position() * 100.0f), (double)pitch, (double)roll, S.mic_db, audio_cpu_percent());
+    }
+}

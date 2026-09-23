@@ -1,0 +1,15 @@
+# Shared by both targets. Target-specific settings live in sdkconfig.defaults.esp32s3 / .esp32c3.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Console over the native USB Serial/JTAG on both chips, so `idf.py monitor` just works.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_UART_DEFAULT=n
+
+# 1 ms tick so the 10 ms input poll is exact.
+CONFIG_FREERTOS_HZ=1000
+
+# Sample slots live in a FAT partition (partitions.csv)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_FATFS_LFN_HEAP=y
