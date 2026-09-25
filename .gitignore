@@ -15,8 +15,9 @@ plugin/build-configure.log
 # release images made by tools/release.sh
 dist/
 __pycache__/
-dist/
+# the Pages job puts the images and the video next to the page
 site/firmware/*.bin
+site/media/
 # hardware/gen scratch: router round trip, render stack, KiCad per-user state
 hardware/*/route.dsn
 hardware/*/route.ses

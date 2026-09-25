@@ -46,6 +46,8 @@ jobs:
           pattern: samplooler-*
           merge-multiple: true
           path: site/firmware
+      - name: The showcase video, served next to the page
+        run: mkdir -p site/media && cp hardware/images/samplooler-showcase-full.mp4 site/media/showcase.mp4
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

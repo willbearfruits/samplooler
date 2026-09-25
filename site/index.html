@@ -56,6 +56,8 @@ section p{max-width:44em}
 .tiltfig line,.tiltfig path{stroke:var(--ink)}
 .tiltfig .body{fill:var(--red)}
 .tiltfig text{fill:var(--muted);font:11px var(--mono)}
+.video video{width:100%;height:auto;display:block;border:1px solid var(--rule);background:#000}
+.video p{color:var(--muted);font-size:14px;margin-top:10px}
 /* demo */
 .demo{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:start;border:1px solid var(--rule);background:var(--paper);padding:20px}
 .demo canvas{width:384px;max-width:100%;image-rendering:pixelated;border:8px solid #111;border-radius:4px;background:var(--oled);display:block}
@@ -116,6 +118,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
 <header class="top"><div class="wrap">
   <span class="brand">SAMPLOOLER</span>
   <nav>
+    <a href="#video">Video</a>
     <a href="#try">Try it</a>
     <a href="#versions">Versions</a>
     <a href="#get">Get one</a>
@@ -141,6 +144,14 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     <img src="img/c3-case.png" alt="The Samplooler case, rendered: a small red box with a screen window and a microphone grille." width="900" height="650">
     <img class="screen" src="img/screen-5_play_delay.png" alt="The screen while a loop plays: the waveform, the play head and the speed, 2.30x." width="396" height="204">
   </figure>
+</section>
+
+<section id="video" class="video">
+  <h2>See and hear it</h2>
+  <video controls preload="none" playsinline poster="img/showcase.jpg" width="1280" height="720">
+    <source src="media/showcase.mp4" type="video/mp4">
+  </video>
+  <p>Rendered, not filmed: no Samplooler has been built yet. The sound is the firmware's own playback engine running on a computer, given the same moves the 3D model makes, and the screen is the firmware's own drawing code.</p>
 </section>
 
 <section id="how">
@@ -265,7 +276,8 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
 
 <section id="build">
   <h2>Build one</h2>
-  <p>Four small modules wired to the board: a microphone, an audio output, a tilt sensor, and on the S3 a screen, an encoder and a joystick. No circuit board to order. Expect an evening if you have soldered before.</p>
+  <p>Four small modules wired to the board: a microphone, an audio output, a tilt sensor, and on the S3 a screen, an encoder and a joystick. Wired point to point it takes an evening if you have soldered before.</p>
+  <p>For the S3 there are also two circuit boards: a two-board stack, and a one-board Mini without the joystick. They pass their electrical and design-rule checks but have not been made yet; the files and what to check before ordering are in <a href="https://github.com/willbearfruits/samplooler/tree/main/hardware">hardware/</a>.</p>
   <div class="table"><table>
     <tr><th>Part</th><th>What it does</th><th>Rough price</th></tr>
     <tr><td>ESP32-S3 or C3 SuperMini</td><td>runs everything</td><td>$2 to $7</td></tr>
@@ -288,7 +300,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     <tr><th>Part</th><th>Licence</th></tr>
     <tr><td>firmware, tools</td><td>GPL-3.0</td></tr>
     <tr><td>plugin</td><td>AGPL-3.0 (JUCE)</td></tr>
-    <tr><td>case, docs, images</td><td>CC BY-SA 4.0</td></tr>
+    <tr><td>case, circuit boards, docs, images</td><td>CC BY-SA 4.0</td></tr>
   </table></div>
   <p>Fork it, change it, sell your own. Keep it open and say where it came from. Bugs, questions and builds go in <a href="https://github.com/willbearfruits/samplooler/issues">GitHub issues</a>.</p>
 </section>

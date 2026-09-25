@@ -9,9 +9,10 @@ looper. Hold a button to record the mic, release and it loops; the IMU's pitch a
 speed and direction. One ESP-IDF firmware builds for two chips, plus a JUCE plugin, a browser
 flasher site, an OpenSCAD enclosure and host-side tools.
 
-`docs/BUILD.md` is the current, user-facing build guide. `README.md` predates the rename and the move
-into `firmware/` (it still says `main/`, `gr_midi.py`, "Gesture Recorder"), so trust BUILD.md and the
-code over it. `docs/DESIGN.md` is the design note; `docs/IDEAS.md` is unbuilt ideas only.
+`docs/BUILD.md` is the current, user-facing build guide; `README.md` is the short GitHub landing page
+that points to it and to the project page (https://willbearfruits.github.io/samplooler/, deployed from
+`site/` by CI). Keep the README's Status section honest: nothing has been built or manufactured yet.
+`docs/DESIGN.md` is the design note; `docs/IDEAS.md` is unbuilt ideas only.
 
 ## Commands
 

@@ -276,3 +276,8 @@ because it rewrites every file.
 | `gen/mech.py` | the mechanical model |
 | `gen/schematic.py`, `gen/footprints.py`, `gen/models.py` | writers for `.kicad_sch`, `.kicad_mod`, VRML bodies |
 | `lib/` | the generated symbol, footprint and 3D-model libraries |
+
+## Licence
+
+The board files, renders and fab outputs are CC BY-SA 4.0 ([LICENSE](LICENSE) in this folder). The
+generator in `gen/` is GPL-3.0, like the rest of the tools (the repository's [LICENSE](../LICENSE)).
