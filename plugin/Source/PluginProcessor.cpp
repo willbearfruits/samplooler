@@ -2,9 +2,9 @@
 #include "PluginEditor.h"
 
 static const char* ids[] = { "micGain", "mode", "pitch", "tilt", "speedMax", "speedMin", "snap", "grain", "volume", "input", "slot" };
-const char* GestureRecorderProcessor::paramId (int p) { return ids[p]; }
+const char* SamploolerProcessor::paramId (int p) { return ids[p]; }
 
-juce::AudioProcessorValueTreeState::ParameterLayout GestureRecorderProcessor::layout()
+juce::AudioProcessorValueTreeState::ParameterLayout SamploolerProcessor::layout()
 {
     using namespace juce;
     std::vector<std::unique_ptr<RangedAudioParameter>> p;
@@ -22,7 +22,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout GestureRecorderProcessor::la
     return { p.begin(), p.end() };
 }
 
-GestureRecorderProcessor::GestureRecorderProcessor()
+SamploolerProcessor::SamploolerProcessor()
     : AudioProcessor (BusesProperties().withInput ("Input", juce::AudioChannelSet::stereo(), true)
                                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "state", layout())
@@ -31,19 +31,19 @@ GestureRecorderProcessor::GestureRecorderProcessor()
     startTimer (250);
 }
 
-GestureRecorderProcessor::~GestureRecorderProcessor()
+SamploolerProcessor::~SamploolerProcessor()
 {
     stopTimer();
     if (in) in->stop();
 }
 
-bool GestureRecorderProcessor::isBusesLayoutSupported (const BusesLayout& l) const
+bool SamploolerProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 {
     return l.getMainOutputChannelSet() == juce::AudioChannelSet::stereo()
         || l.getMainOutputChannelSet() == juce::AudioChannelSet::mono();
 }
 
-void GestureRecorderProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi)
+void SamploolerProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiBuffer& midi)
 {
     juce::ignoreUnused (audio);                       // audio passes through: the device's USB return goes on this track
     if (! midi.isEmpty())
@@ -55,7 +55,7 @@ void GestureRecorderProcessor::processBlock (juce::AudioBuffer<float>& audio, ju
 }
 
 // ---- value scaling, matching main.c on the device ----
-int GestureRecorderProcessor::valueTo127 (int p, float v) const
+int SamploolerProcessor::valueTo127 (int p, float v) const
 {
     switch (p)
     {
@@ -74,7 +74,7 @@ int GestureRecorderProcessor::valueTo127 (int p, float v) const
     }
 }
 
-float GestureRecorderProcessor::value127To (int p, int v) const
+float SamploolerProcessor::value127To (int p, int v) const
 {
     switch (p)
     {
@@ -93,42 +93,42 @@ float GestureRecorderProcessor::value127To (int p, int v) const
     }
 }
 
-void GestureRecorderProcessor::parameterChanged (const juce::String& id, float value)
+void SamploolerProcessor::parameterChanged (const juce::String& id, float value)
 {
     if (suppressEcho) return;
     for (int p = 0; p < pCount; ++p)
         if (id == ids[p]) { send (juce::MidiMessage::controllerEvent (1, 20 + p, valueTo127 (p, value))); return; }
 }
 
-void GestureRecorderProcessor::sendAllSettings()
+void SamploolerProcessor::sendAllSettings()
 {
     for (int p = 0; p < pCount; ++p)
         if (auto* par = apvts.getRawParameterValue (ids[p]))
             send (juce::MidiMessage::controllerEvent (1, 20 + p, valueTo127 (p, par->load())));
 }
 
-void GestureRecorderProcessor::send (const juce::MidiMessage& m)
+void SamploolerProcessor::send (const juce::MidiMessage& m)
 {
     if (out) out->sendMessageNow (m);
 }
 
-void GestureRecorderProcessor::setRecordHeld (bool held) { send (held ? juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100) : juce::MidiMessage::noteOff (1, 60)); }
-void GestureRecorderProcessor::loadSlot()             { send (juce::MidiMessage::noteOn (1, 61, (juce::uint8) 100)); }
-void GestureRecorderProcessor::saveSlot()             { send (juce::MidiMessage::noteOn (1, 63, (juce::uint8) 100)); }
-void GestureRecorderProcessor::rebootToDownload()
+void SamploolerProcessor::setRecordHeld (bool held) { send (held ? juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100) : juce::MidiMessage::noteOff (1, 60)); }
+void SamploolerProcessor::loadSlot()             { send (juce::MidiMessage::noteOn (1, 61, (juce::uint8) 100)); }
+void SamploolerProcessor::saveSlot()             { send (juce::MidiMessage::noteOn (1, 63, (juce::uint8) 100)); }
+void SamploolerProcessor::rebootToDownload()
 {
     const juce::uint8 sx[] = { 0x7D, 'R' };
     send (juce::MidiMessage::createSysExMessage (sx, 2));
 }
 
-juce::StringArray GestureRecorderProcessor::recentLog() const
+juce::StringArray SamploolerProcessor::recentLog() const
 {
     const juce::ScopedLock sl (logLock);
     return log;
 }
 
 // ---- from the device ----
-void GestureRecorderProcessor::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
+void SamploolerProcessor::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
 {
     if (m.isController())
     {
@@ -181,7 +181,7 @@ void GestureRecorderProcessor::handleIncomingMidiMessage (juce::MidiInput*, cons
 }
 
 // ---- connection ----
-void GestureRecorderProcessor::timerCallback()
+void SamploolerProcessor::timerCallback()
 {
     // Flush host MIDI to the device.
     {
@@ -193,25 +193,25 @@ void GestureRecorderProcessor::timerCallback()
     if (in && out) { live.connected = true; return; }
 
     for (const auto& dev : juce::MidiInput::getAvailableDevices())
-        if (dev.name.containsIgnoreCase ("Gesture Recorder") && ! in)
+        if (dev.name.containsIgnoreCase ("Samplooler") && ! in)
             if ((in = juce::MidiInput::openDevice (dev.identifier, this))) { in->start(); deviceName_ = dev.name; }
     for (const auto& dev : juce::MidiOutput::getAvailableDevices())
-        if (dev.name.containsIgnoreCase ("Gesture Recorder") && ! out)
+        if (dev.name.containsIgnoreCase ("Samplooler") && ! out)
             out = juce::MidiOutput::openDevice (dev.identifier);
 
     if (in && out) { live.connected = true; sendAllSettings(); }
     else live.connected = false;
 }
 
-void GestureRecorderProcessor::getStateInformation (juce::MemoryBlock& dest)
+void SamploolerProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
     if (auto xml = apvts.copyState().createXml()) copyXmlToBinary (*xml, dest);
 }
-void GestureRecorderProcessor::setStateInformation (const void* data, int size)
+void SamploolerProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size)) apvts.replaceState (juce::ValueTree::fromXml (*xml));
 }
 
-juce::AudioProcessorEditor* GestureRecorderProcessor::createEditor() { return new GestureRecorderEditor (*this); }
+juce::AudioProcessorEditor* SamploolerProcessor::createEditor() { return new SamploolerEditor (*this); }
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new GestureRecorderProcessor(); }
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new SamploolerProcessor(); }

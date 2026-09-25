@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Samplooler</title>
+<meta name="description" content="A small open-source looper you play by tilting it. ESP32-S3 or ESP32-C3, a mic, a DAC and a tilt sensor. Flash it from the browser, build it from the guide.">
+<meta property="og:title" content="Samplooler">
+<meta property="og:description" content="Hold to record. Let go and it loops. Tilt it to change speed and direction.">
+<meta property="og:image" content="img/c3-case.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='5' width='12' height='7' rx='1.5' fill='%23c7412b' transform='rotate(-15 8 8)'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+:root{
+  --bg:#e9e8e2; --paper:#f3f2ed; --ink:#151412; --muted:#5f5e57; --rule:#151412; --soft:#cfcdc4;
+  --red:#c7412b; --oled:#05070c;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#141412; --paper:#1c1c19; --ink:#e7e5dc; --muted:#a09e94; --rule:#e7e5dc; --soft:#3a3934; --red:#e0664f; }
+}
+:root[data-theme="dark"]{ --bg:#141412; --paper:#1c1c19; --ink:#e7e5dc; --muted:#a09e94; --rule:#e7e5dc; --soft:#3a3934; --red:#e0664f; }
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans)}
+a{color:inherit;text-decoration-color:var(--red);text-underline-offset:3px}
+a:hover{color:var(--red)}
+img{max-width:100%;height:auto;display:block}
+.wrap{max-width:980px;margin:0 auto;padding:0 16px}
+header.top{border-bottom:1px solid var(--rule);font-family:var(--mono);font-size:13px}
+header.top .wrap{display:flex;gap:18px;align-items:center;justify-content:space-between;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+header.top nav{display:flex;gap:14px;flex-wrap:wrap}
+header.top nav a{text-decoration:none}
+.brand{font-weight:600;letter-spacing:.12em}
+.hero{display:grid;grid-template-columns:1.1fr 1fr;gap:32px;align-items:center;padding:48px 0 24px}
+.hero h1{font-family:var(--mono);font-weight:600;font-size:clamp(34px,6.5vw,64px);letter-spacing:.02em;line-height:1;margin:0 0 14px}
+.hero p.lead{font-size:20px;margin:0 0 10px;max-width:30em}
+.hero p.small{color:var(--muted);margin:0 0 20px;font-size:15px}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.btn{font-family:var(--mono);font-size:14px;border:1px solid var(--rule);padding:9px 14px;text-decoration:none;background:var(--paper);color:var(--ink);cursor:pointer;display:inline-block}
+.btn.solid{background:var(--ink);color:var(--bg)}
+.btn:hover{background:var(--red);border-color:var(--red);color:#fff}
+.hero figure{margin:0;position:relative}
+.hero figure .screen{position:absolute;right:-6px;bottom:-14px;width:46%;border:6px solid #111;border-radius:3px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+h2{font-family:var(--mono);font-size:13px;letter-spacing:.2em;text-transform:uppercase;background:var(--ink);color:var(--bg);display:inline-block;padding:3px 10px;margin:56px 0 18px}
+h3{font-family:var(--mono);font-size:15px;margin:22px 0 8px}
+section p{max-width:44em}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--rule)}
+.steps > div{padding:16px;border-right:1px solid var(--rule)}
+.steps > div:last-child{border-right:0}
+.steps b{font-family:var(--mono);display:block;margin-bottom:6px}
+.steps svg{width:100%;height:92px;display:block;margin-bottom:8px}
+.tiltfig line,.tiltfig path{stroke:var(--ink)}
+.tiltfig .body{fill:var(--red)}
+.tiltfig text{fill:var(--muted);font:11px var(--mono)}
+/* demo */
+.demo{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:start;border:1px solid var(--rule);background:var(--paper);padding:20px}
+.demo canvas{width:384px;max-width:100%;image-rendering:pixelated;border:8px solid #111;border-radius:4px;background:var(--oled);display:block}
+.demo .ctl{display:flex;flex-direction:column;gap:14px;min-width:0}
+#rec{font-family:var(--mono);font-size:16px;padding:18px;border:2px solid var(--ink);background:var(--bg);color:var(--ink);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none}
+#rec.on{background:var(--red);border-color:var(--red);color:#fff}
+.tiltrow{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}
+.tiltrow label{font-family:var(--mono);font-size:13px;color:var(--muted);display:flex;justify-content:space-between}
+input[type=range]{width:100%;accent-color:var(--red)}
+#box{width:64px;height:28px;background:var(--red);border-radius:4px;transition:transform .08s linear;position:relative}
+#box::after{content:"";position:absolute;right:8px;top:8px;width:12px;height:8px;background:var(--oled)}
+.boxwrap{width:84px;height:64px;display:grid;place-items:center}
+.demo .row{display:flex;gap:10px;flex-wrap:wrap}
+#demo-note{font-size:14px;color:var(--muted);min-height:1.4em;margin:0}
+/* tables */
+.table{overflow-x:auto;border:1px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:15px;background:var(--paper)}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--soft);vertical-align:top}
+th{font-family:var(--mono);font-size:13px;font-weight:600;border-bottom:1px solid var(--rule)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-family:var(--mono);font-size:13px;color:var(--muted);white-space:nowrap}
+/* get one */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--rule)}
+.cards > div{padding:18px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:8px;background:var(--paper)}
+.cards > div:last-child{border-right:0}
+.cards h3{margin:0}
+.cards .price{font-family:var(--mono);color:var(--muted);font-size:14px}
+.cards p{margin:0;font-size:15px;flex:1}
+.soon{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--red)}
+.flash{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+.flash ol{margin:0;padding-left:1.3em}
+.flash li{margin-bottom:8px}
+.flashbox{border:1px solid var(--rule);background:var(--paper);padding:18px}
+esp-web-install-button button,.flashbox .btn{width:100%}
+.flashbox p{font-size:14px;color:var(--muted);margin:10px 0 0}
+.gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.gallery figure{margin:0}
+.gallery img.oled{border:5px solid #111;border-radius:3px}
+.gallery figcaption{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px}
+code,kbd{font-family:var(--mono);font-size:.9em}
+pre{font-family:var(--mono);font-size:13px;background:var(--paper);border:1px solid var(--soft);padding:12px;overflow-x:auto}
+footer{border-top:1px solid var(--rule);margin-top:64px;font-family:var(--mono);font-size:13px;color:var(--muted)}
+footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:16px;padding-bottom:32px}
+@media (max-width:760px){
+  .hero,.flash{grid-template-columns:1fr}
+  .hero{padding-top:28px}
+  .hero figure{margin-bottom:18px}
+  .steps,.cards{grid-template-columns:1fr}
+  .steps > div,.cards > div{border-right:0;border-bottom:1px solid var(--rule)}
+  .steps > div:last-child,.cards > div:last-child{border-bottom:0}
+  .demo{grid-template-columns:1fr;padding:14px}
+  .gallery{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <span class="brand">SAMPLOOLER</span>
+  <nav>
+    <a href="#try">Try it</a>
+    <a href="#versions">Versions</a>
+    <a href="#get">Get one</a>
+    <a href="#flash">Flash</a>
+    <a href="#build">Build</a>
+    <a href="https://github.com/willbearfruits/samplooler">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+
+<section class="hero">
+  <div>
+    <h1>SAMPLOOLER</h1>
+    <p class="lead">A small looper you play by tilting it.</p>
+    <p class="small">Hold the button and make a sound. Let go and it loops. Tip the box forward and the loop runs faster; tip it back and it runs backwards. Open source, about $15 in parts, flashes from this page.</p>
+    <div class="actions">
+      <a class="btn solid" href="#try">Try it in the browser</a>
+      <a class="btn" href="#build">Build one</a>
+    </div>
+  </div>
+  <figure>
+    <img src="img/c3-case.png" alt="The Samplooler case, rendered: a small red box with a screen window and a microphone grille." width="900" height="650">
+    <img class="screen" src="img/screen-5_play_delay.png" alt="The screen while a loop plays: the waveform, the play head and the speed, 2.30x." width="396" height="204">
+  </figure>
+</section>
+
+<section id="how">
+  <h2>How it works</h2>
+  <div class="steps">
+    <div>
+      <svg class="tiltfig" viewBox="0 0 200 92" aria-hidden="true"><rect class="body" x="60" y="36" width="80" height="24" rx="4"/><circle cx="100" cy="22" r="8" fill="none" stroke-width="2" style="stroke:var(--ink)"/><text x="100" y="86" text-anchor="middle">hold</text></svg>
+      <b>1. Hold</b>Hold the button and talk, sing, beatbox or put it next to a speaker. Up to 20 seconds.
+    </div>
+    <div>
+      <svg class="tiltfig" viewBox="0 0 200 92" aria-hidden="true"><rect class="body" x="60" y="36" width="80" height="24" rx="4"/><path d="M40 48 a60 20 0 1 0 120 0" fill="none" stroke-width="2" stroke-dasharray="4 4"/><text x="100" y="86" text-anchor="middle">let go</text></svg>
+      <b>2. Let go</b>It loops what you recorded. Flat on the table it crawls forward very slowly, so the sound never stops.
+    </div>
+    <div>
+      <svg class="tiltfig" viewBox="0 0 200 92" aria-hidden="true"><g transform="rotate(20 60 50)"><rect class="body" x="30" y="40" width="60" height="18" rx="3"/></g><text x="60" y="86" text-anchor="middle">faster</text><g transform="rotate(-20 142 50)"><rect class="body" x="112" y="40" width="60" height="18" rx="3"/></g><text x="142" y="86" text-anchor="middle">backwards</text></svg>
+      <b>3. Tilt</b>Nose down plays forward, faster the further you tip it. Nose up plays backwards. Roll it sideways for delay or stutter.
+    </div>
+  </div>
+</section>
+
+<section id="try">
+  <h2>Try it here</h2>
+  <p>The same playback engine as the firmware, running in your browser. Hold the button to record from your microphone, or load the demo loop. On a phone, turn on tilt and tip the phone. On a computer, drag the slider.</p>
+  <div class="demo">
+    <canvas id="screen" width="384" height="192" aria-label="A simulated Samplooler screen"></canvas>
+    <div class="ctl">
+      <button id="rec">Hold to record <span aria-hidden="true">(or Space)</span></button>
+      <div class="row">
+        <button class="btn" id="demo">Load a demo loop</button>
+        <button class="btn" id="sensor">Use the phone's tilt</button>
+        <button class="btn" id="flip" title="If tipping forward plays backwards">Flip direction</button>
+      </div>
+      <div class="tiltrow">
+        <div>
+          <label for="tilt"><span>nose up: backwards</span><span>nose down: forward</span></label>
+          <input id="tilt" type="range" min="-60" max="60" step="1" value="0" style="direction:rtl">
+        </div>
+        <div class="boxwrap"><div id="box"></div></div>
+      </div>
+      <p id="demo-note">Headphones stop the loop from feeding back into the mic.</p>
+    </div>
+  </div>
+</section>
+
+<section id="versions">
+  <h2>Two versions</h2>
+  <p>Both use the same microphone, audio output and tilt sensor. The S3 version is the full one. The C3 version is smaller and cheaper, with a shorter take.</p>
+  <div class="table"><table>
+    <tr><th></th><th>Samplooler (ESP32-S3)</th><th>Samplooler mini (ESP32-C3)</th></tr>
+    <tr><td>Board</td><td>ESP32-S3 SuperMini</td><td>ESP32-C3 SuperMini with 0.42" screen</td></tr>
+    <tr><td>Take</td><td>20 s at 32 kHz</td><td>about 5 to 7 s at 16 kHz</td></tr>
+    <tr><td>Screen</td><td>0.96" 128x64 two-colour</td><td>0.42" 72x40, on the board</td></tr>
+    <tr><td>Controls</td><td>button, encoder, joystick</td><td>button, optional encoder</td></tr>
+    <tr><td>Modes</td><td>TAPE (speed and pitch together) and GRAIN (pitch kept, freeze, scrub)</td><td>TAPE</td></tr>
+    <tr><td>Effects</td><td>delay and stutter on the roll axis</td><td>none</td></tr>
+    <tr><td>USB</td><td>MIDI port, USB sound card, plugin</td><td>power and flashing only</td></tr>
+    <tr><td>Sample slots</td><td>8, kept when off</td><td>8, kept when off</td></tr>
+    <tr><td>Parts, roughly</td><td>$15 to $25</td><td>$10 to $17</td></tr>
+  </table></div>
+  <p style="font-size:14px;color:var(--muted)">The S3 version runs on a built <a href="https://github.com/willbearfruits/esp32-s3-supermini-kit">ESP32-S3 SuperMini kit</a> without rewiring.</p>
+</section>
+
+<section id="screens">
+  <h2>Screens</h2>
+  <div class="gallery">
+    <figure><img class="oled" src="img/screen-2_idle.png" alt="Ready screen" loading="lazy"><figcaption>ready</figcaption></figure>
+    <figure><img class="oled" src="img/screen-4_recording.png" alt="Recording screen" loading="lazy"><figcaption>recording</figcaption></figure>
+    <figure><img class="oled" src="img/screen-6_grain_stutter.png" alt="Loop playing backwards in GRAIN mode with stutter" loading="lazy"><figcaption>backwards, GRAIN, stutter</figcaption></figure>
+    <figure><img class="oled" src="img/screen-9_menu_save.png" alt="Menu: save to slot 3" loading="lazy"><figcaption>menu, save to a slot</figcaption></figure>
+    <figure><img class="oled" src="img/c3-screen-5_play_delay.png" alt="C3 screen while a loop plays" loading="lazy"><figcaption>mini, looping</figcaption></figure>
+    <figure><img src="img/c3-case-open.png" alt="The case with the lid lifted: DAC, tilt sensor and board in their cradles" loading="lazy"><figcaption>mini case, lid off</figcaption></figure>
+  </div>
+  <p style="font-size:14px;color:var(--muted)">Screens are rendered from the firmware's own drawing code on a computer. The case is a render; it has not been printed yet.</p>
+</section>
+
+<section id="get">
+  <h2>Get one</h2>
+  <div class="cards">
+    <div>
+      <span class="soon">coming soon</span>
+      <h3>Prebuilt</h3>
+      <p>Assembled, flashed and tested, in a printed case. Plug in headphones or an amp and play.</p>
+      <span class="price">price to be announced</span>
+    </div>
+    <div>
+      <span class="soon">coming soon</span>
+      <h3>Kit</h3>
+      <p>All the boards, wire, screws and a printed case. You solder about 20 wires. The board comes flashed.</p>
+      <span class="price">price to be announced</span>
+    </div>
+    <div>
+      <span class="soon" style="color:var(--muted)">now</span>
+      <h3>Build from scratch</h3>
+      <p>Order the parts yourself, print the case, flash from this page. Everything you need is in the repository.</p>
+      <a class="btn" href="https://github.com/willbearfruits/samplooler/blob/main/docs/BUILD.md">Build guide</a>
+    </div>
+  </div>
+  <p style="font-size:14px;color:var(--muted)">To hear when kits are ready, watch the <a href="https://github.com/willbearfruits/samplooler">GitHub repository</a> (Watch, then Custom, then Releases).</p>
+</section>
+
+<section id="flash">
+  <h2>Flash from the browser</h2>
+  <div class="flash">
+    <div>
+      <ol>
+        <li>Use Chrome or Edge on a computer. Phones cannot do this.</li>
+        <li><b>S3:</b> hold the BOOT button on the board while you plug it in, then let go. The running firmware uses USB for MIDI and audio, so the browser only finds the board this way.<br><b>C3:</b> just plug it in.</li>
+        <li>Press the button on the right and pick the port. The page works out which chip it is.</li>
+        <li>When it says done, unplug and plug in again. On the S3 it may say the device was lost; that is normal.</li>
+      </ol>
+    </div>
+    <div class="flashbox">
+      <esp-web-install-button manifest="firmware/manifest.json">
+        <button slot="activate" class="btn solid">Connect and flash</button>
+        <span slot="unsupported">This browser cannot flash boards. Use Chrome or Edge on a computer, or flash the <a href="https://github.com/willbearfruits/samplooler/releases">release files</a> with esptool.</span>
+        <span slot="not-allowed">Flashing needs a secure page (https).</span>
+      </esp-web-install-button>
+      <p>Flashing erases the sample slots. The images are also on the <a href="https://github.com/willbearfruits/samplooler/releases">releases page</a>, one file per chip, written at offset 0x0.</p>
+    </div>
+  </div>
+</section>
+
+<section id="build">
+  <h2>Build one</h2>
+  <p>Four small modules wired to the board: a microphone, an audio output, a tilt sensor, and on the S3 a screen, an encoder and a joystick. No circuit board to order. Expect an evening if you have soldered before.</p>
+  <div class="table"><table>
+    <tr><th>Part</th><th>What it does</th><th>Rough price</th></tr>
+    <tr><td>ESP32-S3 or C3 SuperMini</td><td>runs everything</td><td>$2 to $7</td></tr>
+    <tr><td>INMP441</td><td>microphone</td><td>$1.50 to $3</td></tr>
+    <tr><td>PCM5102A module</td><td>line out on a 3.5 mm jack</td><td>$2.50 to $5</td></tr>
+    <tr><td>MPU6050 (GY-521)</td><td>tilt</td><td>$1 to $2.50</td></tr>
+    <tr><td>S3 only</td><td>0.96" OLED, EC11 encoder, joystick</td><td>about $4</td></tr>
+  </table></div>
+  <p>The output is line level: use headphones through a small amp, powered speakers, or a mixer. The full parts list, wiring, case printing and a first-power-on check are in the <a href="https://github.com/willbearfruits/samplooler/blob/main/docs/BUILD.md">build guide</a>.</p>
+</section>
+
+<section id="computer">
+  <h2>With a computer (S3)</h2>
+  <p>Plugged into a computer, the S3 shows up as a MIDI port and a sound card. The loop goes straight into a DAW track, and anything the DAW plays can be recorded into the box. Every setting can be changed over MIDI. The plugin (VST3 and standalone) shows the tilt, the speed and the log, and has buttons for record, save and load.</p>
+</section>
+
+<section id="source">
+  <h2>Open source</h2>
+  <div class="table"><table>
+    <tr><th>Part</th><th>Licence</th></tr>
+    <tr><td>firmware, tools</td><td>GPL-3.0</td></tr>
+    <tr><td>plugin</td><td>AGPL-3.0 (JUCE)</td></tr>
+    <tr><td>case, docs, images</td><td>CC BY-SA 4.0</td></tr>
+  </table></div>
+  <p>Fork it, change it, sell your own. Keep it open and say where it came from. Bugs, questions and builds go in <a href="https://github.com/willbearfruits/samplooler/issues">GitHub issues</a>.</p>
+</section>
+
+</main>
+
+<footer><div class="wrap">
+  <span>Samplooler. Made in Haifa by Serious S.H.I.T.</span>
+  <span><a href="https://github.com/willbearfruits/samplooler">source</a> · <a href="https://www.patreon.com/Seriousshit">patreon</a></span>
+</div></footer>
+
+<script src="demo.js"></script>
+</body>
+</html>

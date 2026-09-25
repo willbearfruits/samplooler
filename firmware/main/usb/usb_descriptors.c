@@ -23,12 +23,12 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) { (void)index; ret
 static const char *strings[] = {
     (const char[]){ 0x09, 0x04 },
     "willbearfruits",            // 1
-    "Gesture Recorder",          // 2
+    "Samplooler",          // 2
     "GR-0001",                   // 3
-    "Gesture Recorder MIDI",     // 4
-    "Gesture Recorder audio",    // 5
-    "Gesture Recorder in",       // 6 speaker (host -> device)
-    "Gesture Recorder out",      // 7 mic (device -> host)
+    "Samplooler MIDI",     // 4
+    "Samplooler audio",    // 5
+    "Samplooler in",       // 6 speaker (host -> device)
+    "Samplooler out",      // 7 mic (device -> host)
 };
 static uint16_t desc_str[32];
 uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)

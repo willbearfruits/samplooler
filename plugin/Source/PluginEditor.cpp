@@ -1,6 +1,6 @@
 #include "PluginEditor.h"
 
-GestureRecorderEditor::GestureRecorderEditor (GestureRecorderProcessor& p)
+SamploolerEditor::SamploolerEditor (SamploolerProcessor& p)
     : AudioProcessorEditor (p), proc (p)
 {
     addAndMakeVisible (params);
@@ -22,7 +22,7 @@ GestureRecorderEditor::GestureRecorderEditor (GestureRecorderProcessor& p)
     startTimerHz (20);
 }
 
-void GestureRecorderEditor::resized()
+void SamploolerEditor::resized()
 {
     auto r = getLocalBounds().reduced (12);
     statusArea = r.removeFromTop (180);
@@ -38,7 +38,7 @@ void GestureRecorderEditor::resized()
     params.setBounds (r);
 }
 
-void GestureRecorderEditor::paint (juce::Graphics& g)
+void SamploolerEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff1c2124));
     auto a = statusArea.toFloat();
@@ -47,7 +47,7 @@ void GestureRecorderEditor::paint (juce::Graphics& g)
     // Header line
     g.setColour (juce::Colours::white);
     g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
-    juce::String head = L.connected ? "Connected: " + proc.deviceName() : "Looking for the Gesture Recorder on USB MIDI...";
+    juce::String head = L.connected ? "Connected: " + proc.deviceName() : "Looking for the Samplooler on USB MIDI...";
     g.drawText (head, a.removeFromTop (22.0f), juce::Justification::centredLeft);
 
     // State chip

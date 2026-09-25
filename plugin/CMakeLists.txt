@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(GestureRecorderPlugin VERSION 0.1.0 LANGUAGES C CXX)
+project(SamploolerPlugin VERSION 0.1.0 LANGUAGES C CXX)
 
 # JUCE: pass -DFETCHCONTENT_SOURCE_DIR_JUCE=<checkout> to use a local copy (8.0.13 is on disk
 # at ~/Projects/hikim/build/_deps/juce-src), otherwise it is fetched.
@@ -10,11 +10,11 @@ FetchContent_Declare(JUCE
     GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(JUCE)
 
-juce_add_plugin(GestureRecorder
-    PRODUCT_NAME "Gesture Recorder"
+juce_add_plugin(Samplooler
+    PRODUCT_NAME "Samplooler"
     COMPANY_NAME "willbearfruits"
     PLUGIN_MANUFACTURER_CODE Wbfr
-    PLUGIN_CODE Gstr
+    PLUGIN_CODE Smpl
     FORMATS VST3 Standalone
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT TRUE
@@ -23,21 +23,21 @@ juce_add_plugin(GestureRecorder
     VST3_CATEGORIES Fx Tools
     COPY_PLUGIN_AFTER_BUILD TRUE)
 
-target_sources(GestureRecorder PRIVATE
+target_sources(Samplooler PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
 
-target_compile_features(GestureRecorder PRIVATE cxx_std_17)
-target_compile_definitions(GestureRecorder PUBLIC
+target_compile_features(Samplooler PRIVATE cxx_std_17)
+target_compile_definitions(Samplooler PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_compile_definitions(GestureRecorder PUBLIC JUCE_ALSA=1 JUCE_JACK=1)
+    target_compile_definitions(Samplooler PUBLIC JUCE_ALSA=1 JUCE_JACK=1)
 endif()
 
-target_link_libraries(GestureRecorder PRIVATE
+target_link_libraries(Samplooler PRIVATE
     juce::juce_audio_utils
     juce::juce_audio_devices
     juce::juce_audio_processors

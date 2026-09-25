@@ -8,7 +8,7 @@
 set -e
 cd "$(dirname "$0")/.."
 . "${IDF_PATH:-$HOME/esp/esp-idf}/export.sh" >/dev/null 2>&1
-if python3 tools/gr_midi.py reboot 2>/dev/null; then sleep 3; fi
+if python3 tools/sl_midi.py reboot 2>/dev/null; then sleep 3; fi
 PORT="${PORT:-$(ls /dev/serial/by-id/*Espressif* /dev/ttyACM0 2>/dev/null | head -1)}"
-cd build
+cd firmware/build
 esptool.py --chip esp32s3 -p "$PORT" -b 460800 --before default_reset --after watchdog_reset write_flash "@flash_args"

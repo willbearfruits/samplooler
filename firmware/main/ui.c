@@ -117,8 +117,7 @@ static bool splash(void)
     if (fr >= N) return false;
     oled_clear();
     int reveal = fr * 6;                                               // columns unveiled so far
-    oled_text2(22, 2, "GESTURE");
-    oled_text2(16, 22, "RECORDER");
+    oled_text2(4, 1, "SAMPLOOLER");                                   // 10 x 12 px, in the yellow band
     oled_rect(reveal, 0, OLED_W - reveal, 40, false);                 // wipe from the left
     if (reveal < OLED_W) oled_rect(reveal, 0, 1, 40, (fr & 1));
     sine_ph += 0.35f;
@@ -299,12 +298,14 @@ void ui_draw(const ui_t *u)
     else if (u->state == REC_PLAYING) snprintf(line, sizeof line, "LOOP %.1fs", (double)u->loop_s);
     else snprintf(line, sizeof line, "HOLD BOOT");
     oled_text(0, 0, line);
-    meter(OLED_W - 32, 0, 32, 7, u->meter_in, &peak_hold, u->clip);
+    meter(OLED_W - 16, 0, 16, 7, u->meter_in, &peak_hold, u->clip);    // 9 header chars (54 px) fit beside it
 
     if (u->menu) {
-        snprintf(line, sizeof line, "%d/%d %s", u->param + 1, u->param_n, u->param_name);
-        oled_text(0, 10, line);
+        oled_text(0, 10, u->param_name);                                // 12 chars across, the counter goes below
         oled_text(0, 20, u->param_val);
+        snprintf(line, sizeof line, "%d/%d", u->param + 1, u->param_n);
+        int cw = 6 * (int)strlen(line);
+        if (6 * (int)strlen(u->param_val) + 6 + cw <= OLED_W) oled_text(OLED_W - cw, 20, line);
         if (u->param_frac >= 0) slider(2, 31, OLED_W - 4, u->param_frac);
         oled_flush();
         return;

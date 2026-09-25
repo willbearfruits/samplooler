@@ -1,4 +1,4 @@
-// Gesture Recorder plugin: a window onto the box. The DSP runs on the device; this
+// Samplooler plugin: a window onto the box. The DSP runs on the device; this
 // plugin mirrors its settings as automatable parameters, talks to it over its USB MIDI
 // port, and passes the DAW's audio through untouched (route the device's USB audio
 // into this track and its output back out to the device to sample from the DAW).
@@ -7,14 +7,14 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <atomic>
 
-class GestureRecorderProcessor : public juce::AudioProcessor,
+class SamploolerProcessor : public juce::AudioProcessor,
                                  private juce::MidiInputCallback,
                                  private juce::AudioProcessorValueTreeState::Listener,
                                  private juce::Timer
 {
 public:
-    GestureRecorderProcessor();
-    ~GestureRecorderProcessor() override;
+    SamploolerProcessor();
+    ~SamploolerProcessor() override;
 
     // Settings as the device numbers them: CC 20 + index.
     enum Param { pMic, pMode, pPitch, pTilt, pSpdMax, pSpdMin, pSnap, pGrain, pVol, pInput, pSlot, pCount };
@@ -41,7 +41,7 @@ public:
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-    const juce::String getName() const override { return "Gesture Recorder"; }
+    const juce::String getName() const override { return "Samplooler"; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return true; }
     double getTailLengthSeconds() const override { return 0; }
@@ -72,5 +72,5 @@ private:
     juce::MidiBuffer toDevice;              // host MIDI arriving in processBlock, forwarded on the timer
     juce::CriticalSection toDeviceLock;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GestureRecorderProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SamploolerProcessor)
 };

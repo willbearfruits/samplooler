@@ -1,0 +1,9 @@
+{
+  "name": "Samplooler",
+  "version": "0.1.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    { "chipFamily": "ESP32-S3", "parts": [{ "path": "samplooler-esp32s3.bin", "offset": 0 }] },
+    { "chipFamily": "ESP32-C3", "parts": [{ "path": "samplooler-esp32c3.bin", "offset": 0 }] }
+  ]
+}

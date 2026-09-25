@@ -1,8 +1,8 @@
-// Gesture recorder enclosure: ESP32-C3 SuperMini (OLED variant), INMP441 round mic,
+// Samplooler enclosure: ESP32-C3 SuperMini (OLED variant), INMP441 round mic,
 // GY-PCM5102 DAC, GY-521 IMU. Two parts, printed face down, M2 self-tapping screws.
 //
-//   openscad -D 'part="shell"' -o out/shell.stl gesture_recorder.scad
-//   openscad -D 'part="lid"'   -o out/lid.stl   gesture_recorder.scad
+//   openscad -D 'part="shell"' -o out/shell.stl samplooler.scad
+//   openscad -D 'part="lid"'   -o out/lid.stl   samplooler.scad
 //   openscad -D 'part="assembly"' ...            (preview with the modules in place)
 //
 // Every module dimension is a parameter below, with its source. The ones marked
@@ -188,10 +188,13 @@ module modules() {
     }
 }
 
+lid_lift = 6;      // previews only: gap above the shell in the assembly view
 if (part == "shell") shell();
 if (part == "lid") { translate([0, 0, lid_t]) mirror([0, 0, 1]) lid(); }     // face down for printing
 if (part == "plunger") plunger();
-if (part == "assembly") { shell(); modules(); translate([0, 0, shell_h + 6]) lid(); }
+case_color = "";   // previews only: "" keeps the viewer's default, e.g. -D 'case_color="#c7412b"'
+module tint() { if (case_color == "") children(); else color(case_color) children(); }
+if (part == "assembly") { tint() shell(); modules(); translate([0, 0, shell_h + lid_lift]) tint() lid(); }
 if (part == "top") { shell(); modules(); }
 if (part == "lidtop") lid();
 if (part == "plate") { shell(); translate([out_l + 10, 0, lid_t]) mirror([0, 0, 1]) lid(); translate([-12, 10, 0]) plunger(); }

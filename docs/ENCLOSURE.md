@@ -3,7 +3,7 @@
 OpenSCAD, two printed parts plus a button plunger, M2 self-tapping screws into
 printed posts. `enclosure/render.sh` writes `out/shell.stl`, `out/lid.stl`,
 `out/plunger.stl` and two preview PNGs. Every module dimension is a Customizer
-parameter at the top of `enclosure/gesture_recorder.scad`.
+parameter at the top of `enclosure/samplooler.scad`.
 
 Outer size 74 x 60 x 16 mm (cavity 70 x 56 x 12, 2 mm walls, 2 mm floor and lid).
 The IMU lies flat on the floor with its long edge along the box, so "nose up"

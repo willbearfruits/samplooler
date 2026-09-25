@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Talk to the Gesture Recorder over its raw MIDI port (no extra Python packages).
+"""Talk to the Samplooler over its raw MIDI port (no extra Python packages).
 
-  gr_midi.py log            print the device log (SysEx 7D 4C lines) and other MIDI it sends
-  gr_midi.py reboot         ask the device to reboot into download mode (then run idf.py flash)
-  gr_midi.py cc N V         send controller N value V
-  gr_midi.py note N [on|off]
+  sl_midi.py log            print the device log (SysEx 7D 4C lines) and other MIDI it sends
+  sl_midi.py reboot         ask the device to reboot into download mode (then run idf.py flash)
+  sl_midi.py cc N V         send controller N value V
+  sl_midi.py note N [on|off]
 """
 import glob, os, sys, time
 
 def port():
     for card in glob.glob('/proc/asound/card*/midi0'):
-        if 'Gesture Recorder' in open(card).read():
+        if 'Samplooler' in open(card).read():
             n = card.split('card')[1].split('/')[0]
             return f'/dev/snd/midiC{n}D0'
-    sys.exit('no Gesture Recorder MIDI port found')
+    sys.exit('no Samplooler MIDI port found')
 
 def send(data):
     with open(port(), 'wb', buffering=0) as f: f.write(bytes(data))

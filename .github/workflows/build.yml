@@ -1,0 +1,70 @@
+# Builds the firmware for both chips on every push. On main it also publishes site/ with
+# the images to GitHub Pages (the browser flasher needs them on the same origin). A v* tag
+# attaches the images to a GitHub release.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [esp32s3, esp32c3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5
+          target: ${{ matrix.target }}
+          path: firmware
+          command: idf.py build && idf.py merge-bin -o samplooler-${{ matrix.target }}.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: samplooler-${{ matrix.target }}
+          path: firmware/build/samplooler-${{ matrix.target }}.bin
+
+  pages:
+    if: github.ref == 'refs/heads/main'
+    needs: firmware
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: samplooler-*
+          merge-multiple: true
+          path: site/firmware
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: firmware
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: samplooler-*
+          merge-multiple: true
+          path: dist
+      - run: cd dist && sha256sum samplooler-*.bin > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*

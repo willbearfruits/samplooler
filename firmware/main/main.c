@@ -1,4 +1,4 @@
-// Gesture recorder: hold BOOT to record the mic, let go and it loops.
+// Samplooler: hold BOOT to record the mic, let go and it loops.
 // Tilt nose down to play forward faster, nose up to play backwards.
 // Roll left for a delay whose tail rings out, roll right to stutter the loop (S3).
 // Builds for the ESP32-S3 SuperMini kit (float, PSRAM, 0.96" OLED, joystick,
@@ -261,7 +261,7 @@ static float param_frac(int p) { return p >= P_SAVE ? -1.0f : setting_to_127(p) 
 void app_main(void)
 {
     vTaskDelay(pdMS_TO_TICKS(300));
-    ESP_LOGI(TAG, "gesture recorder on %s: hold BOOT to record, tilt to play", CONFIG_IDF_TARGET);
+    ESP_LOGI(TAG, "samplooler on %s: hold BOOT to record, tilt to play", CONFIG_IDF_TARGET);
 
     gpio_config_t btn = { .pin_bit_mask = 1ULL << PIN_BOOT, .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
     gpio_config(&btn);
