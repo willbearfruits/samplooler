@@ -1,0 +1,242 @@
+(footprint "SSD1306_0.96in_I2C"
+	(version 20241229)
+	(generator "samplooler_gen")
+	(generator_version "1.0")
+	(layer "F.Cu")
+	(descr "0.96\" 128x64 SSD1306 I2C OLED module, 4-pin header on the top edge. Pin 1/2 are GND/VCC on most modules, VCC/GND on some: JP1/JP2 on the board pick the order.")
+	(tags "module breakout header")
+	(fp_rect
+		(start -9.84 -1.5)
+		(end 17.46 26.3)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "a43b7b67-5d95-5dd5-aa1f-3da10c05240e")
+	)
+	(fp_rect
+		(start -10.09 -1.75)
+		(end 17.71 26.55)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "9c6cff83-34f6-5a55-8891-6b969424c927")
+	)
+	(fp_rect
+		(start -9.84 -1.5)
+		(end 17.46 26.3)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "aaf7adcf-44d4-5cab-a550-1c4d017bf328")
+	)
+	(property "Reference" "REF**"
+		(at 3.81 17 0)
+		(layer "F.SilkS")
+		(uuid "a0d6275c-1e2b-5fce-b2d2-745cbebcd8c0")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "SSD1306_0.96in_I2C"
+		(at 3.81 27.5 0)
+		(layer "F.Fab")
+		(uuid "a1f91f90-1f18-5b47-83d3-33401a4d422b")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 3.81 14.9 0)
+		(layer "F.Fab")
+		(uuid "81d9ac83-4f79-5ff0-bc92-b94de225f9c5")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "OLED 0.96\""
+		(at 3.81 10 0)
+		(layer "F.SilkS")
+		(uuid "8daeb04c-1721-5b5a-a80e-b0d25e2cefb4")
+		(effects
+			(font
+				(size 1.2 1.2)
+				(thickness 0.18)
+			)
+		)
+	)
+	(fp_text user "SSD1306 128x64"
+		(at 3.81 12.2 0)
+		(layer "F.SilkS")
+		(uuid "70cfbf81-d42c-58ca-96f1-82933f44dd24")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_rect
+		(start -9.54 2.6)
+		(end 17.16 21.9)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "74175e28-d8b7-57ba-b6f0-7b8f16868fe7")
+	)
+	(fp_rect
+		(start -7.06 4.5)
+		(end 14.68 15.4)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "58e354b7-73cd-5dc4-99b4-5d72bbb55ff8")
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "P1")
+		(pintype "passive")
+		(uuid "ccfeaf8d-83dc-5bec-99b0-655e9004dae0")
+	)
+	(fp_text user "P1"
+		(at 0 1.8 0)
+		(layer "F.SilkS")
+		(uuid "95bfa28a-e434-5de1-aca6-c008f3ceaee1")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "2" thru_hole circle
+		(at 2.54 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "P2")
+		(pintype "passive")
+		(uuid "c4939ee4-49e6-5530-ac67-53718de19c91")
+	)
+	(fp_text user "P2"
+		(at 2.54 1.8 0)
+		(layer "F.SilkS")
+		(uuid "118fd391-f60b-587b-bc9e-61f84e72971d")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "3" thru_hole circle
+		(at 5.08 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SCL")
+		(pintype "passive")
+		(uuid "b6b69a9e-102c-574d-a353-8d78e5afd358")
+	)
+	(fp_text user "SCL"
+		(at 5.08 2.214 90)
+		(layer "F.SilkS")
+		(uuid "4dd2351e-77b2-5dd2-9eb0-36abb8a7b274")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "4" thru_hole circle
+		(at 7.62 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SDA")
+		(pintype "passive")
+		(uuid "a5b1baa8-464b-5902-8c95-2c927024f474")
+	)
+	(fp_text user "SDA"
+		(at 7.62 2.214 90)
+		(layer "F.SilkS")
+		(uuid "bab87662-8512-5637-b4aa-0e4e7d1fc1ec")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "" np_thru_hole circle
+		(at -7.84 0.5)
+		(size 2.5 2.5)
+		(drill 2.5)
+		(layers "*.Cu" "*.Mask")
+		(uuid "628fdd75-f3f7-5f68-a800-3f6d04de9bfd")
+	)
+	(pad "" np_thru_hole circle
+		(at 15.46 0.5)
+		(size 2.5 2.5)
+		(drill 2.5)
+		(layers "*.Cu" "*.Mask")
+		(uuid "8dfefcc4-0d67-5b34-85bc-dd90ed3338c7")
+	)
+	(pad "" np_thru_hole circle
+		(at -7.84 24.3)
+		(size 2.5 2.5)
+		(drill 2.5)
+		(layers "*.Cu" "*.Mask")
+		(uuid "496282d1-427a-5cc1-9e39-5d54332dc691")
+	)
+	(pad "" np_thru_hole circle
+		(at 15.46 24.3)
+		(size 2.5 2.5)
+		(drill 2.5)
+		(layers "*.Cu" "*.Mask")
+		(uuid "b4cc6a0c-899f-5cd4-8140-f6da4d995e0d")
+	)
+	(model "${KIPRJMOD}/../lib/samplooler.3dshapes/SSD1306_0.96in_I2C.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 0.3937 0.3937 0.3937)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(embedded_fonts no)
+)

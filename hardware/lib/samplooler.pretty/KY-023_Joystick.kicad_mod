@@ -1,0 +1,263 @@
+(footprint "KY-023_Joystick"
+	(version 20241229)
+	(generator "samplooler_gen")
+	(generator_version "1.0")
+	(layer "F.Cu")
+	(descr "KY-023 joystick module, straight 5-pin header (replace the right-angle one), M3 holes for 2.5 mm spacers. Power it from 3V3: the ESP32 ADC is 3.3 V.")
+	(tags "module breakout header")
+	(fp_rect
+		(start -1.5 -8)
+		(end 32.5 18)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "ef314b19-b6bd-5a8a-a9e5-4d0b8cf3779e")
+	)
+	(fp_rect
+		(start -1.75 -8.25)
+		(end 32.75 18.25)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "84820962-24b2-503b-8c95-aebaad7e8c80")
+	)
+	(fp_rect
+		(start -1.5 -8)
+		(end 32.5 18)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "5f5d8c9c-e69a-581f-b557-89f0e1f10249")
+	)
+	(property "Reference" "REF**"
+		(at 15.5 2.8 0)
+		(layer "F.SilkS")
+		(uuid "e0742176-0aba-5494-b2b8-af7a2b9e0560")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "KY-023_Joystick"
+		(at 15.5 19.2 0)
+		(layer "F.Fab")
+		(uuid "c3aeb5eb-36d2-581f-9d42-46c855f0d06a")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 15.5 7.5 0)
+		(layer "F.Fab")
+		(uuid "60094a23-90d7-5458-995d-1cf29d666529")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "KY-023"
+		(at 15.5 12.5 0)
+		(layer "F.SilkS")
+		(uuid "334f9a4c-dd3e-5d69-b9fa-b1b911e96b1c")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "+5V pin = 3V3"
+		(at 15.5 14.4 0)
+		(layer "F.SilkS")
+		(uuid "4c86b92c-ea9e-5ddf-bac9-c65eb41263eb")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_circle
+		(center 15.5 4.1)
+		(end 23.5 4.1)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "9d9f053c-77a0-5a2b-a476-47ec861fc362")
+	)
+	(fp_text user "STICK"
+		(at 15.5 4.1 0)
+		(layer "F.Fab")
+		(uuid "98e5b15b-154f-52d5-9174-e92c64530e62")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "GND")
+		(pintype "passive")
+		(uuid "730f0d9e-c50e-5939-a49b-3debbe19da91")
+	)
+	(fp_text user "GND"
+		(at 2.214 0 0)
+		(layer "F.SilkS")
+		(uuid "54dcd064-d492-55c2-9c11-1a862ca87ecf")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "2" thru_hole circle
+		(at 0 2.54)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "+5V")
+		(pintype "passive")
+		(uuid "295bc77e-bf0e-5847-966e-020c7f4303ca")
+	)
+	(fp_text user "+5V"
+		(at 2.214 2.54 0)
+		(layer "F.SilkS")
+		(uuid "10618827-e30b-5e94-98d0-c22cb52778b4")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "3" thru_hole circle
+		(at 0 5.08)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "VRx")
+		(pintype "passive")
+		(uuid "fbc82cae-db2c-5022-b66f-35ac19605345")
+	)
+	(fp_text user "VRx"
+		(at 2.214 5.08 0)
+		(layer "F.SilkS")
+		(uuid "154c8bdb-f78d-5d83-b56c-44f695e078f6")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "4" thru_hole circle
+		(at 0 7.62)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "VRy")
+		(pintype "passive")
+		(uuid "689b6b71-e8ca-581b-9b6e-3384f5276608")
+	)
+	(fp_text user "VRy"
+		(at 2.214 7.62 0)
+		(layer "F.SilkS")
+		(uuid "737e3d56-e1fd-523c-bd88-4314cb879020")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "5" thru_hole circle
+		(at 0 10.16)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SW")
+		(pintype "passive")
+		(uuid "c05949dc-00fc-54bb-9394-71516b4c09e9")
+	)
+	(fp_text user "SW"
+		(at 1.926 10.16 0)
+		(layer "F.SilkS")
+		(uuid "cc4a216a-83b6-5aac-8ee1-767c3ac72202")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "" np_thru_hole circle
+		(at 3 -5.25)
+		(size 3.3 3.3)
+		(drill 3.3)
+		(layers "*.Cu" "*.Mask")
+		(uuid "c5294bc7-5d97-51c3-9a4c-77905a813a1c")
+	)
+	(pad "" np_thru_hole circle
+		(at 29.5 -5.25)
+		(size 3.3 3.3)
+		(drill 3.3)
+		(layers "*.Cu" "*.Mask")
+		(uuid "2f17819c-55bc-5a0d-8e01-2e8f513aaad9")
+	)
+	(pad "" np_thru_hole circle
+		(at 3 15.25)
+		(size 3.3 3.3)
+		(drill 3.3)
+		(layers "*.Cu" "*.Mask")
+		(uuid "9aef7554-6c14-5027-8e77-7b769c36d944")
+	)
+	(pad "" np_thru_hole circle
+		(at 29.5 15.25)
+		(size 3.3 3.3)
+		(drill 3.3)
+		(layers "*.Cu" "*.Mask")
+		(uuid "bc0d1c94-e5ae-5dfb-9021-ed75b6d165b2")
+	)
+	(model "${KIPRJMOD}/../lib/samplooler.3dshapes/KY-023_Joystick.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 0.3937 0.3937 0.3937)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(embedded_fonts no)
+)

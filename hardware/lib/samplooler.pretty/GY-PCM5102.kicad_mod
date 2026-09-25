@@ -1,0 +1,456 @@
+(footprint "GY-PCM5102"
+	(version 20241229)
+	(generator "samplooler_gen")
+	(generator_version "1.0")
+	(layer "F.Cu")
+	(descr "GY-PCM5102 purple I2S DAC: 6-pin I2S header plus the 9-pin strap/line row (FLT DEMP XSMT FMT A3V3 AGND ROUT AGND LROUT). Jack exits the +Y long edge.")
+	(tags "module breakout header")
+	(fp_rect
+		(start -1.5 -2.15)
+		(end 30.2 14.85)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "e33787cf-f67d-5bfc-8053-6cb6da97c8f9")
+	)
+	(fp_rect
+		(start -1.75 -2.4)
+		(end 30.45 15.1)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "e78ecb09-ec47-553a-94e9-a94ac04c8f34")
+	)
+	(fp_rect
+		(start -1.5 -2.15)
+		(end 30.2 14.85)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "4dda9cd0-de6a-55b1-83f8-e35c9b6b8c74")
+	)
+	(property "Reference" "REF**"
+		(at 14.35 4.15 0)
+		(layer "F.SilkS")
+		(uuid "f6976a8c-6c39-5062-8fbe-968967343995")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "GY-PCM5102"
+		(at 14.35 16.05 0)
+		(layer "F.Fab")
+		(uuid "bd87228d-88f0-5cb8-98e3-c7944030939f")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 14.35 8.85 0)
+		(layer "F.Fab")
+		(uuid "fd6cc95c-8345-55ff-859e-bc3f94330307")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "PCM5102A"
+		(at 13 6 0)
+		(layer "F.SilkS")
+		(uuid "b90e1658-0f7e-5834-83d8-a74f626f3edd")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "DAC"
+		(at 13 8 0)
+		(layer "F.SilkS")
+		(uuid "09def7ef-a166-5939-b335-390b29bd9813")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "JACK"
+		(at 24.5 13.3 0)
+		(layer "F.SilkS")
+		(uuid "3d3572e7-6bd2-5688-bada-ef25cfdfe4ec")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_rect
+		(start 21.5 2.4)
+		(end 27.5 16.3)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "31931d10-db1c-53ef-af95-4e1911ecab73")
+	)
+	(fp_text user "JACK"
+		(at 24.5 9 0)
+		(layer "F.Fab")
+		(uuid "87940e8d-2a08-57da-953c-956dcce0e1d9")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SCK")
+		(pintype "passive")
+		(uuid "34113205-b832-57ac-8b69-7be22e06e2c4")
+	)
+	(fp_text user "SCK"
+		(at 2.214 0 0)
+		(layer "F.SilkS")
+		(uuid "84cd3568-6b20-5df6-a111-2c687ba05745")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "2" thru_hole circle
+		(at 0 2.54)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "BCK")
+		(pintype "passive")
+		(uuid "4dfcd84b-1e20-5455-b562-58b2db0d3113")
+	)
+	(fp_text user "BCK"
+		(at 2.214 2.54 0)
+		(layer "F.SilkS")
+		(uuid "0039f9c6-3cdd-5659-8d6d-2913eb0adbe7")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "3" thru_hole circle
+		(at 0 5.08)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "DIN")
+		(pintype "passive")
+		(uuid "34e0414e-9c3d-5582-8fbc-92f62db2e878")
+	)
+	(fp_text user "DIN"
+		(at 2.214 5.08 0)
+		(layer "F.SilkS")
+		(uuid "614d9b97-f2ac-5c0d-bb2a-c4058a1bc055")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "4" thru_hole circle
+		(at 0 7.62)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "LCK")
+		(pintype "passive")
+		(uuid "fc838768-2fe9-5b18-bc3d-20e1a9a91461")
+	)
+	(fp_text user "LCK"
+		(at 2.214 7.62 0)
+		(layer "F.SilkS")
+		(uuid "03a951c5-3202-5dd2-bbb2-0e323d5dc88f")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "5" thru_hole circle
+		(at 0 10.16)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "GND")
+		(pintype "passive")
+		(uuid "c0ca4f55-47f1-5531-8fb1-dd101de8e639")
+	)
+	(fp_text user "GND"
+		(at 2.214 10.16 0)
+		(layer "F.SilkS")
+		(uuid "c818dc0e-7068-5ba8-9d96-208e75140bbf")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "6" thru_hole circle
+		(at 0 12.7)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "VIN")
+		(pintype "passive")
+		(uuid "623784f9-959b-5caf-85de-dc8a102c1a04")
+	)
+	(fp_text user "VIN"
+		(at 2.214 12.7 0)
+		(layer "F.SilkS")
+		(uuid "09999751-0f26-5993-8788-4bef38becfdb")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "7" thru_hole circle
+		(at 6.475 -0.65)
+		(size 1.9 1.9)
+		(drill 1.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "FLT")
+		(pintype "passive")
+		(uuid "3dfe4d23-7304-5902-979f-8f15773054f5")
+	)
+	(fp_text user "FLT"
+		(at 6.475 1.614 90)
+		(layer "F.SilkS")
+		(uuid "725f10f5-0a3b-56c3-ae19-99acc2a2dc22")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "8" thru_hole circle
+		(at 9.015 -0.65)
+		(size 1.9 1.9)
+		(drill 1.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "DEMP")
+		(pintype "passive")
+		(uuid "7c5f9255-5818-5a10-b685-42eb1a1ef4b7")
+	)
+	(fp_text user "DEMP"
+		(at 9.015 1.902 90)
+		(layer "F.SilkS")
+		(uuid "4ae123fa-9ab6-542a-a779-d4da87a7c4a3")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "9" thru_hole circle
+		(at 11.555 -0.65)
+		(size 1.9 1.9)
+		(drill 1.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "XSMT")
+		(pintype "passive")
+		(uuid "3683e2f0-d011-59af-8a6a-9b57e70332b5")
+	)
+	(fp_text user "XSMT"
+		(at 11.555 1.902 90)
+		(layer "F.SilkS")
+		(uuid "b0018ace-97e3-575e-be84-814f2be93c90")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "10" thru_hole circle
+		(at 14.095 -0.65)
+		(size 1.9 1.9)
+		(drill 1.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "FMT")
+		(pintype "passive")
+		(uuid "fdc668f9-35f3-5ac5-997f-0aea109941c3")
+	)
+	(fp_text user "FMT"
+		(at 14.095 1.614 90)
+		(layer "F.SilkS")
+		(uuid "f021d200-e509-584f-b594-acdbe4385550")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "11" thru_hole circle
+		(at 16.635 -0.65)
+		(size 1.9 1.9)
+		(drill 1.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "A3V3")
+		(pintype "passive")
+		(uuid "37fed3e3-919e-5b6e-ae5c-6b3f08cea7c1")
+	)
+	(fp_text user "A3V3"
+		(at 16.635 1.902 90)
+		(layer "F.SilkS")
+		(uuid "90d16da3-d60a-5f0c-a239-1f929e9d7e0e")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "12" thru_hole circle
+		(at 19.175 -0.65)
+		(size 1.9 1.9)
+		(drill 1.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "AGND")
+		(pintype "passive")
+		(uuid "2f089e5f-cd44-5362-ba2d-62694f75b8b4")
+	)
+	(fp_text user "AGND"
+		(at 19.175 1.902 90)
+		(layer "F.SilkS")
+		(uuid "fb22e460-bf91-5166-a30b-31d18a8b02d5")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "13" thru_hole circle
+		(at 21.715 -0.65)
+		(size 1.9 1.9)
+		(drill 1.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "ROUT")
+		(pintype "passive")
+		(uuid "7baafca8-cf25-5e15-82d7-4750efc22390")
+	)
+	(fp_text user "ROUT"
+		(at 21.715 1.902 90)
+		(layer "F.SilkS")
+		(uuid "65f4c620-4405-57f7-b81f-87a983e9f9d8")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "14" thru_hole circle
+		(at 24.255 -0.65)
+		(size 1.9 1.9)
+		(drill 1.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "AGND")
+		(pintype "passive")
+		(uuid "7f60941e-268e-56fd-a336-bff23524a678")
+	)
+	(fp_text user "AGND"
+		(at 24.255 1.902 90)
+		(layer "F.SilkS")
+		(uuid "5929651c-8674-5f9d-9791-5cefc302f59c")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "15" thru_hole circle
+		(at 26.795 -0.65)
+		(size 1.9 1.9)
+		(drill 1.2)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "LROUT")
+		(pintype "passive")
+		(uuid "65b8fdcd-188a-5ea7-b7f9-e36b3f5295cc")
+	)
+	(fp_text user "LROUT"
+		(at 26.795 2.19 90)
+		(layer "F.SilkS")
+		(uuid "40a502ca-bd59-544c-8558-1e447190b3b1")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(model "${KIPRJMOD}/../lib/samplooler.3dshapes/GY-PCM5102.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 0.3937 0.3937 0.3937)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(embedded_fonts no)
+)

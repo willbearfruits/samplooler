@@ -1,0 +1,541 @@
+(footprint "ESP32-S3_SuperMini"
+	(version 20241229)
+	(generator "samplooler_gen")
+	(generator_version "1.0")
+	(layer "F.Cu")
+	(descr "ESP32-S3 SuperMini (nologo/Tenstar) on 2.54 mm headers, USB-C toward -Y. Row spacing 15.33 (15.24..15.45 fits the 1.1 mm drills).")
+	(tags "module breakout header")
+	(fp_rect
+		(start -1.38 -1.59)
+		(end 16.71 21.91)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "dd023b55-c0c8-5902-9d44-e01062f3add1")
+	)
+	(fp_rect
+		(start -1.63 -1.84)
+		(end 16.96 22.16)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "e383ccc7-12a3-5834-b5a9-b26fa06be8b1")
+	)
+	(fp_rect
+		(start -1.38 -1.59)
+		(end 16.71 21.91)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "cf586f6d-377a-503b-853c-865db9806c00")
+	)
+	(property "Reference" "REF**"
+		(at 7.665 16.5 0)
+		(layer "F.SilkS")
+		(uuid "737ec17c-8910-5641-939d-77ad64e60a40")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "ESP32-S3_SuperMini"
+		(at 7.665 23.11 0)
+		(layer "F.Fab")
+		(uuid "490ee771-7e97-599b-b1b3-2ca34280260a")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 7.665 12.66 0)
+		(layer "F.Fab")
+		(uuid "b7ac61bb-3e87-5125-8ca2-357bb0e98d34")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "ESP32-S3"
+		(at 7.665 9.5 0)
+		(layer "F.SilkS")
+		(uuid "7eaaa587-c9ee-548a-b81c-0b6536c42b18")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "SuperMini"
+		(at 7.665 11.2 0)
+		(layer "F.SilkS")
+		(uuid "86f90d6f-65f9-558c-b13c-89411671076f")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "USB"
+		(at 7.665 0.6 0)
+		(layer "F.SilkS")
+		(uuid "403c229e-e848-5077-a372-d90bae6073b8")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_rect
+		(start 3.165 -3.6)
+		(end 12.165 4.6)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "4994bab7-23c9-5bd0-bb01-1ca2290e6352")
+	)
+	(fp_rect
+		(start 2.1 19.9)
+		(end 8.2 21.9)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "d9e08b14-393d-5dc2-9dcc-18ab7e50ac7a")
+	)
+	(fp_text user "USB-C"
+		(at 7.665 1.2 0)
+		(layer "F.Fab")
+		(uuid "6bf6d8fc-9fbd-5915-88b9-97156b6f661e")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "ANT"
+		(at 5.15 20.9 0)
+		(layer "F.Fab")
+		(uuid "ef394395-8d17-51c2-87c8-5c827a29da52")
+		(effects
+			(font
+				(size 0.6 0.6)
+				(thickness 0.09)
+			)
+		)
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "TX")
+		(pintype "passive")
+		(uuid "7f23f2c6-37d1-5eab-8389-a65d4b3f9276")
+	)
+	(fp_text user "TX"
+		(at 1.926 0 0)
+		(layer "F.SilkS")
+		(uuid "fca5553f-d248-5cce-9f4c-330f12a6ccac")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "2" thru_hole circle
+		(at 0 2.54)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "RX")
+		(pintype "passive")
+		(uuid "8b82d2a0-e3da-51bb-847b-5011bca4b3af")
+	)
+	(fp_text user "RX"
+		(at 1.926 2.54 0)
+		(layer "F.SilkS")
+		(uuid "ec04b067-92fc-588b-8b4b-74a0b3d4ed9c")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "3" thru_hole circle
+		(at 0 5.08)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "1")
+		(pintype "passive")
+		(uuid "f2e7d838-1b54-547f-82e2-55de83dfb5ee")
+	)
+	(fp_text user "1"
+		(at 1.638 5.08 0)
+		(layer "F.SilkS")
+		(uuid "f5c740ca-f502-54e1-9377-6045fe6e954e")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "4" thru_hole circle
+		(at 0 7.62)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "2")
+		(pintype "passive")
+		(uuid "cc24f0aa-72d8-5b07-aaf9-3720ec692bd2")
+	)
+	(fp_text user "2"
+		(at 1.638 7.62 0)
+		(layer "F.SilkS")
+		(uuid "424f76ff-82c3-5985-bdb1-b96012038d4c")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "5" thru_hole circle
+		(at 0 10.16)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "3")
+		(pintype "passive")
+		(uuid "76517104-9630-5055-9cf2-2ff24490baf7")
+	)
+	(fp_text user "3"
+		(at 1.638 10.16 0)
+		(layer "F.SilkS")
+		(uuid "160501a9-ea98-577c-a052-5bf0513da9a5")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "6" thru_hole circle
+		(at 0 12.7)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "4")
+		(pintype "passive")
+		(uuid "2d723632-25ea-5558-8092-9c704a473b76")
+	)
+	(fp_text user "4"
+		(at 1.638 12.7 0)
+		(layer "F.SilkS")
+		(uuid "0a390b38-7538-54fe-8ab4-569ede645d6e")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "7" thru_hole circle
+		(at 0 15.24)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "5")
+		(pintype "passive")
+		(uuid "d47c5f82-5b32-5a6e-9f61-6acd75098703")
+	)
+	(fp_text user "5"
+		(at 1.638 15.24 0)
+		(layer "F.SilkS")
+		(uuid "e7b44508-2754-5db2-8610-1c5b63236198")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "8" thru_hole circle
+		(at 0 17.78)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "6")
+		(pintype "passive")
+		(uuid "ec9f097a-da5d-5e38-acc2-8b9347df0b26")
+	)
+	(fp_text user "6"
+		(at 1.638 17.78 0)
+		(layer "F.SilkS")
+		(uuid "c016af86-b0e2-5c43-ad3a-a0408936a611")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "9" thru_hole circle
+		(at 0 20.32)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "7")
+		(pintype "passive")
+		(uuid "6c07a941-04b4-5a1e-9c2a-d7308e3db0a8")
+	)
+	(fp_text user "7"
+		(at 1.638 20.32 0)
+		(layer "F.SilkS")
+		(uuid "63aa8158-bef0-5295-bad5-af6814646f7e")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "10" thru_hole circle
+		(at 15.33 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "5V")
+		(pintype "passive")
+		(uuid "12b0dff8-33f3-5f8d-96ea-60bec4202c9d")
+	)
+	(fp_text user "5V"
+		(at 13.404 0 0)
+		(layer "F.SilkS")
+		(uuid "130b786a-e99b-5a6e-9860-c3f3aaf3fde4")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "11" thru_hole circle
+		(at 15.33 2.54)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "GND")
+		(pintype "passive")
+		(uuid "b3ea1d0b-d8ac-50a5-8bf2-7d7e341ec573")
+	)
+	(fp_text user "GND"
+		(at 13.116 2.54 0)
+		(layer "F.SilkS")
+		(uuid "513c0a2a-546c-5770-81b4-3678799c4321")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "12" thru_hole circle
+		(at 15.33 5.08)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "3V3")
+		(pintype "passive")
+		(uuid "0e68b059-925d-5c50-9c8f-1992f9fbb82f")
+	)
+	(fp_text user "3V3"
+		(at 13.116 5.08 0)
+		(layer "F.SilkS")
+		(uuid "64aa916c-91b8-5ec9-9845-3d006610dd82")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "13" thru_hole circle
+		(at 15.33 7.62)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "13")
+		(pintype "passive")
+		(uuid "7670cda2-fea3-5251-80ec-6af3770ed545")
+	)
+	(fp_text user "13"
+		(at 13.404 7.62 0)
+		(layer "F.SilkS")
+		(uuid "971d5a30-ff24-5dc8-9895-ee3c573638e0")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "14" thru_hole circle
+		(at 15.33 10.16)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "12")
+		(pintype "passive")
+		(uuid "bef445c8-0782-5f6a-a610-72716acfd3b2")
+	)
+	(fp_text user "12"
+		(at 13.404 10.16 0)
+		(layer "F.SilkS")
+		(uuid "f73c996c-a167-51b8-b3ba-78b7449d3969")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "15" thru_hole circle
+		(at 15.33 12.7)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "11")
+		(pintype "passive")
+		(uuid "672b269a-6418-559f-b9f1-5ad3a7aea14d")
+	)
+	(fp_text user "11"
+		(at 13.404 12.7 0)
+		(layer "F.SilkS")
+		(uuid "608adffa-93da-538d-9d49-b3def1f0a890")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "16" thru_hole circle
+		(at 15.33 15.24)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "10")
+		(pintype "passive")
+		(uuid "c8b679b9-8dad-5bf1-b1b9-41a346c8e608")
+	)
+	(fp_text user "10"
+		(at 13.404 15.24 0)
+		(layer "F.SilkS")
+		(uuid "b04abdd7-e2d8-5527-935f-3ae4f9fb08f1")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "17" thru_hole circle
+		(at 15.33 17.78)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "9")
+		(pintype "passive")
+		(uuid "85c919d5-d564-5830-b869-f865c2318fcc")
+	)
+	(fp_text user "9"
+		(at 13.692 17.78 0)
+		(layer "F.SilkS")
+		(uuid "b9ab544c-2f61-59c6-ab35-d2495a88090c")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "18" thru_hole circle
+		(at 15.33 20.32)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "8")
+		(pintype "passive")
+		(uuid "c95ac95c-0278-5a0f-890a-69e5d7567cb9")
+	)
+	(fp_text user "8"
+		(at 13.692 20.32 0)
+		(layer "F.SilkS")
+		(uuid "316abe2e-1e2f-5633-9d1f-118f793e7eed")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(model "${KIPRJMOD}/../lib/samplooler.3dshapes/ESP32-S3_SuperMini.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 0.3937 0.3937 0.3937)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(embedded_fonts no)
+)

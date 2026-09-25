@@ -1,0 +1,287 @@
+(footprint "GY-521_MPU6050"
+	(version 20241229)
+	(generator "samplooler_gen")
+	(generator_version "1.0")
+	(layer "F.Cu")
+	(descr "GY-521 MPU-6050 breakout, 8-pin header on the long edge.")
+	(tags "module breakout header")
+	(fp_rect
+		(start -1.3 -1.24)
+		(end 14.3 19)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "037370a5-d697-5f26-a41d-14b188f50582")
+	)
+	(fp_rect
+		(start -1.55 -1.49)
+		(end 14.55 19.25)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "4402dba6-cae1-54a7-8f56-615dec7ff3a7")
+	)
+	(fp_rect
+		(start -1.3 -1.24)
+		(end 14.3 19)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "3b472ba8-23fd-5d28-8814-02a5e06388b1")
+	)
+	(property "Reference" "REF**"
+		(at 6.5 6.68 0)
+		(layer "F.SilkS")
+		(uuid "4fd9f628-c377-53df-9cb0-948b7c72493c")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "GY-521_MPU6050"
+		(at 6.5 20.2 0)
+		(layer "F.Fab")
+		(uuid "4b1a36f2-6b62-5cb2-9f54-d21caaac5166")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 6.5 11.38 0)
+		(layer "F.Fab")
+		(uuid "282ff92c-aace-5822-bba0-d08539fcb2ec")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "MPU6050"
+		(at 7.5 13 0)
+		(layer "F.SilkS")
+		(uuid "9475e9bb-8cd9-589e-9816-b2d785a1fe72")
+		(effects
+			(font
+				(size 0.9 0.9)
+				(thickness 0.135)
+			)
+		)
+	)
+	(fp_circle
+		(center 11.6 1.2)
+		(end 13.1 1.2)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "859ecd5d-72cc-5369-b821-aef12a6e5573")
+	)
+	(fp_circle
+		(center 11.6 16.5)
+		(end 13.1 16.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "1377e05e-70f5-594f-a1dd-eb010b155cdd")
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "VCC")
+		(pintype "passive")
+		(uuid "822fc5b6-6ec4-535b-b28c-cc75e87b6d35")
+	)
+	(fp_text user "VCC"
+		(at 2.214 0 0)
+		(layer "F.SilkS")
+		(uuid "3172b8ab-7409-5c71-8cab-b2ee5e079d12")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "2" thru_hole circle
+		(at 0 2.54)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "GND")
+		(pintype "passive")
+		(uuid "47ad8460-c083-5f3d-8b3a-007ed1a1314d")
+	)
+	(fp_text user "GND"
+		(at 2.214 2.54 0)
+		(layer "F.SilkS")
+		(uuid "a70560fe-0163-5e6f-93ed-6b80382d5c2a")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "3" thru_hole circle
+		(at 0 5.08)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SCL")
+		(pintype "passive")
+		(uuid "a137d087-d7bd-556f-8fbc-c8cc3b119702")
+	)
+	(fp_text user "SCL"
+		(at 2.214 5.08 0)
+		(layer "F.SilkS")
+		(uuid "4ffa3342-017b-5920-9797-51bec6faadba")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "4" thru_hole circle
+		(at 0 7.62)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SDA")
+		(pintype "passive")
+		(uuid "c179511f-9ebf-546d-b162-7d065662beed")
+	)
+	(fp_text user "SDA"
+		(at 2.214 7.62 0)
+		(layer "F.SilkS")
+		(uuid "98da03b2-fa56-57d4-8be5-e5fa3d519d25")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "5" thru_hole circle
+		(at 0 10.16)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "XDA")
+		(pintype "passive")
+		(uuid "e5560c7f-28e2-5246-95e3-fd2d9b7b3d36")
+	)
+	(fp_text user "XDA"
+		(at 2.214 10.16 0)
+		(layer "F.SilkS")
+		(uuid "1ecfc0b6-b720-5985-a89d-72ab426707a4")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "6" thru_hole circle
+		(at 0 12.7)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "XCL")
+		(pintype "passive")
+		(uuid "ac3633cb-5f88-543d-8d27-0fdd2284cd5a")
+	)
+	(fp_text user "XCL"
+		(at 2.214 12.7 0)
+		(layer "F.SilkS")
+		(uuid "ee2e60bb-fe8e-519d-95eb-788b6486fc7f")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "7" thru_hole circle
+		(at 0 15.24)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "AD0")
+		(pintype "passive")
+		(uuid "0de8c573-4fdd-517d-b9c0-beac1d7f96ea")
+	)
+	(fp_text user "AD0"
+		(at 2.214 15.24 0)
+		(layer "F.SilkS")
+		(uuid "d6df1507-7798-516b-a060-8917b1d66ec1")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "8" thru_hole circle
+		(at 0 17.78)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "INT")
+		(pintype "passive")
+		(uuid "3d29f5a5-5c37-5c36-9453-282a7bb82d7f")
+	)
+	(fp_text user "INT"
+		(at 2.214 17.78 0)
+		(layer "F.SilkS")
+		(uuid "7e4ac519-abb4-5425-ac34-870aed2c0d27")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(model "${KIPRJMOD}/../lib/samplooler.3dshapes/GY-521_MPU6050.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 0.3937 0.3937 0.3937)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(embedded_fonts no)
+)

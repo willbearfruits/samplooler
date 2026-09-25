@@ -1,0 +1,245 @@
+(footprint "INMP441_Round"
+	(version 20241229)
+	(generator "samplooler_gen")
+	(generator_version "1.0")
+	(layer "F.Cu")
+	(descr "INMP441 round I2S MEMS mic, 2x3 pins, rows 7.62 apart. Mounted sound hole UP (label side up, the metal can faces the carrier).")
+	(tags "module breakout header")
+	(fp_circle
+		(center 0 0)
+		(end 7 0)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "a6900946-e972-5b57-8f5c-899d3275a8e7")
+	)
+	(fp_circle
+		(center 0 0)
+		(end 7 0)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "eaabb643-2dbf-58fd-b28b-901f2b6026f1")
+	)
+	(fp_circle
+		(center 0 0)
+		(end 7.25 0)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "24ad0f26-a664-5c3e-a14b-2f351f21b0a5")
+	)
+	(property "Reference" "REF**"
+		(at 8.4 0 0)
+		(layer "F.SilkS")
+		(uuid "fbe13016-907f-5203-9590-67072ad9f100")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "INMP441_Round"
+		(at 0 8.2 0)
+		(layer "F.Fab")
+		(uuid "9cd2d576-042c-5a44-9619-66eed1f51230")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 2.5 0)
+		(layer "F.Fab")
+		(uuid "d79111e5-8bad-56b6-86e2-d5b0dc7fc095")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_circle
+		(center 0 0)
+		(end 0.9 0)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "fbaa0d55-9a67-599b-ba6b-52b6773bad4f")
+	)
+	(fp_circle
+		(center 0 0)
+		(end 0.75 0)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "42182f6e-b807-5df5-bce2-9353adb59e34")
+	)
+	(fp_text user "PORT"
+		(at 0 1.4 0)
+		(layer "F.Fab")
+		(uuid "fe3093e2-d860-538f-b272-51b90c6b7f36")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "1" thru_hole rect
+		(at -2.54 -3.81)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SCK")
+		(pintype "passive")
+		(uuid "6b2a2c5b-196c-58cf-af52-5351dceb28a0")
+	)
+	(fp_text user "SCK"
+		(at -2.54 -2.01 0)
+		(layer "F.SilkS")
+		(uuid "e0969a0d-08ec-5026-bf5d-cee88c5cc43e")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "2" thru_hole circle
+		(at 0 -3.81)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "WS")
+		(pintype "passive")
+		(uuid "031ade34-5483-5143-90a8-0c3fbca9e2a3")
+	)
+	(fp_text user "WS"
+		(at 0 -2.01 0)
+		(layer "F.SilkS")
+		(uuid "d252bd84-dc5d-51a2-8943-636c21203bc1")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "3" thru_hole circle
+		(at 2.54 -3.81)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "L/R")
+		(pintype "passive")
+		(uuid "6c348a17-f2fe-5779-934e-2bb66df434df")
+	)
+	(fp_text user "L/R"
+		(at 2.54 -2.01 0)
+		(layer "F.SilkS")
+		(uuid "332f8716-cf2a-5565-88e3-9ea54aa3ec52")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "4" thru_hole circle
+		(at -2.54 3.81)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SD")
+		(pintype "passive")
+		(uuid "fccc85ad-b8fb-58bd-b13c-be6d8abc076f")
+	)
+	(fp_text user "SD"
+		(at -2.54 2.01 0)
+		(layer "F.SilkS")
+		(uuid "e6a247e2-3fa6-525a-948d-2ced5a5a0d02")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "5" thru_hole circle
+		(at 0 3.81)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "VDD")
+		(pintype "passive")
+		(uuid "f6f9ca8c-1f81-58f6-b850-115a644122d6")
+	)
+	(fp_text user "VDD"
+		(at 0 2.01 0)
+		(layer "F.SilkS")
+		(uuid "00bd977e-0f40-5a4f-9af0-9b152b0cd039")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "6" thru_hole circle
+		(at 2.54 3.81)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "GND")
+		(pintype "passive")
+		(uuid "c98b994d-bf47-5118-a797-79519af38411")
+	)
+	(fp_text user "GND"
+		(at 2.54 2.01 0)
+		(layer "F.SilkS")
+		(uuid "6d48b51a-281d-53f8-b97b-85db556263d6")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(model "${KIPRJMOD}/../lib/samplooler.3dshapes/INMP441_Round.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 0.3937 0.3937 0.3937)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(embedded_fonts no)
+)

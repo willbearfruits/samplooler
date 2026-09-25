@@ -1,0 +1,233 @@
+(footprint "MAX98357A_Breakout"
+	(version 20241229)
+	(generator "samplooler_gen")
+	(generator_version "1.0")
+	(layer "F.Cu")
+	(descr "Header for the optional MAX98357A I2S amp breakout (Adafruit 3006 pin order). The module lies over -Y; its speaker terminal is at the far edge.")
+	(tags "module breakout header")
+	(fp_rect
+		(start -1.27 -16.51)
+		(end 16.51 2.54)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "db071924-4fb4-5154-b2a0-767ba687d1be")
+	)
+	(fp_rect
+		(start -1.52 -16.76)
+		(end 16.76 2.79)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "495bcba2-30a0-5992-be8f-da2b10e77fac")
+	)
+	(property "Reference" "REF**"
+		(at -3.2 0 0)
+		(layer "F.SilkS")
+		(uuid "3b8d9e3d-e3e4-5a43-bd2b-8ef04b076e82")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "MAX98357A_Breakout"
+		(at 7.62 3.74 0)
+		(layer "F.Fab")
+		(uuid "97f35d4b-b3a0-5de0-bb3f-9dcf4cf37fe4")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 7.62 -4.485 0)
+		(layer "F.Fab")
+		(uuid "009aedcf-d559-5a38-bff5-013ef1a2e3e6")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "MAX98357A (opt)"
+		(at 7.62 -8 0)
+		(layer "F.Fab")
+		(uuid "aa741195-fa47-5b29-9e49-d684fd5cb852")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "LRC")
+		(pintype "passive")
+		(uuid "1b19574e-1fdd-5cf2-b8e1-442313bcd019")
+	)
+	(fp_text user "LRC"
+		(at 0 2.214 90)
+		(layer "F.SilkS")
+		(uuid "69dab954-c0f3-5a92-b89c-605eff49c60d")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "2" thru_hole circle
+		(at 2.54 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "BCLK")
+		(pintype "passive")
+		(uuid "b870d77f-1156-555f-954e-5d4be104e659")
+	)
+	(fp_text user "BCLK"
+		(at 2.54 2.502 90)
+		(layer "F.SilkS")
+		(uuid "a0cd0455-9bc3-5565-8819-ac66fce73088")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "3" thru_hole circle
+		(at 5.08 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "DIN")
+		(pintype "passive")
+		(uuid "a799f63c-6afd-5539-9c5a-48f03257fde5")
+	)
+	(fp_text user "DIN"
+		(at 5.08 2.214 90)
+		(layer "F.SilkS")
+		(uuid "1b2625d9-e160-5471-961a-a69edd71d4c8")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "4" thru_hole circle
+		(at 7.62 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "GAIN")
+		(pintype "passive")
+		(uuid "efdb520b-7ae3-596f-9715-319d28a613c3")
+	)
+	(fp_text user "GAIN"
+		(at 7.62 2.502 90)
+		(layer "F.SilkS")
+		(uuid "9554c7db-6b77-5fe0-b030-ef0d8ad6dc84")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "5" thru_hole circle
+		(at 10.16 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SD")
+		(pintype "passive")
+		(uuid "0cadff68-bf6b-5d3c-81ae-cefe2c12bada")
+	)
+	(fp_text user "SD"
+		(at 10.16 1.8 0)
+		(layer "F.SilkS")
+		(uuid "b4be57d8-76fc-5bab-8a56-e2c3c5c0dda2")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "6" thru_hole circle
+		(at 12.7 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "GND")
+		(pintype "passive")
+		(uuid "7f8f3742-140c-5080-98fd-686513a2bf89")
+	)
+	(fp_text user "GND"
+		(at 12.7 2.214 90)
+		(layer "F.SilkS")
+		(uuid "f606096f-d2f6-5251-8bf6-4131c2f75acb")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "7" thru_hole circle
+		(at 15.24 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "VIN")
+		(pintype "passive")
+		(uuid "a95703c4-266c-5df1-997b-d320fa4c38d0")
+	)
+	(fp_text user "VIN"
+		(at 15.24 2.214 90)
+		(layer "F.SilkS")
+		(uuid "9d66c0be-aa4f-53c5-9e60-5b490507fa56")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(model "${KIPRJMOD}/../lib/samplooler.3dshapes/MAX98357A_Breakout.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 0.3937 0.3937 0.3937)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(embedded_fonts no)
+)
