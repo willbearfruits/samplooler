@@ -36,6 +36,10 @@ idf.py -B build-c3 -DSDKCONFIG=sdkconfig.c3 build flash monitor
   every screen state for both targets to `tools/uisim/out/sheet.png` and `out/c3/sheet.png`. This is the
   way to check UI changes without hardware; there is no unit test suite.
 - `enclosure/render.sh` — OpenSCAD → `out/{shell,lid,plunger}.stl` + preview PNGs.
+- `tools/showcase/make_showcase.sh` — the product video with sound (~25 min): `twin.c` compiles the
+  firmware's `recorder_f32.c`, `fx.c`, `ui.c`, `oled.c` on the host and plays a scripted performance
+  (`score.py`) into a soundtrack plus OLED frames; Blender tilts the stack in sync. `make_hardware_video.sh`
+  is the boards-only cut. Both write to `hardware/images/`.
 - Plugin: `cd plugin && cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_SOURCE_DIR_JUCE=<juce checkout> && cmake --build build`
   (VST3 is copied to `~/.vst3`).
 
