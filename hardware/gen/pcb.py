@@ -18,6 +18,17 @@ def items(c):
     return [c[i] for i in range(len(c))]
 
 
+# Design rules, one copy: applied to the board here and written into the .kicad_pro by build.py
+# (the project file is where KiCad keeps them; pcbnew skips saving it while KiCad has it open).
+RULES = dict(min_clearance=0.15, min_track_width=0.15, min_via_diameter=0.5, min_through_hole_diameter=0.3,
+             min_copper_edge_clearance=0.5, min_hole_to_hole=0.5, min_resolved_spokes=1)
+NETCLASSES = {
+    'Default': dict(clearance=0.2, track_width=0.25, via_diameter=0.6, via_drill=0.3),
+    'Power': dict(clearance=0.2, track_width=0.5, via_diameter=0.8, via_drill=0.4),
+}
+POWER_NETS = ['+5V', '+3V3', 'GND', '/OLED_P1', '/OLED_P2', '/DAC_3V3']
+
+
 class Board:
     def __init__(self, path, projlib):
         self.path = path
@@ -28,28 +39,25 @@ class Board:
         self.fps = {}
 
     # -- rules (JLCPCB 2-layer standard: 0.127 mm min, we stay well above) --
-    def rules(self, clearance=0.2, track=0.3, via=(0.6, 0.3), power=None, edge=0.5):
+    def rules(self):
         ds = self.b.GetDesignSettings()
-        ds.m_MinClearance = MM(0.15)
-        ds.m_TrackMinWidth = MM(0.15)
-        ds.m_ViasMinSize = MM(0.5)
-        ds.m_MinThroughDrill = MM(0.3)
-        ds.m_CopperEdgeClearance = MM(edge)
-        ds.m_HoleToHoleMin = MM(0.5)
+        ds.m_MinClearance = MM(RULES['min_clearance'])
+        ds.m_TrackMinWidth = MM(RULES['min_track_width'])
+        ds.m_ViasMinSize = MM(RULES['min_via_diameter'])
+        ds.m_MinThroughDrill = MM(RULES['min_through_hole_diameter'])
+        ds.m_CopperEdgeClearance = MM(RULES['min_copper_edge_clearance'])
+        ds.m_HoleToHoleMin = MM(RULES['min_hole_to_hole'])
+        ds.m_MinResolvedSpokes = RULES['min_resolved_spokes']
         ds.m_SolderMaskExpansion = MM(0.05)
-        ds.m_MinResolvedSpokes = 1      # THT pads also land on the other layer's pour
         ns = ds.m_NetSettings
-        d = ns.GetDefaultNetclass()
-        d.SetClearance(MM(clearance)); d.SetTrackWidth(MM(track))
-        d.SetViaDiameter(MM(via[0])); d.SetViaDrill(MM(via[1]))
-        if power:
-            width, nets = power
-            nc = pcbnew.NETCLASS('Power')
-            nc.SetClearance(MM(clearance)); nc.SetTrackWidth(MM(width))
-            nc.SetViaDiameter(MM(0.8)); nc.SetViaDrill(MM(0.4))
-            ns.SetNetclass('Power', nc)
-            for n in nets:
-                ns.SetNetclassPatternAssignment(n, 'Power')
+        for name, c in NETCLASSES.items():
+            nc = ns.GetDefaultNetclass() if name == 'Default' else pcbnew.NETCLASS(name)
+            nc.SetClearance(MM(c['clearance'])); nc.SetTrackWidth(MM(c['track_width']))
+            nc.SetViaDiameter(MM(c['via_diameter'])); nc.SetViaDrill(MM(c['via_drill']))
+            if name != 'Default':
+                ns.SetNetclass(name, nc)
+        for pattern in POWER_NETS:
+            ns.SetNetclassPatternAssignment(pattern, 'Power')
 
     def net(self, name):
         if name not in self.nets:

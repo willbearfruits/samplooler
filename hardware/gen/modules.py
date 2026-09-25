@@ -34,15 +34,42 @@ SUPERMINI = dict(
          ('text', 'USB-C', (SM_ROW / 2, 1.2), 0.8),
          ('text', 'ANT', (5.15, 20.9), 0.6)],
     ref_at=(SM_ROW / 2, 16.5),
-    silk=[('text', 'ESP32-S3', (SM_ROW / 2, 9.5), 1.0), ('text', 'SuperMini', (SM_ROW / 2, 11.2), 0.8),
-          ('text', 'USB', (SM_ROW / 2, 0.6), 0.8)],
+    # the underside pads fill the space between the columns from y 5.3 on: pin names go outside,
+    # except 5V and GND, which fit inside above the pads (outside, a Mini OLED pin sits there)
+    silk=[('text', 'ESP32-S3', (SM_ROW / 2, 3.4), 0.8), ('text', 'USB', (SM_ROW / 2, 0.6), 0.8)],
+    label_side={**{n: 'left' for n in range(1, 10)}, 10: 'left', 11: 'left',
+                **{n: 'right' for n in range(12, 19)}},
+    label_off=1.9,                     # clear of the module outline (1.38 from the pins)
     # keep copper pour away from the antenna end (module-local rect)
     antenna=((0.6, 18.4), (SM_ROW - 0.6, 21.91)),
+    height=5.0,
+    mech_extra=[('usb-c', (SM_ROW / 2 - 4.5, -3.6, SM_ROW / 2 + 4.5, 4.6), 3.5, 7.0, 'edge')],
+    boot=(3.1, 7.0), rst=(SM_ROW - 3.1, 7.0),
 )
+# Pads on the SuperMini's underside, reached with pogo pins from the carrier (the module sits
+# 2.5 mm up on its headers). nologo footprint + rectified board photo, +-0.05 mm, in the module's
+# centreline frame so they stay centred whatever the true row spacing. Rows 1.753 mm apart.
+# Column C's order (48 at the top) follows the silkscreen; nologo's schematic shows it reversed,
+# so check with a meter (diode mode: the "48" pad to GND lights the module's red LED).
+_POGO_Y = [round(6.03 + 1.753 * k, 3) for k in range(8)]
+_POGO_COLS = [(-5.47, [48, 47, 46, 45, 42, 41, 40, 39]),     # column C, next to the TX column
+              (+2.77, [38, 37, 36, 35]),                     # column B, rows 0-3
+              (+5.46, [34, 33, 21, 18, 17, 16, 15, 14])]     # column A, next to the 5V column
+POGO = []
+for _dx, _gpios in _POGO_COLS:
+    for _k, _g in enumerate(_gpios):
+        POGO.append((19 + len(POGO), round(SM_ROW / 2 + _dx, 3), _POGO_Y[_k], f'GPIO{_g}'))
+POGO_LAND = 1.5          # square land: fits Same Sky CPG-15 (1.35 base) on every pad, 2 mm-flange pins on alternate ones
+SUPERMINI['pogo'] = POGO
+SUPERMINI['smd'] = [(n, x, y, name, POGO_LAND, POGO_LAND) for n, x, y, name in POGO]
+
 SUPERMINI_PINS = {  # pad -> symbol pin name
     1: 'GPIO43/TX', 2: 'GPIO44/RX', 3: 'GPIO1', 4: 'GPIO2', 5: 'GPIO3', 6: 'GPIO4', 7: 'GPIO5', 8: 'GPIO6',
     9: 'GPIO7', 10: '5V', 11: 'GND', 12: '3V3', 13: 'GPIO13', 14: 'GPIO12', 15: 'GPIO11', 16: 'GPIO10',
     17: 'GPIO9', 18: 'GPIO8'}
+SUPERMINI_PINS.update({p[0]: p[3] + ' (pad)' for p in POGO})
+SUPERMINI['sym'] = (list(range(1, 10)) + [p[0] for p in POGO[:8]],
+                    list(range(10, 19)) + [p[0] for p in POGO[8:]], 'U', SUPERMINI_PINS)
 
 # ---------------------------------------------------------------- GY-PCM5102 (purple)
 DAC_ROW_X = 6.475
@@ -59,6 +86,9 @@ PCM5102 = dict(
     fab=[('rect', (21.5, 2.4), (27.5, 16.3)), ('text', 'JACK', (24.5, 9.0), 0.8)],
     silk=[('text', 'PCM5102A', (13.0, 6.0), 1.0), ('text', 'DAC', (13.0, 8.0), 1.0),
           ('text', 'JACK', (24.5, 13.3), 0.8)],
+    height=5.6,
+    mech_extra=[('jack', (21.5, 2.4, 27.5, 16.3), 4.1, 9.6, 'edge')],
+    jack=(24.5, 16.3),
 )
 
 # ---------------------------------------------------------------- INMP441
@@ -73,6 +103,7 @@ INMP441 = dict(
     ref_at=(8.4, 0),
     silk=[('circle', (0, 0), 0.9)],
     label_side={1: 'below', 2: 'below', 3: 'below', 4: 'above', 5: 'above', 6: 'above'},
+    height=4.0,
 )
 
 # ---------------------------------------------------------------- GY-521 (MPU-6050)
@@ -83,6 +114,7 @@ GY521 = dict(
     outline=('rect', -1.3, -1.24, 14.3, 19.0),
     fab=[('circle', (11.6, 1.2), 1.5), ('circle', (11.6, 16.5), 1.5)],
     silk=[('text', 'MPU6050', (7.5, 13.0), 0.9)],
+    height=5.3,
 )
 
 # ---------------------------------------------------------------- KY-023 joystick
@@ -96,6 +128,10 @@ KY023 = dict(
     fab=[('circle', (15.5, 4.1), 8.0), ('text', 'STICK', (15.5, 4.1), 1.0)],
     silk=[('text', 'KY-023', (15.5, 12.5), 1.0), ('text', '+5V pin = 3V3', (15.5, 14.4), 0.8)],
     stick=(15.5, 4.1),
+    height=5.1,
+    mech_extra=[('gimbal', (15.5 - 8, 4.1 - 8, 15.5 + 8, 4.1 + 8), 4.1, 14.6),
+                ('stick', ('circle', 15.5, 4.1, 2.5), 14.6, 18.6),
+                ('cap', ('circle', 15.5, 4.1, 9.75), 18.6, 23.6)],
 )
 
 # ---------------------------------------------------------------- MAX98357A (Adafruit 3006 layout)
@@ -106,11 +142,16 @@ MAX98357 = dict(
     pads=row(0, 0, ['LRC', 'BCLK', 'DIN', 'GAIN', 'SD', 'GND', 'VIN']),
     outline=('rect', -1.27, -16.51, 16.51, 2.54),
     silk_outline=False,            # the module overhangs the board edge: outline on F.Fab only
+    overhang=True,
     fab=[('text', 'MAX98357A (opt)', (7.62, -8), 0.8)],
     silk=[],
     ref_at=(-3.2, 0),
     label_side={i: 'down' for i in range(1, 8)},
     label_size=0.8,
+    height=5.5,
+    # the optional amp itself: hangs off the edge, speaker terminal (8.5 mm tall) at its far end
+    mech_extra=[('amp', (-1.27, -16.51, 16.51, 2.54), 2.5, 5.5, 'edge'),
+                ('terminal', (-1.27, -16.51, 16.51, -9.5), 5.5, 11.0, 'edge')],
 )
 
 # ---------------------------------------------------------------- SSD1306 0.96" I2C
@@ -125,6 +166,44 @@ OLED = dict(
     silk=[('text', 'OLED 0.96"', (3.81, 10.0), 1.2), ('text', 'SSD1306 128x64', (3.81, 12.2), 0.8)],
     ref_at=(3.81, 17.0),
     label_side={1: 'down', 2: 'down', 3: 'down', 4: 'down'},
+    height=5.6,
 )
+
+def breakout(name, value, labels, desc='Breakout pads, 2.54 mm, for headers or wires later.', rows=False,
+             back_labels=False, labels_right=False, skip_rows=()):
+    """labels: list of pin labels in header order (1, 2, 3, ...), two columns: odd left, even right.
+    Pin 1 is square. Labels sit outside the columns so they stay readable with a header fitted;
+    rows=True puts one "odd even" label per row on the odd side (for rows along a board edge)."""
+    n = len(labels)
+    rows = (n + 1) // 2
+    pads = []
+    side = {}
+    for i, lab in enumerate(labels):
+        num = i + 1
+        x = 0.0 if num % 2 else 2.54
+        y = 2.54 * (i // 2)
+        pads.append((num, x, y, lab))
+        side[num] = 'left' if num % 2 else 'right'
+    n_rows = (n + 1) // 2
+    silk = []
+    if rows:
+        side = {num: None for num, *_ in pads}
+        for r in range(n_rows):
+            if r in skip_rows:             # labelled on the board instead (no room beside this row)
+                continue
+            odd = labels[2 * r]
+            even = labels[2 * r + 1] if 2 * r + 1 < n else ''
+            text = f'{odd} {even}'.strip()
+            w = 0.85 * 0.8 * len(text)
+            x = (2.54 + 1.27 + 0.8 + w / 2) if labels_right else (-1.27 - 0.8 - w / 2)
+            silk.append(('text_back' if back_labels else 'text', text, (x, 2.54 * r), 0.8))
+    return dict(name=name, value=value, desc=desc, pads=pads, label_side=side,
+                outline=('rect', -1.27, -1.27, 3.81, 2.54 * n_rows - 1.27), silk_outline=True,
+                ref_at=(1.27, -2.4), fab=[], silk=silk, height=0.0, breakout=True)
+
+
+# On the Mini every corner hole would land behind a module on the back: no screws, no holes.
+OLED_NOHOLES = dict(OLED, name='SSD1306_0.96in_I2C_NoHoles', holes=[], silk_outline=False,
+                    desc=OLED['desc'] + ' No mounting holes: held by its header (Mini).')
 
 MODULES = [SUPERMINI, PCM5102, INMP441, GY521, KY023, MAX98357, OLED]

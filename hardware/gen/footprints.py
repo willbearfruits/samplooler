@@ -62,6 +62,10 @@ def _draw(items, layer, w):
             out.append(_circle(e[1], e[2], layer, w))
         elif kind == 'text':
             out.append(_text(e[1], e[2], layer, e[3] if len(e) > 3 else 0.8, rot=e[4] if len(e) > 4 else 0))
+        elif kind == 'text_back' and layer == 'F.SilkS':     # pinout printed on the far side
+            t = _text(e[1], e[2], 'B.SilkS', e[3] if len(e) > 3 else 0.8, rot=e[4] if len(e) > 4 else 0)
+            t[-1].append([S('justify'), S('mirror')])
+            out.append(t)
     return out
 
 
@@ -69,9 +73,10 @@ def _text_w(s, size):
     return 0.72 * size * len(s)
 
 
-def _label(pname, x, y, side, pad, ls):
-    """A pin name beside its pad, centred so KiCad's keep-upright flip cannot move it onto the pad."""
-    off = pad / 2 + 0.45
+def _label(pname, x, y, side, pad, ls, off=None):
+    """A pin name beside its pad, centred so KiCad's keep-upright flip cannot move it onto the pad.
+    `off`: distance from the pad centre to the label's near edge (default just past the pad)."""
+    off = pad / 2 + 0.45 if off is None else off
     w = _text_w(pname, ls)
     if side == 'right':
         return _text(pname, (x + off + w / 2, y), 'F.SilkS', ls)
@@ -118,10 +123,18 @@ def module_footprint(m):
         fp.append([S('pad'), str(num), S('thru_hole'), S(shape), [S('at'), x, y], [S('size'), size, size],
                    [S('drill'), drill], [S('layers'), '*.Cu', '*.Mask'], [S('remove_unused_layers'), S('no')],
                    [S('pinfunction'), pname], [S('pintype'), 'passive'], [S('uuid'), uid('pad', name, num)]])
-        side = m.get('label_side', {}).get(num)
-        if side is None:
+        ls = m.get('label_side', {})
+        side = ls.get(num, 'auto')
+        if side is None:                      # labelled some other way (e.g. one label per row)
+            continue
+        if side == 'auto':
             side = 'right' if x <= xmid else 'left'
-        fp.append(_label(pname, x, y, side, size, m.get('label_size', 0.8)))
+        fp.append(_label(pname, x, y, side, size, m.get('label_size', 0.8), m.get('label_off')))
+    for num, x, y, pname, w, h in m.get('smd', ()):
+        fp.append([S('pad'), str(num), S('smd'), S('roundrect'), [S('at'), x, y], [S('size'), w, h],
+                   [S('layers'), 'F.Cu', 'F.Paste', 'F.Mask'], [S('roundrect_rratio'), 0.2],
+                   [S('pinfunction'), pname], [S('pintype'), 'passive'], [S('uuid'), uid('smd', name, num)]])
+        fp.append(_text(pname.replace('GPIO', ''), (x, y), 'F.Fab', 0.5))
     for i, (x, y, d) in enumerate(m.get('holes', ())):
         fp.append([S('pad'), '', S('np_thru_hole'), S('circle'), [S('at'), x, y], [S('size'), d, d],
                    [S('drill'), d], [S('layers'), '*.Cu', '*.Mask'], [S('uuid'), uid('hole', name, i)]])

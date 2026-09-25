@@ -72,20 +72,9 @@
 		)
 	)
 	(fp_text user "ESP32-S3"
-		(at 7.665 9.5 0)
+		(at 7.665 3.4 0)
 		(layer "F.SilkS")
-		(uuid "7eaaa587-c9ee-548a-b81c-0b6536c42b18")
-		(effects
-			(font
-				(size 1 1)
-				(thickness 0.15)
-			)
-		)
-	)
-	(fp_text user "SuperMini"
-		(at 7.665 11.2 0)
-		(layer "F.SilkS")
-		(uuid "86f90d6f-65f9-558c-b13c-89411671076f")
+		(uuid "4cb33a27-6727-5c2d-8731-04911fd5f66d")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -159,9 +148,9 @@
 		(uuid "7f23f2c6-37d1-5eab-8389-a65d4b3f9276")
 	)
 	(fp_text user "TX"
-		(at 1.926 0 0)
+		(at -2.476 0 0)
 		(layer "F.SilkS")
-		(uuid "fca5553f-d248-5cce-9f4c-330f12a6ccac")
+		(uuid "98442677-75af-58cb-bcb3-207d5f03331e")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -180,9 +169,9 @@
 		(uuid "8b82d2a0-e3da-51bb-847b-5011bca4b3af")
 	)
 	(fp_text user "RX"
-		(at 1.926 2.54 0)
+		(at -2.476 2.54 0)
 		(layer "F.SilkS")
-		(uuid "ec04b067-92fc-588b-8b4b-74a0b3d4ed9c")
+		(uuid "ae97a24c-f2bb-5358-9d15-c01021273885")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -201,9 +190,9 @@
 		(uuid "f2e7d838-1b54-547f-82e2-55de83dfb5ee")
 	)
 	(fp_text user "1"
-		(at 1.638 5.08 0)
+		(at -2.188 5.08 0)
 		(layer "F.SilkS")
-		(uuid "f5c740ca-f502-54e1-9377-6045fe6e954e")
+		(uuid "7b6f90b8-ef01-56f5-af2c-1c4e74300780")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -222,9 +211,9 @@
 		(uuid "cc24f0aa-72d8-5b07-aaf9-3720ec692bd2")
 	)
 	(fp_text user "2"
-		(at 1.638 7.62 0)
+		(at -2.188 7.62 0)
 		(layer "F.SilkS")
-		(uuid "424f76ff-82c3-5985-bdb1-b96012038d4c")
+		(uuid "f399e6d2-b4b6-5098-83dd-5e9091c90ed8")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -243,9 +232,9 @@
 		(uuid "76517104-9630-5055-9cf2-2ff24490baf7")
 	)
 	(fp_text user "3"
-		(at 1.638 10.16 0)
+		(at -2.188 10.16 0)
 		(layer "F.SilkS")
-		(uuid "160501a9-ea98-577c-a052-5bf0513da9a5")
+		(uuid "0eb5e6db-1b55-572d-a7a0-5b227e49d56f")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -264,9 +253,9 @@
 		(uuid "2d723632-25ea-5558-8092-9c704a473b76")
 	)
 	(fp_text user "4"
-		(at 1.638 12.7 0)
+		(at -2.188 12.7 0)
 		(layer "F.SilkS")
-		(uuid "0a390b38-7538-54fe-8ab4-569ede645d6e")
+		(uuid "4b2d4f98-577f-5d5f-971c-5572353fa58e")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -285,9 +274,9 @@
 		(uuid "d47c5f82-5b32-5a6e-9f61-6acd75098703")
 	)
 	(fp_text user "5"
-		(at 1.638 15.24 0)
+		(at -2.188 15.24 0)
 		(layer "F.SilkS")
-		(uuid "e7b44508-2754-5db2-8610-1c5b63236198")
+		(uuid "19bfbe92-51dc-5013-9281-a8cc15bc047d")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -306,9 +295,9 @@
 		(uuid "ec9f097a-da5d-5e38-acc2-8b9347df0b26")
 	)
 	(fp_text user "6"
-		(at 1.638 17.78 0)
+		(at -2.188 17.78 0)
 		(layer "F.SilkS")
-		(uuid "c016af86-b0e2-5c43-ad3a-a0408936a611")
+		(uuid "2a725df9-09e7-56df-a338-c5a25fd22e28")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -327,9 +316,9 @@
 		(uuid "6c07a941-04b4-5a1e-9c2a-d7308e3db0a8")
 	)
 	(fp_text user "7"
-		(at 1.638 20.32 0)
+		(at -2.188 20.32 0)
 		(layer "F.SilkS")
-		(uuid "63aa8158-bef0-5295-bad5-af6814646f7e")
+		(uuid "88cd2100-ee86-5c78-b254-9486c47909f8")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -348,9 +337,9 @@
 		(uuid "12b0dff8-33f3-5f8d-96ea-60bec4202c9d")
 	)
 	(fp_text user "5V"
-		(at 13.404 0 0)
+		(at 12.854 0 0)
 		(layer "F.SilkS")
-		(uuid "130b786a-e99b-5a6e-9860-c3f3aaf3fde4")
+		(uuid "895fe847-2959-572b-97a5-004c780d22cf")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -369,9 +358,9 @@
 		(uuid "b3ea1d0b-d8ac-50a5-8bf2-7d7e341ec573")
 	)
 	(fp_text user "GND"
-		(at 13.116 2.54 0)
+		(at 12.566 2.54 0)
 		(layer "F.SilkS")
-		(uuid "513c0a2a-546c-5770-81b4-3678799c4321")
+		(uuid "89183236-d2e0-551b-b4fc-69e14274e91a")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -390,9 +379,9 @@
 		(uuid "0e68b059-925d-5c50-9c8f-1992f9fbb82f")
 	)
 	(fp_text user "3V3"
-		(at 13.116 5.08 0)
+		(at 18.094 5.08 0)
 		(layer "F.SilkS")
-		(uuid "64aa916c-91b8-5ec9-9845-3d006610dd82")
+		(uuid "b2a64146-23a7-5905-a2f5-aa012239dcc1")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -411,9 +400,9 @@
 		(uuid "7670cda2-fea3-5251-80ec-6af3770ed545")
 	)
 	(fp_text user "13"
-		(at 13.404 7.62 0)
+		(at 17.806 7.62 0)
 		(layer "F.SilkS")
-		(uuid "971d5a30-ff24-5dc8-9895-ee3c573638e0")
+		(uuid "c3771cb0-1112-5c57-b532-cccc2693a37a")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -432,9 +421,9 @@
 		(uuid "bef445c8-0782-5f6a-a610-72716acfd3b2")
 	)
 	(fp_text user "12"
-		(at 13.404 10.16 0)
+		(at 17.806 10.16 0)
 		(layer "F.SilkS")
-		(uuid "f73c996c-a167-51b8-b3ba-78b7449d3969")
+		(uuid "885b6a50-2ad5-513d-811b-4df2cfa6ee41")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -453,9 +442,9 @@
 		(uuid "672b269a-6418-559f-b9f1-5ad3a7aea14d")
 	)
 	(fp_text user "11"
-		(at 13.404 12.7 0)
+		(at 17.806 12.7 0)
 		(layer "F.SilkS")
-		(uuid "608adffa-93da-538d-9d49-b3def1f0a890")
+		(uuid "007433b9-c74a-5664-a59a-7169a8b039f0")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -474,9 +463,9 @@
 		(uuid "c8b679b9-8dad-5bf1-b1b9-41a346c8e608")
 	)
 	(fp_text user "10"
-		(at 13.404 15.24 0)
+		(at 17.806 15.24 0)
 		(layer "F.SilkS")
-		(uuid "b04abdd7-e2d8-5527-935f-3ae4f9fb08f1")
+		(uuid "a4b8a7fc-8cbe-5605-9955-afb2370128e4")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -495,9 +484,9 @@
 		(uuid "85c919d5-d564-5830-b869-f865c2318fcc")
 	)
 	(fp_text user "9"
-		(at 13.692 17.78 0)
+		(at 17.518 17.78 0)
 		(layer "F.SilkS")
-		(uuid "b9ab544c-2f61-59c6-ab35-d2495a88090c")
+		(uuid "9d67f434-99b4-5394-9925-2b8ffad2fc48")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -516,13 +505,413 @@
 		(uuid "c95ac95c-0278-5a0f-890a-69e5d7567cb9")
 	)
 	(fp_text user "8"
-		(at 13.692 20.32 0)
+		(at 17.518 20.32 0)
 		(layer "F.SilkS")
-		(uuid "316abe2e-1e2f-5633-9d1f-118f793e7eed")
+		(uuid "7cac6ac3-ca70-5dc3-b358-e7f72b10b65b")
 		(effects
 			(font
 				(size 0.8 0.8)
 				(thickness 0.12)
+			)
+		)
+	)
+	(pad "19" smd roundrect
+		(at 2.195 6.03)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO48")
+		(pintype "passive")
+		(uuid "0cb8185d-e0c8-5b07-8de6-fdca692e1c4f")
+	)
+	(fp_text user "48"
+		(at 2.195 6.03 0)
+		(layer "F.Fab")
+		(uuid "f7f7253f-a092-5a4e-8af3-06838cc3824b")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "20" smd roundrect
+		(at 2.195 7.783)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO47")
+		(pintype "passive")
+		(uuid "010a3cfd-2ae0-595f-8820-befab678784e")
+	)
+	(fp_text user "47"
+		(at 2.195 7.783 0)
+		(layer "F.Fab")
+		(uuid "7c13ecc8-413b-547e-92d3-9326cc363ca7")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "21" smd roundrect
+		(at 2.195 9.536)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO46")
+		(pintype "passive")
+		(uuid "e5886c4b-6580-5dd0-8d0e-29f4ba79be74")
+	)
+	(fp_text user "46"
+		(at 2.195 9.536 0)
+		(layer "F.Fab")
+		(uuid "1e5e609d-5f5d-51ce-9bd8-c152a52d50e9")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "22" smd roundrect
+		(at 2.195 11.289)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO45")
+		(pintype "passive")
+		(uuid "0815413f-e89e-5bff-8812-f4146d0aae36")
+	)
+	(fp_text user "45"
+		(at 2.195 11.289 0)
+		(layer "F.Fab")
+		(uuid "e9c6cca4-09a8-55d3-b2b8-08e3d9f2bfcb")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "23" smd roundrect
+		(at 2.195 13.042)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO42")
+		(pintype "passive")
+		(uuid "efc28e60-3614-55d6-b426-9d6e73246cfc")
+	)
+	(fp_text user "42"
+		(at 2.195 13.042 0)
+		(layer "F.Fab")
+		(uuid "3fcbfa80-75da-54ec-b9fe-4a7fe01661de")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "24" smd roundrect
+		(at 2.195 14.795)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO41")
+		(pintype "passive")
+		(uuid "b1e0ed05-1b72-54cd-a52a-851b85bd089e")
+	)
+	(fp_text user "41"
+		(at 2.195 14.795 0)
+		(layer "F.Fab")
+		(uuid "5d124c16-638c-5458-9a03-bc20e6e2de1d")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "25" smd roundrect
+		(at 2.195 16.548)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO40")
+		(pintype "passive")
+		(uuid "0fd507d3-bf2d-54fd-abdd-ae5678508dc8")
+	)
+	(fp_text user "40"
+		(at 2.195 16.548 0)
+		(layer "F.Fab")
+		(uuid "05122505-361f-5cc1-ab7d-9646a6f940e0")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "26" smd roundrect
+		(at 2.195 18.301)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO39")
+		(pintype "passive")
+		(uuid "d4e01f0a-2652-5311-9f6c-2b49fe286608")
+	)
+	(fp_text user "39"
+		(at 2.195 18.301 0)
+		(layer "F.Fab")
+		(uuid "5a0655ab-b880-5bd0-b568-8a3e7bb481cd")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "27" smd roundrect
+		(at 10.435 6.03)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO38")
+		(pintype "passive")
+		(uuid "0d651a3d-c74a-5870-a6cc-96f6a0e4b4b0")
+	)
+	(fp_text user "38"
+		(at 10.435 6.03 0)
+		(layer "F.Fab")
+		(uuid "d0acb6ff-8ba6-5d50-8caf-1b21a44e74bd")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "28" smd roundrect
+		(at 10.435 7.783)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO37")
+		(pintype "passive")
+		(uuid "f0864efa-f79f-5a0e-ac0e-15a5ddf9fe45")
+	)
+	(fp_text user "37"
+		(at 10.435 7.783 0)
+		(layer "F.Fab")
+		(uuid "cf1275db-ce23-5173-861a-ad247716d98d")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "29" smd roundrect
+		(at 10.435 9.536)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO36")
+		(pintype "passive")
+		(uuid "297146ff-fbdc-5cda-967b-0ad6e62b32d6")
+	)
+	(fp_text user "36"
+		(at 10.435 9.536 0)
+		(layer "F.Fab")
+		(uuid "f598b84e-5b24-5979-8c8b-0f40d949e55f")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "30" smd roundrect
+		(at 10.435 11.289)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO35")
+		(pintype "passive")
+		(uuid "19876070-32c2-5e4f-b5c2-adc71afaacf3")
+	)
+	(fp_text user "35"
+		(at 10.435 11.289 0)
+		(layer "F.Fab")
+		(uuid "804f7ba3-60de-5b08-a9cc-18c99aa46051")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "31" smd roundrect
+		(at 13.125 6.03)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO34")
+		(pintype "passive")
+		(uuid "02a9c7f6-3437-5b1a-8f49-f67b97a97a7b")
+	)
+	(fp_text user "34"
+		(at 13.125 6.03 0)
+		(layer "F.Fab")
+		(uuid "8d1299ec-e867-5c3e-a6ac-3be168eb40fd")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "32" smd roundrect
+		(at 13.125 7.783)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO33")
+		(pintype "passive")
+		(uuid "ff6f63f6-980e-5c95-b1fa-7f6271aa2276")
+	)
+	(fp_text user "33"
+		(at 13.125 7.783 0)
+		(layer "F.Fab")
+		(uuid "2f179ed8-9bd5-51a7-a8b9-e83fd9fd51f3")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "33" smd roundrect
+		(at 13.125 9.536)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO21")
+		(pintype "passive")
+		(uuid "b51f298e-bff9-53d4-a861-768432a07733")
+	)
+	(fp_text user "21"
+		(at 13.125 9.536 0)
+		(layer "F.Fab")
+		(uuid "ddf99bb7-b19e-5d70-a6ff-bd404b94e671")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "34" smd roundrect
+		(at 13.125 11.289)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO18")
+		(pintype "passive")
+		(uuid "e76c4f84-7ecb-581e-b536-2f14ea98cecf")
+	)
+	(fp_text user "18"
+		(at 13.125 11.289 0)
+		(layer "F.Fab")
+		(uuid "0f4b0645-01d7-5e1b-8d2a-fc2c7b9a5678")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "35" smd roundrect
+		(at 13.125 13.042)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO17")
+		(pintype "passive")
+		(uuid "6ba877f1-df8f-5db1-9bc3-efc03d43c69f")
+	)
+	(fp_text user "17"
+		(at 13.125 13.042 0)
+		(layer "F.Fab")
+		(uuid "62176c00-2c5b-57e3-8e85-872b9fb71739")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "36" smd roundrect
+		(at 13.125 14.795)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO16")
+		(pintype "passive")
+		(uuid "ec459bfe-85ab-5a69-aa2c-e6f763ecb43e")
+	)
+	(fp_text user "16"
+		(at 13.125 14.795 0)
+		(layer "F.Fab")
+		(uuid "f142ee32-bf42-52bd-b51e-90d8d36db92b")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "37" smd roundrect
+		(at 13.125 16.548)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO15")
+		(pintype "passive")
+		(uuid "76cc5f07-c3b8-5813-921b-656c0ff3f424")
+	)
+	(fp_text user "15"
+		(at 13.125 16.548 0)
+		(layer "F.Fab")
+		(uuid "ba7348db-b710-50e2-be37-16f318fa8b27")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
+			)
+		)
+	)
+	(pad "38" smd roundrect
+		(at 13.125 18.301)
+		(size 1.5 1.5)
+		(layers "F.Cu" "F.Paste" "F.Mask")
+		(roundrect_rratio 0.2)
+		(pinfunction "GPIO14")
+		(pintype "passive")
+		(uuid "9d7608ed-307b-5b50-84bc-373bcf1f33cf")
+	)
+	(fp_text user "14"
+		(at 13.125 18.301 0)
+		(layer "F.Fab")
+		(uuid "93c95ce7-4d87-596c-a0bf-49958ff7cd5e")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.075)
 			)
 		)
 	)

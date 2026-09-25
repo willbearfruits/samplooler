@@ -81,6 +81,9 @@ def supermini(M):
         m.cyl(bx, 7.0, 0.5, top + 0.8, top + 1.2, 'black')
     m.box(2.1, 19.9, 8.2, 21.9, top, top + 0.8, 'white')                              # chip antenna
     m.box(row - 2.6, 15.3, row - 0.6, 17.3, top, top + 0.6, 'white')                  # RGB LED
+    for _, x, y, _ in M.SUPERMINI.get('pogo', ()):                                     # pogo pins
+        m.box(x - 0.67, y - 0.67, x + 0.67, y + 0.67, 0, 0.6, 'gold', 0.8)
+        m.cyl(x, y, 0.35, 0.6, HDR, 'gold', shine=0.8)
     return m
 
 
@@ -150,16 +153,17 @@ def oled(M):
     return m
 
 
-def ec11_knob():
-    """EC11 vertical encoder with a 15 mm knob; footprint origin is pad A, shaft at (7.5, 2.5)."""
+def ec11_knob(shaft=25.0):
+    """EC11 vertical encoder with a 15 mm knob pushed onto a `shaft` mm shaft (length from the
+    PCB); footprint origin is pad A, shaft at (7.5, 2.5)."""
     m = Model()
     cx, cy = 7.5, 2.5
     m.box(cx - 6.0, cy - 6.0, cx + 6.0, cy + 6.0, 0, 6.8, 'silver', 0.6)
     m.box(cx - 5.2, cy - 5.2, cx + 5.2, cy + 5.2, 6.8, 7.2, 'black')
     m.cyl(cx, cy, 3.5, 7.2, 12.0, 'silver', shine=0.8)                                 # M7 bushing
-    m.cyl(cx, cy, 3.0, 12.0, 14.0, 'silver', shine=0.8)                                # shaft
-    m.cyl(cx, cy, 7.5, 14.0, 29.0, 'cap', shine=0.25)                                  # knob
-    m.cyl(cx, cy, 6.8, 29.0, 29.6, 'black', shine=0.4)
+    m.cyl(cx, cy, 3.0, 12.0, shaft - 11.0, 'silver', shine=0.8)                        # shaft
+    m.cyl(cx, cy, 7.5, shaft - 11.0, shaft + 4.0, 'cap', shine=0.25)                   # knob
+    m.cyl(cx, cy, 6.8, shaft + 4.0, shaft + 4.6, 'black', shine=0.4)
     for x in (0, 14.5):
         for y in ((0, 2.5, 5) if x == 0 else (0, 5)):
             m.box(x - 0.4, y - 0.15, x + 0.4, y + 0.15, -3.0, 0.0, 'silver', 0.6)
@@ -169,5 +173,5 @@ def ec11_knob():
 BUILDERS = {
     'ESP32-S3_SuperMini': supermini, 'GY-PCM5102': pcm5102, 'INMP441_Round': inmp441,
     'GY-521_MPU6050': gy521, 'KY-023_Joystick': ky023, 'MAX98357A_Breakout': max98357_header,
-    'SSD1306_0.96in_I2C': oled,
+    'SSD1306_0.96in_I2C': oled, 'SSD1306_0.96in_I2C_NoHoles': oled,
 }

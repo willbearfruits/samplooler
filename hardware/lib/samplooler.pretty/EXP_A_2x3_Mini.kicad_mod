@@ -1,0 +1,179 @@
+(footprint "EXP_A_2x3_Mini"
+	(version 20241229)
+	(generator "samplooler_gen")
+	(generator_version "1.0")
+	(layer "F.Cu")
+	(descr "Breakout pads, 2.54 mm, for headers or wires later.")
+	(tags "module breakout header")
+	(fp_rect
+		(start -1.27 -1.27)
+		(end 3.81 6.35)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "576a5811-98c7-5f8a-8bd2-c010ccf1a9e0")
+	)
+	(fp_rect
+		(start -1.52 -1.52)
+		(end 4.06 6.6)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "ea80c695-b7fd-543a-89e3-c0cc98a91b4a")
+	)
+	(fp_rect
+		(start -1.27 -1.27)
+		(end 3.81 6.35)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "556a78b3-3e2d-50b0-8344-93f3f0c97cb3")
+	)
+	(property "Reference" "REF**"
+		(at 1.27 -2.4 0)
+		(layer "F.SilkS")
+		(uuid "01f85952-242c-5449-8f62-e93f011474e2")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "EXP_A_2x3_Mini"
+		(at 1.27 7.55 0)
+		(layer "F.Fab")
+		(uuid "fc1ce16e-70c8-5dfd-b325-72f96f9f889a")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 1.27 5.04 0)
+		(layer "F.Fab")
+		(uuid "695150de-c10f-5960-98b5-76a4a86f2e8b")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_text user "43 44"
+		(at 6.31 0 0)
+		(layer "F.SilkS")
+		(uuid "169908d8-2f95-58e2-86af-6c4a748e382f")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "1 2"
+		(at 5.63 2.54 0)
+		(layer "F.SilkS")
+		(uuid "554c4ca4-149f-5442-9c87-1281cecc088a")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "GND GND"
+		(at 6.99 5.08 0)
+		(layer "F.SilkS")
+		(uuid "b130159e-76df-5413-94dd-1ca6fc698221")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "43")
+		(pintype "passive")
+		(uuid "f45f6d14-8e80-588b-9c18-8d38ff270d1b")
+	)
+	(pad "2" thru_hole circle
+		(at 2.54 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "44")
+		(pintype "passive")
+		(uuid "30ddd847-63ab-5acd-9019-fcc157ba49bf")
+	)
+	(pad "3" thru_hole circle
+		(at 0 2.54)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "1")
+		(pintype "passive")
+		(uuid "b202f9b6-8d2a-5717-bb49-a3ad6b53339e")
+	)
+	(pad "4" thru_hole circle
+		(at 2.54 2.54)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "2")
+		(pintype "passive")
+		(uuid "ad45c314-53da-5345-9933-2e1d41e51ed8")
+	)
+	(pad "5" thru_hole circle
+		(at 0 5.08)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "GND")
+		(pintype "passive")
+		(uuid "11c47339-d4d9-5a1c-9751-f590d633a6e0")
+	)
+	(pad "6" thru_hole circle
+		(at 2.54 5.08)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "GND")
+		(pintype "passive")
+		(uuid "2e09213d-2828-5901-ac29-d2d85f7335d6")
+	)
+	(model "${KIPRJMOD}/../lib/samplooler.3dshapes/EXP_A_2x3_Mini.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 0.3937 0.3937 0.3937)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(embedded_fonts no)
+)

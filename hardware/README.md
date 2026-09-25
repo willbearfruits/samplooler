@@ -1,177 +1,278 @@
-# Samplooler hardware: a two-board stack for the S3 build
+# Samplooler hardware
 
-![The assembled stack](images/stack-3d.png)
+Two PCB designs for the ESP32-S3 build. Both are generated from the Python in `gen/`:
 
-Two 90 × 64 mm boards, 11 mm apart on M3 standoffs:
+| | **Stack** | **Mini** |
+| - | - | - |
+| Boards | two, 90 × 64 mm, 11 mm apart on M3 standoffs | one, 82 × 56 mm, parts on both faces |
+| Controls | joystick and encoder (hold the encoder to record) | encoder and a 12 mm record button |
+| Layout | bottom board: every module, the joystick, the encoder<br>top board: OLED, microphone | front: OLED, mic, encoder, REC, breakouts<br>back: SuperMini, DAC, IMU, amp header |
+| KiCad projects | `stack-bottom/`, `stack-top/` | `mini/` |
 
-- **bottom** carries the modules: ESP32-S3 SuperMini, GY-PCM5102 DAC, INMP441 mic,
-  GY-521 (MPU-6050), KY-023 joystick, and a header for the optional MAX98357A amp.
-- **top** is the panel: the 0.96" SSD1306 OLED, the EC11 encoder, an opening for the
-  joystick, and access holes over the SuperMini's BOOT and RST buttons.
+Both use the kit wiring from `firmware/main/pins.h`, plus these extras:
 
-They meet through a 2×4 connector: an 8.5 mm female socket on the bottom board and a male
-header fitted to the underside of the top board. Socket plus header plastic is 11.0 mm,
-which is the standoff length.
+- **Pogo pins to the SuperMini's 20 underside pads**, for 20 more GPIOs: 14–18, 21, 33–42 and 45–48.
+- **Breakouts for every spare GPIO**: labelled 2.54 mm pads, ready for a header or wires later. Each board has an EXP A and an EXP B.
+- **Qwiic / STEMMA QT** (JST-SH, 3.3 V I2C) for sensors and add-ons.
+- **Header for the optional MAX98357A amp**, which hangs off the left edge.
+- **DAC strap jumpers and OLED pin-order jumpers**, so module variants need no rework.
 
-Everything is the same circuit as the kit wiring in `firmware/main/pins.h`, so the
-firmware runs unchanged.
+![The stack](images/stack-3d.png)
 
-| | |
+| Stack, bottom board | Stack, top board |
 | - | - |
-| Bottom board | ![bottom](images/bottom-plan.png) |
-| Top board | ![top](images/top-plan.png) |
-| From the nose edge | ![nose](images/stack-nose.png) |
+| ![](images/stack-bottom-plan.png) | ![](images/stack-top-plan.png) |
+| **Mini, front** | **Mini, back** |
+| ![](images/mini-front-plan.png) | ![](images/mini-back-plan.png) |
 
 ## Order the boards (JLCPCB)
 
-Upload each zip as its own PCB:
+Each board is a separate PCB order. Upload its zip from `fab/`:
 
-- `fab/samplooler-bottom-jlcpcb.zip`
-- `fab/samplooler-top-jlcpcb.zip`
+| Design | Upload |
+| - | - |
+| Stack | `samplooler-stack-bottom-jlcpcb.zip` and `samplooler-stack-top-jlcpcb.zip` |
+| Mini | `samplooler-mini-jlcpcb.zip` |
 
 | Setting | Value |
 | - | - |
 | Layers | 2 |
-| Size | 90 × 64 mm (read from the Gerbers) |
 | Thickness | 1.6 mm FR-4 |
-| Surface | HASL lead-free (or ENIG) |
-| Min track / via | 0.25 mm tracks, 0.3 mm via drill: standard process, no extra cost |
-| Order number | "Specify a location": the `JLCJLCJLCJLC` text on the back of each board |
+| Surface | HASL lead-free, or ENIG |
+| Tracks / vias | 0.25 mm signal, 0.5–0.6 mm power, 0.6/0.3 mm vias, 0.5 mm to the edge: the standard process |
+| Order number | "Specify a location": each board carries a `JLCJLCJLCJLC` text on its back |
 
-The drills include plated slots for the encoder's mounting lugs, which the standard
-process covers. The joystick opening and the BOOT/RST holes are routed from the outline.
+The encoder's mounting lugs are plated slots, which the standard process covers. The stack's
+openings for the stick, the shaft, BOOT and RST are routed from the outline.
 
-The only SMD parts are 0805 capacitors (and two unfitted 0805 resistors), easy by hand.
-If you would rather have JLC fit them, `fab/*-bom.csv` and `fab/*-cpl.csv` are in JLC's
-SMT format (top side only, basic parts).
+The SMD parts are 0805 capacitors, two unfitted 0805 resistors and the pogo pins. The
+capacitors are easy by hand. If you'd rather have JLC fit them, `fab/*-bom.csv` and
+`fab/*-cpl.csv` are in JLC's SMT format. The Mini has parts on both faces.
 
 ## Parts
 
-| Qty | Part | Where |
-| -: | - | - |
-| 1 | ESP32-S3 SuperMini (ESP32-S3FH4R2) | bottom U1 |
-| 1 | GY-PCM5102 purple I2S DAC with 3.5 mm jack | bottom U2 |
-| 1 | INMP441 round I2S microphone | bottom U3 |
-| 1 | GY-521 MPU-6050 breakout | bottom U4 |
-| 1 | KY-023 joystick | bottom U5 |
-| 0–1 | MAX98357A breakout, Adafruit 3006 pin order (optional) | bottom J2 |
-| 1 | SSD1306 0.96" 128×64 I2C OLED, 4-pin | top U1 |
-| 1 | EC11 encoder with push switch, vertical, 20 mm shaft, plus a knob | top SW1 |
-| 1 | 2×4 female socket, 2.54 mm, 8.5 mm tall | bottom J1 |
-| 1 | 2×4 male header, 2.54 mm, standard 2.5 mm plastic | top J1 (underneath) |
-| ~60 | Straight male header pins, 2.54 mm (breakaway strip) | module headers |
-| 4 | M3 × 11 mm female-female standoffs (or 10 mm plus a 1 mm washer) and 8 M3 × 6 screws | corners |
-| 3 | 10 µF 0805 capacitor (LCSC C15850) | bottom C1 C2, top C1 |
-| 3 | 100 nF 0805 capacitor (LCSC C49678) | bottom C3 C4, top C2 |
-| 0 | 4.7 k 0805 resistor (LCSC C17673), not fitted | bottom R1 R2 |
-| 4 | Optional: M2 × 2.5 mm spacers and M2 screws for the OLED corners | top |
+| Qty | Part | Stack | Mini |
+| -: | - | - | - |
+| 1 | ESP32-S3 SuperMini (ESP32-S3FH4R2) | bottom U1 | back U1 |
+| 1 | GY-PCM5102 purple I2S DAC with 3.5 mm jack | bottom U2 | back U2 |
+| 1 | INMP441 round I2S microphone | top U2 | front U3 |
+| 1 | GY-521 (MPU-6050) | bottom U4 | back U4 |
+| 1 | SSD1306 0.96" 128×64 I2C OLED, 4 pins | top U1 | front U5 |
+| 1 | KY-023 joystick | bottom U5 | – |
+| 1 | EC11 encoder with push switch, vertical, plus a knob | bottom SW1, **25 mm shaft** | front SW1, 20 mm shaft |
+| 1 | 12 × 12 mm tactile switch with a round cap | – | front SW2 |
+| up to 20 | SMD pogo pins (see [below](#pogo-pins)) | bottom, under U1 | back, under U1 |
+| 1 + 1 | 2×4 female socket, 8.5 mm tall, and a 2×4 male header | bottom J1, top J1 (underneath) | – |
+| 1 | JST-SH 4-pin horizontal (SM04B-SRSS-TB) | bottom J3 | front J3 |
+| 4 | M3 standoffs and 8 M3 screws | 11 mm, between the boards | 12 mm, as feet |
+| strip | straight 2.54 mm header pins | the modules (about 60), plus any breakouts you fit | the same |
+| 3 / 2 | 10 µF 0805 (LCSC C15850) | bottom C1 C2, top C1 | C1, C4 |
+| 3 / 3 | 100 nF 0805 (LCSC C49678) | bottom C3, top C2 C3 | C2, C3, C5 |
+| 0 | 4.7 k 0805 (LCSC C17673), not fitted | bottom R1 R2 | R1 R2 |
+| 0–1 | MAX98357A breakout, Adafruit 3006 pin order | bottom J2 | back J2 |
+
+R1 and R2 are I2C pull-ups. Fit them only if neither the OLED nor the GY-521 has its own
+(both usually do).
+
+## Pogo pins
+
+The SuperMini sits on its headers 2.5 mm above the carrier. Spring pins on the carrier touch
+the 20 pads on its underside. The pads are 1.753 mm apart down each column, so the pin's
+base width matters more than its height. Every pad has a 1.5 mm square land.
+
+| Pin | Fits | Where |
+| - | - | - |
+| Same Sky CPG-15-SMT-TR (recommended) | every pad | DigiKey / Same Sky, not at LCSC |
+| SMD pogo pins with a Ø2 mm flange, e.g. YIYUAN (LCSC C5221287, C2988082, C5157384) | every other pad only | LCSC |
+| Harwin P70 (LCSC C17702549), Mill-Max 0900 | only with a spacer: they don't match the 2.5 mm gap | |
+
+You only need pins on the pads you use. Clamp the module while you solder its headers: the
+springs push it up. Two checks on your own module:
+
+- **Pad order in the column next to TX/RX.** The module's silkscreen says 48 at the top and
+  39 at the bottom, but nologo's schematic shows the reverse. Meter it in diode mode: the pad
+  marked 48 lights the module's RGB LED.
+- **Strapping pins.** GPIO45 and GPIO46 must not be pulled high at power-up (45 high sets the
+  flash to 1.8 V). GPIO48 drives the module's RGB LED. GPIO14–18 sit on ADC2, which Wi-Fi
+  also uses.
+
+## Breakouts
+
+Every GPIO the design doesn't use goes to a breakout pad with its number on the silkscreen.
+The pin order follows the fixed escape from the SuperMini (see
+[how the boards are laid out](#how-the-boards-are-laid-out)), which is why the numbers aren't
+sequential. On the stack, the rows sit under the top board, so fit **right-angle** headers
+there.
+
+**Stack, EXP A** (right edge, top to bottom)
+
+| | | |
+| -: | :-: | :-: |
+| 1 · 2 | 34 | 33 |
+| 3 · 4 | 21 | 18 |
+| 5 · 6 | 14 | 15 |
+| 7 · 8 | 16 | 17 |
+| 9 · 10 | 35 | 36 |
+| 11 · 12 | 37 | 38 |
+| 13 · 14 | 3V3 | GND |
+
+**Stack, EXP B** (bottom edge, left to right; pin 1 is top right)
+
+| | | | | | | | |
+| - | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| top | 43 TX | 39 | 41 | 45 | 47 | 5V | 3V3 |
+| bottom | 44 RX | 40 | 42 | 46 | 48 | GND | GND |
+
+**Mini, EXP A** (right edge, top to bottom)
+
+| | | |
+| -: | :-: | :-: |
+| 1 · 2 | 43 TX | 44 RX |
+| 3 · 4 | 1 | 2 |
+| 5 · 6 | GND | GND |
+
+**Mini, EXP B** (bottom edge, left to right; pin 1 is top right)
+
+| | | | | | | | | | | | | |
+| - | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| top | 34 | 21 | 14 | 16 | 35 | 48 | 47 | 46 | 42 | 40 | 5V | GND |
+| bottom | 33 | 18 | 15 | 17 | 36 | 37 | 38 | 45 | 41 | 39 | 3V3 | GND |
+
+On the Mini, GPIO1 and GPIO2 (the stack's joystick pins, ADC1) are free, so EXP A breaks them out.
 
 ## Before you order: measure these
 
-Cheap modules differ between sellers. Where the sources disagreed I put the holes at the
-midpoint and opened up the drills. A minute with calipers confirms these:
+Cheap modules differ between sellers. Where sources disagreed, the pads sit at the midpoint
+and the drills are opened up. A minute with calipers confirms these:
 
 | Check | Designed for | Tolerance built in |
 | - | - | - |
-| SuperMini: distance between its two pin rows | 15.33 mm (sources say 15.24 to 15.44) | 1.1 mm drills: a real 15.24 or 15.44 still fits |
+| SuperMini: distance between its two pin rows | 15.33 mm (sources say 15.24 to 15.46) | 1.1 mm drills fit either |
 | DAC: the 9-pin row (FLT…LROUT) against the 6-pin header | 6.475 mm in, 0.65 mm up from SCK | 1.2 mm drills; that row is optional anyway |
-| OLED: pin order | GND VCC SCL SDA | top JP1/JP2 swap GND and VCC, see below |
-| OLED: corner holes | 23.3 × 23.8 mm grid | 2.5 mm holes for M2; the header alone also holds it |
-| KY-023: stick centre vs its header | 17 mm from the header edge, 1 mm toward GND | 27 mm opening, gimbal needs 23 |
-| KY-023: M3 holes | 26.5 × 20.5 mm | optional; the 5-pin header carries it |
+| OLED: pin order | GND VCC SCL SDA | jumpers swap GND and VCC, see below |
+| OLED (stack): corner holes | 23.3 × 23.8 mm grid | 2.5 mm holes for M2; the header alone also holds it |
+| KY-023 (stack): stick centre against its header | 17 mm from the header edge, 1 mm toward GND | 27 mm opening, the gimbal needs 23 |
 
 ## Assembly
 
-1. **SMD capacitors first**, on both boards (C1 to C4 bottom, C1 and C2 top). Leave R1/R2
-   empty unless neither the OLED nor the GY-521 has I2C pull-ups.
-2. **DAC straps, bottom JP1 to JP4.** The DAC board's own H1L to H4L bridges are on its
-   back, which you cannot reach once it is mounted. If your DAC came with those bridges
-   set, leave JP1 to JP4 open. If they are open, bridge FLT = L, DEMP = L, XSMT = H,
-   FMT = L here (1–2 = H, 2–3 = L). An open XSMT means a silent DAC.
-3. **Joystick:** desolder the right-angle header and fit a straight one.
-4. **Modules onto the bottom board**, each on straight male headers with the plastic
-   between module and carrier, so every module sits 2.5 mm up. Solder the carrier side
-   last and trim the tails flush underneath.
-   - **Microphone:** the sound hole goes **up**. The header plastic goes on the side with
-     the metal can, and the can sits in the 2.5 mm gap.
-   - **DAC:** the 6-pin header, and the 9-pin row too if you can. It holds the board
-     against the force of plugging in the jack, and carries the straps from step 2.
-   - **SuperMini:** USB-C faces the board edge.
-   - **J2**, only if you fit the amp. Its module hangs off the right edge, with the speaker
-     terminal outside the stack.
-5. **Bottom J1:** the 2×4 female socket.
-6. **Top board:**
-   - **Encoder** from the top.
-   - **OLED** from the top, on its own header.
-   - **J1:** the 2×4 male header goes in from **underneath**, plastic below the board,
-     soldered on top.
-   - **OLED pin order:** if your OLED's first two pins read VCC GND instead of GND VCC,
-     cut the thin 1–2 bridge on JP1 and JP2 and solder 2–3 on both.
-7. **Stack:** four standoffs on the bottom board, press the top board's header into the
-   socket, screw down.
+### Stack
 
-The tilt "nose" is the edge with USB-C, the jack and the mic. Tilting that edge down plays
-forward, faster with angle. The MPU-6050's +X axis points at it, which is the orientation
-the firmware's `TILT_SIGN +1` expects. Roll left feeds the delay, roll right the stutter.
+1. **SMD first**: the capacitors, then any pogo pins under where the SuperMini goes.
+2. **DAC straps, JP1 to JP4.** The DAC board's own H1L to H4L bridges are on its back, out of
+   reach once it's mounted. If your DAC came with them set, leave JP1–JP4 open. If they're
+   open, bridge FLT = L, DEMP = L, XSMT = H, FMT = L here (1–2 = H, 2–3 = L). An open XSMT
+   means a silent DAC. On the stack, XSMT's strap only has the H side: L would mute the DAC.
+3. **Joystick**: swap its right-angle header for a straight one.
+4. **Modules onto the bottom board**, each on straight headers with the plastic between module
+   and carrier. Then the encoder (25 mm shaft) and the 2×4 socket J1. Trim the tails
+   underneath.
+5. **Top board**: the OLED and the mic (sound hole up) from the top, the 2×4 header J1 from
+   underneath (plastic below the board, soldered on top). If your OLED's first two pins read
+   VCC GND instead of GND VCC, cut the thin 1–2 bridges on JP1 and JP2 and solder 2–3 on both.
+6. **Stack**: four 11 mm standoffs on the bottom board, press the header into the socket,
+   screw down.
 
-To flash from the browser, hold BOOT while plugging in. Reach it through the hole in the
-top board with a toothpick or a 2 mm rod.
+To flash from the browser, hold BOOT while plugging in. Reach it through the hole in the top
+board with a toothpick.
 
-## Checks the design passed
+### Mini
+
+Parts on both faces hide each other's solder joints, so the order matters. The build works it
+out:
+
+**J2 (amp header) → SuperMini U1 → DAC U2 → mic U3 → IMU U4 → OLED U5**
+
+After that come the encoder, the record button, the breakouts and the four feet. The encoder's
+mounting lugs are soldered for strength only: on the Mini they aren't connected to GND. Trim the
+SuperMini's and the DAC's pin tails flush on the front before the mic and the OLED go over
+them. The DAC straps and the OLED jumpers work as on the stack (JP1–JP4 on the back, JP5/JP6
+on the front).
+
+On both designs, the **nose** is the edge with USB-C and the jack. Tilting the nose down plays
+forward, faster with angle.
+
+## Firmware notes
+
+- **Stack:** runs the current firmware unchanged. The joystick is mounted as in the kit case.
+  Published KY-023 wiring suggests left/right may come out mirrored, in the kit as well as
+  here. If so, change `x = ay` to `x = -ay` in `firmware/main/input.c`.
+- **Mini:** needs three small firmware changes, not made yet:
+  - Record on GPIO3, the record button (the joystick's old click pin). The SuperMini has a
+    100k/100k divider from USB 5V on GPIO3; a button to GND still reads fine.
+  - Menus on the encoder: hold = menu, tap = next, as on the C3.
+  - `ROLL_SIGN -1`: the IMU sits upside down on the back. Its +X still points at the nose, so
+    pitch is unchanged.
+
+## Checks every build runs
 
 | Check | Result |
 | - | - |
-| ERC, both schematics, every severity | 0 findings |
-| DRC, both boards, every severity including warnings, on the saved copper fill the Gerbers are plotted from | 0 findings |
-| Schematic ↔ PCB parity (`kicad-cli pcb drc --schematic-parity`) | clean |
-| Mechanical model of the 11 mm gap (`gen/layout.py: mechanical_check`) | 0 collisions |
-| Rules | JLC standard: 0.2 mm clearance, 0.25 mm signal / 0.5–0.6 mm power tracks, 0.6/0.3 mm vias, 0.5 mm to the edge |
+| ERC, every schematic, every severity | 0 findings |
+| DRC with schematic parity, every board, every severity, on the saved copper fill that the Gerbers are plotted from | 0 findings |
+| Routing | every connection routed on all three boards |
+| 3D mechanical model (`gen/mech.py`) | 0 collisions |
+| Stack: J1 socket against J1 header | mate pin for pin |
 
-The mechanical check models:
+The mechanical model covers:
 
-- every module's height above the carrier, counting its 2.5 mm header plastic
-- the untrimmed header tails and OLED M2 screws under the top board, and the encoder's pins
-- the jack, which is the tallest part at 9.6 mm, so nothing hangs above it
-- the joystick gimbal passing through the opening, and the swing of its cap
-- the standoffs and the board edges
+- every part's height, from its header plastic up
+- tall features: USB-C, the jack, the joystick gimbal, stick and cap swing, the encoder bushing, shaft and knob, the OLED screws
+- pin tails through the board
+- the openings in the top board, the standoffs and the board edges
+- on the Mini, which module hides which solder joint
+
+The Mini is two-sided on purpose, so KiCad's generic "PTH inside courtyard" check is switched
+off there. The mechanical model checks heights and solder order instead.
 
 ## How the boards are laid out
 
-- **Power:** the SuperMini's USB 5V feeds the DAC (and the amp); its 3.3 V regulator
-  feeds the mic, IMU, joystick, OLED and encoder. Both rails are hand-routed at 0.6 mm:
-  - risers run under the SuperMini, where the carrier is free because the module sits on
-    headers
-  - a 5V and a 3V3 line run across the board at y ≈ 33 mm
-  - each load gets a short branch; the DAC, mic, IMU and the feed to the top board each
-    have a 10 µF or 100 nF capacitor right at the pin
-- **Signals** are routed by Freerouting around those locked power lines. Both copper layers
-  are poured with GND and stitched with vias. The one pour island that stayed cut off got
-  its own via.
-- **Antenna:** no copper pour under the SuperMini's chip antenna. Nothing uses the radio
-  today, but BLE-MIDI stays possible.
-- **Joystick:** mounted a quarter turn clockwise, header toward the MCU. That is the same
-  as the kit case, so `input.c`'s axis mapping (`x = ay, y = -ax`) applies unchanged.
-  Published KY-023 wiring suggests left/right may come out mirrored in both the kit and
-  here. If so, change it to `x = -ay` in `firmware/main/input.c`.
+- **Power:** USB-C on the SuperMini feeds everything. Its 5 V pin feeds the DAC and the amp.
+  Its 3.3 V regulator feeds the IMU, joystick, mic, OLED, Qwiic and the breakouts.
+  Decoupling capacitors sit near the modules' supply pins. On the Mini, the IMU's capacitor
+  is wired straight onto its pins.
+- **The SuperMini escape:** the underside pads sit 1.753 mm apart in three columns, too tight
+  for an autorouter. A fixed, locked escape (`kit.supermini_escape`) brings each pad out:
+  - column C on the pads' own layer
+  - column B and the top of column A through a via to the other layer
+  - the bottom of column A straight out
+  - the 5 V and 3.3 V risers alongside
+
+  All the lines end in one row just below the module.
+- **Breakout order:** each breakout takes those lines in the order they arrive, so no two
+  cross on the way in. That order is the pin numbering above.
+- **Routing:** Freerouting joins everything else. Its preferred directions and via cost are
+  set per run, and the build keeps the best of a few settings. Afterwards it removes any
+  escape stub the router made redundant.
+- **Ground:** both layers are GND pours, stitched with vias. A last step works on the fill as
+  plotted: it ties any GND pad or pour pocket the routing walled in back to a plane, then DRC
+  confirms.
+- **Antenna:** no copper under the SuperMini's chip antenna.
+- **Stack link:** the 2×4 connector carries I2C (OLED) and I2S (mic) to the top board, with
+  GND on its bottom row.
 
 ## Regenerating
 
-Everything under `bottom/`, `top/`, `lib/`, `fab/` and `images/` is generated by the
-scripts in `gen/`. Nothing was drawn by hand in the KiCad GUI.
+Everything under `stack-bottom/`, `stack-top/`, `mini/`, `lib/`, `fab/` and `images/` is
+generated by the scripts in `gen/`. Nothing was drawn by hand in the KiCad GUI.
 
 ```sh
-python3 hardware/gen/build.py        # library, schematics + ERC, PCBs, routing, pours, DRC, fab zips
-python3 hardware/gen/render.py       # images/*.png, including the stacked render
+python3 hardware/gen/build.py              # both designs: library, schematics + ERC, PCBs, routing, DRC, fab files
+python3 hardware/gen/build.py mini         # one design
+python3 hardware/gen/build.py --check      # the mechanical model only
+python3 hardware/gen/render.py             # images/
 ```
 
-Needs KiCad 10 (`kicad-cli` and its `pcbnew` Python module) and Freerouting 2.4.1 at
-`~/.local/share/freerouting/freerouting-2.4.1-linux-x64/`. That is the Linux bundle,
-which brings its own Java 25. `build.py --no-route` skips the router.
+You need KiCad 10 (`kicad-cli` and its `pcbnew` Python module) and Freerouting 2.4.1 at
+`~/.local/share/freerouting/freerouting-2.4.1-linux-x64/`. That's the Linux bundle, which
+brings its own Java. The build refuses to run while KiCad has one of the projects open,
+because it rewrites every file.
 
 | File | What |
 | - | - |
-| `gen/modules.py` | module geometry: pin order, outlines, the tolerances above |
-| `gen/build.py` | netlists, schematic layout, project setup, routing and fab steps |
-| `gen/layout.py` | placement, the mechanical model, hand-routed power, stitching |
+| `gen/stack.py`, `gen/mini.py` | the two designs: parts, nets, placement, breakout order, silkscreen |
+| `gen/modules.py` | module geometry: pins, outlines, tall features, the pogo pad map, the tolerances above |
+| `gen/parts.py` | stock parts: footprints, LCSC numbers, mechanics |
+| `gen/kit.py` | shared steps: library, schematic layout, placement, SuperMini escape, routing, pours, GND rescue, DRC, fab |
+| `gen/mech.py` | the mechanical model |
 | `gen/schematic.py`, `gen/footprints.py`, `gen/models.py` | writers for `.kicad_sch`, `.kicad_mod`, VRML bodies |
-| `lib/` | the project symbol, footprint and 3D-model libraries |
+| `lib/` | the generated symbol, footprint and 3D-model libraries |
