@@ -17,14 +17,14 @@ jobs:
       matrix:
         target: [esp32s3, esp32c3]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.5
+          esp_idf_version: v5.5.1          # the release the firmware is developed on
           target: ${{ matrix.target }}
           path: firmware
           command: idf.py build && idf.py merge-bin -o samplooler-${{ matrix.target }}.bin
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: samplooler-${{ matrix.target }}
           path: firmware/build/samplooler-${{ matrix.target }}.bin
@@ -40,19 +40,19 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: samplooler-*
           merge-multiple: true
           path: site/firmware
       - name: The showcase video, served next to the page
         run: mkdir -p site/media && cp hardware/images/samplooler-showcase-full.mp4 site/media/showcase.mp4
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -61,12 +61,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: samplooler-*
           merge-multiple: true
           path: dist
       - run: cd dist && sha256sum samplooler-*.bin > SHA256SUMS
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
