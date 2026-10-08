@@ -1,4 +1,4 @@
-set(srcs "main.c" "audio.c" "recorder_f32.c" "recorder_q15.c" "imu.c" "oled.c" "input.c" "slots.c" "usb.c" "fx.c" "ui.c" "diag.c" "settings.c")
+set(srcs "main.c" "audio.c" "recorder_f32.c" "recorder_q15.c" "imu.c" "oled.c" "input.c" "slots.c" "usb.c" "fx.c" "ui.c" "diag.c" "settings.c" "font_data.c")
 set(reqs driver esp_driver_i2s esp_driver_i2c esp_driver_gpio esp_driver_pcnt esp_adc esp_timer fatfs wear_levelling nvs_flash esp_app_format esp_system esp_hw_support)
 if(CONFIG_IDF_TARGET_ARCH_XTENSA)
     list(APPEND reqs xtensa)

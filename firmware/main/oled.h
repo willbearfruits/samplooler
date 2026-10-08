@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include "driver/i2c_master.h"
 #include "pins.h"
+#include "font.h"
 
 bool oled_init(i2c_master_bus_handle_t bus);
 bool oled_present(void);
@@ -18,4 +19,18 @@ void oled_line(int x0, int y0, int x1, int y1, bool on);
 void oled_circle(int cx, int cy, int r, bool on);        // outline
 void oled_disc(int cx, int cy, int r, bool on);          // filled
 void oled_invert(int x, int y, int w, int h);            // XOR a block
+void oled_rrect(int x, int y, int w, int h, int r, bool on);   // filled, rounded corners
+void oled_rframe(int x, int y, int w, int h, int r);           // rounded outline
+void oled_dither(int x, int y, int w, int h, int level, bool on);  // level 0..4 of a 2x2 pattern: a grey
+void oled_hline_pat(int x, int y, int w, uint8_t pat, bool on);    // dotted line, pat bit i = pixel x+i
+
+// Proportional fonts (font.h). Return the x after the text; _w measures. Tracking adds px between glyphs.
+int  oled_ftext(const gfx_font_t *f, int x, int y, const char *s);
+int  oled_ftext_ex(const gfx_font_t *f, int x, int y, const char *s, int tracking);
+int  oled_ftext_w(const gfx_font_t *f, const char *s, int tracking);
+int  oled_ftext_c(const gfx_font_t *f, int cx, int y, const char *s, int tracking);   // centred on cx
+int  oled_ftext_r(const gfx_font_t *f, int rx, int y, const char *s, int tracking);   // right edge at rx
+// A capsule with text: filled (white on black text) or outlined. Returns its width.
+int  oled_pill(const gfx_font_t *f, int x, int y, const char *s, bool filled);
+int  oled_pill_w(const gfx_font_t *f, const char *s);
 void oled_flush(void);

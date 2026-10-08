@@ -6,8 +6,8 @@ set -e
 cd "$(dirname "$0")"
 P=../../firmware/main
 mkdir -p out/c3
-gcc -std=gnu17 -O1 -I. -I$P -o sim sim.c stubs.c $P/ui.c $P/oled.c -lm
-gcc -std=gnu17 -O1 -DCONFIG_IDF_TARGET_ESP32C3=1 -I. -I$P -o sim-c3 sim.c stubs.c $P/ui.c $P/oled.c -lm
+gcc -std=gnu17 -O1 -I. -I$P -o sim sim.c stubs.c $P/ui.c $P/oled.c $P/font_data.c -lm
+gcc -std=gnu17 -O1 -DCONFIG_IDF_TARGET_ESP32C3=1 -I. -I$P -o sim-c3 sim.c stubs.c $P/ui.c $P/oled.c $P/font_data.c -lm
 ./sim
 OUT=out/c3 ./sim-c3
 python3 render.py out/sheet.png out

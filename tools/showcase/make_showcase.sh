@@ -24,7 +24,7 @@ mkdir -p "$WORK"
 if [ "$STAGE" -le 1 ]; then
   echo "1/6 the twin plays the score"
   gcc -std=gnu17 -O2 -ffast-math -I"$S/stubs" -I"$R/tools/uisim" -I"$P" -o "$WORK/twin" "$S/twin.c" \
-      "$P/recorder_f32.c" "$P/fx.c" "$P/ui.c" "$P/oled.c" -lm
+      "$P/recorder_f32.c" "$P/fx.c" "$P/ui.c" "$P/oled.c" "$P/font_data.c" -lm
   python3 "$S/score.py" "$WORK/work"
   "$WORK/twin" "$WORK/work/score.txt" "$WORK/work/mic.f32" "$WORK/work/out.f32" "$WORK/work/oled.raw" "$WORK/work/ui.csv"
   python3 "$S/mix.py" "$WORK/work"

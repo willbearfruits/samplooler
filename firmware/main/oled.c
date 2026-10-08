@@ -174,6 +174,110 @@ void oled_invert(int x, int y, int w, int h)
     for (int j = y; j < y + h; j++) for (int i = x; i < x + w; i++) oled_pixel(i, j, !oled_get(i, j));
 }
 
+// ---- rounded shapes, dither, patterns ----
+static int corner_inset(int r, int i)       // pixels cut from row i of a corner of radius r
+{
+    static const uint8_t ins[5][4] = { {0}, {1}, {2, 1}, {3, 1, 1}, {4, 2, 1, 1} };
+    if (r > 4) r = 4;
+    return i < r ? ins[r][i] : 0;
+}
+void oled_rrect(int x, int y, int w, int h, int r, bool on)
+{
+    for (int j = 0; j < h; j++) {
+        int k = j < h - 1 - j ? j : h - 1 - j;
+        int in = corner_inset(r, k);
+        oled_rect(x + in, y + j, w - 2 * in, 1, on);
+    }
+}
+void oled_rframe(int x, int y, int w, int h, int r)
+{
+    for (int j = 0; j < h; j++) {
+        int k = j < h - 1 - j ? j : h - 1 - j;
+        int in = corner_inset(r, k), in2 = corner_inset(r, k + 1);
+        if (k == 0) { oled_rect(x + in, y + j, w - 2 * in, 1, true); continue; }
+        oled_pixel(x + in, y + j, true); oled_pixel(x + w - 1 - in, y + j, true);
+        if (k < r && in2 > in) { oled_rect(x + in, y + j, in2 - in, 1, true); oled_rect(x + w - in2, y + j, in2 - in, 1, true); }
+    }
+}
+void oled_dither(int x, int y, int w, int h, int level, bool on)
+{
+    for (int j = y; j < y + h; j++) for (int i = x; i < x + w; i++) {
+        int p = ((i & 1) << 1) | (j & 1);                       // 0..3 within a 2x2 cell
+        static const uint8_t order[4] = { 0, 3, 1, 2 };
+        if (order[p] < level) oled_pixel(i, j, on);
+    }
+}
+void oled_hline_pat(int x, int y, int w, uint8_t pat, bool on)
+{
+    for (int i = 0; i < w; i++) if (pat & (1 << (i & 7))) oled_pixel(x + i, y, on);
+}
+
+// ---- proportional fonts ----
+static const gfx_glyph_t *find_glyph(const gfx_font_t *f, uint8_t *ch)
+{
+    uint8_t c = *ch;
+    if (c >= f->first && c <= f->last && f->glyphs[c - f->first].w) return &f->glyphs[c - f->first];
+    if ((f->flags & GFX_FONT_UPPER_FALLBACK) && c >= 'a' && c <= 'z') {
+        c = (uint8_t)(c - 32);
+        if (c >= f->first && c <= f->last && f->glyphs[c - f->first].w) { *ch = c; return &f->glyphs[c - f->first]; }
+    }
+    return NULL;
+}
+static int kern_of(const gfx_font_t *f, uint8_t a, uint8_t b)
+{
+    for (int i = 0; i < f->nkern; i++) {
+        if (f->kern[i].a == a && f->kern[i].b == b) return f->kern[i].k;
+        if (f->kern[i].a > a) break;
+    }
+    return 0;
+}
+static bool font_on = true;                 // glyph colour: false draws black text, for filled pills
+static int glyph(const gfx_font_t *f, int x, int y, uint8_t ch, bool draw)
+{
+    const gfx_glyph_t *gl = find_glyph(f, &ch);
+    if (!gl) return f->space;
+    if (draw) {
+        const uint8_t *d = f->bits + gl->off;
+        for (int cx = 0; cx < gl->w; cx++, d += f->bpc) {
+            uint32_t col = d[0];
+            if (f->bpc > 1) col |= (uint32_t)d[1] << 8;
+            if (f->bpc > 2) col |= (uint32_t)d[2] << 16;
+            if (f->bpc > 3) col |= (uint32_t)d[3] << 24;
+            for (int r = 0; col; r++, col >>= 1) if (col & 1) oled_pixel(x + cx, y + r, font_on);
+        }
+    }
+    return gl->adv;
+}
+static int walk(const gfx_font_t *f, int x, int y, const char *s, int tracking, bool draw)
+{
+    int pen = x, ink_end = x;
+    uint8_t prev = 0;
+    for (const uint8_t *p = (const uint8_t *)s; *p; p++) {
+        uint8_t ch = *p;
+        const gfx_glyph_t *gl = find_glyph(f, &ch);
+        if (prev && f->nkern) pen += kern_of(f, prev, ch);
+        if (!gl) { pen += f->space + tracking; prev = 0; continue; }
+        glyph(f, pen, y, ch, draw);
+        ink_end = pen + gl->w;
+        pen += gl->adv + tracking;
+        prev = ch;
+    }
+    return ink_end - x;
+}
+int oled_ftext_ex(const gfx_font_t *f, int x, int y, const char *s, int tracking) { return x + walk(f, x, y, s, tracking, true); }
+int oled_ftext(const gfx_font_t *f, int x, int y, const char *s) { return oled_ftext_ex(f, x, y, s, 0); }
+int oled_ftext_w(const gfx_font_t *f, const char *s, int tracking) { return walk(f, 0, 0, s, tracking, false); }
+int oled_ftext_c(const gfx_font_t *f, int cx, int y, const char *s, int tracking) { int w = oled_ftext_w(f, s, tracking); return oled_ftext_ex(f, cx - w / 2, y, s, tracking); }
+int oled_ftext_r(const gfx_font_t *f, int rx, int y, const char *s, int tracking) { int w = oled_ftext_w(f, s, tracking); return oled_ftext_ex(f, rx - w, y, s, tracking); }
+int oled_pill_w(const gfx_font_t *f, const char *s) { return oled_ftext_w(f, s, 1) + 6; }
+int oled_pill(const gfx_font_t *f, int x, int y, const char *s, bool filled)
+{
+    int w = oled_pill_w(f, s), h = f->cap + 4;
+    if (filled) { oled_rrect(x, y, w, h, 2, true); font_on = false; oled_ftext_ex(f, x + 3, y + 2, s, 1); font_on = true; }
+    else { oled_rframe(x, y, w, h, 2); oled_ftext_ex(f, x + 3, y + 2, s, 1); }
+    return w;
+}
+
 void oled_flush(void)
 {
     if (!present) return;

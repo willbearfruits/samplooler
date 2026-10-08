@@ -47,9 +47,12 @@ power it up with the encoder held; otherwise reflash with `tools/flash.sh` and r
 - `python3 tools/sl_midi.py log|status|reboot|cc N V|note N [on|off]` — talk to the S3 over raw ALSA MIDI
   (no pip deps). `log` is the only way to see S3 logs in USB mode; `status` asks for the status line and
   the last crash report (SysEx `F0 7D 53 F7`) and decodes the backtrace against `build/samplooler.elf`.
-- `tools/uisim/run.sh` — compiles `firmware/main/ui.c` + `oled.c` on the host against stubs, renders
-  every screen state for both targets to `tools/uisim/out/sheet.png` and `out/c3/sheet.png`. This is the
-  way to check UI changes without hardware; there is no unit test suite.
+- `tools/uisim/run.sh` — compiles `firmware/main/ui.c` + `oled.c` + `font_data.c` on the host against
+  stubs, renders every screen state for both targets to `tools/uisim/out/sheet.png` and `out/c3/sheet.png`
+  (copied to `images/screens-s3.png` / `screens-c3.png` when they change). This is the way to check UI
+  changes without hardware; there is no unit test suite.
+- `python3 tools/fontconv.py` — regenerates `firmware/main/font_data.c` from the ASCII-art faces in
+  `firmware/main/fonts/*.txt` (TWOFOLD's tiny/small/med/big). Run it after editing a glyph.
 - `enclosure/render.sh` — OpenSCAD → `out/{shell,lid,plunger}.stl` + preview PNGs.
 - `tools/showcase/make_showcase.sh` — the product video with sound (~25 min): `twin.c` compiles the
   firmware's `recorder_f32.c`, `fx.c`, `ui.c`, `oled.c` on the host and plays a scripted performance
@@ -115,6 +118,15 @@ load are chunked jobs (`slots_*_begin` / `slots_step`) driven by `job_poll()` in
 muted first (`audio_set_mute`, a 20 ms fade), the file moves in 16 KB steps so the screen and MIDI stay
 alive, recording is ignored meanwhile. The take is reached through `recorder_take()` /
 `recorder_load_begin/end()`, never while recording. A save goes to `slot.tmp` and is renamed at the end.
+
+**Screen** (`ui.c`, `oled.c`, `font.h`). `main.c` fills a `ui_t` per frame (20 fps) and `ui_draw()` does
+everything visual: a tape running between two reels carries the loop's envelope, a stick-figure operator
+on top of it runs with the real speed and direction, tumbles above 4.5x, is echoed by the delay, stutters
+with the stutter and juggles in GRAIN mode; slot jobs, boot notes (`CRASH`, `BROWNOUT`, `WATCHDOG`) and
+the screensaver (3 min idle, drifting) each have a scene. `oled.c` has the primitives: proportional fonts
+(`oled_ftext*`, faces `F_TINY/F_SMALL/F_MED/F_BIG`), `oled_pill` (filled pills draw black text),
+rounded rects, dither, dotted lines. The old 5x7 `oled_text` stays for the showcase twin. Keep the
+16-row header band: it is the yellow strip on two-colour panels.
 
 **Robustness** (`diag.c`, `audio.c`, `oled.c`, `imu.c`). `diag_init()` is the first call in `app_main`;
 `diag_crumb("step")` brackets risky steps (flash writes, USB start) and a `--wrap` of `esp_panic_handler`

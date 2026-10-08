@@ -331,7 +331,7 @@ void app_main(void)
     else { vTaskDelay(pdMS_TO_TICKS(200)); ESP_LOGI(TAG, "switching the USB port to MIDI + audio + CDC console"); usb_start(); }
 #endif
 
-    int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0;
+    int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0, idle_ms = 0;
     audio_stats_t last_stats = { 0 };
     bool held = false, menu = false;
     float roll = 0, pitch = 0, speed_cmd = 1.0f, pitch_ratio = 1.0f, joy_pitch_st = 0;
@@ -354,6 +354,11 @@ void app_main(void)
 #endif
 #endif
         if (job != JOB_NONE) down = false;                    // a slot job owns the take
+        idle_ms += 10;
+        if (down) idle_ms = 0;
+#if HAS_CONTROLS
+        if (in.enc || in.tap || in.hold || in.pressed || in.joy_click || in.joy_long || in.flick_l || in.flick_r || in.flick_u || in.flick_d) idle_ms = 0;
+#endif
         held_n = down ? (held_n < 3 ? held_n + 1 : 3) : (held_n > 0 ? held_n - 1 : 0);
         bool now = held_n == 3 ? true : held_n == 0 ? false : held;
         if (now != held) { held = now; recorder_set_record(held); }
@@ -457,6 +462,7 @@ void app_main(void)
                 .param_name = param_name[param], .param_val = pv, .param_frac = param_frac(param), .toast_ms = toast,
                 .busy_text = job != JOB_NONE ? job_text : NULL, .busy_frac = slots_progress(),
                 .note = result_ms > 0 ? result_text : tick < 700 ? diag_note() : NULL,
+                .idle_ms = recorder_state() == REC_IDLE ? idle_ms : 0,
             };
 #if HAS_CONTROLS
             u.has_joy = in.has_joy;
