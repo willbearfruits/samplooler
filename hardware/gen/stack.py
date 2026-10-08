@@ -1,4 +1,4 @@
-"""The stack: two 90 x 64 mm boards, 11 mm apart on M3 standoffs.
+"""The stack: two 94 x 46 mm boards, 11 mm apart on M3 standoffs.
 
 bottom  every module, the joystick and the encoder (both reach up through the top board),
         pogo pins to the SuperMini's underside pads, breakout rows for every spare GPIO, Qwiic
@@ -15,45 +15,46 @@ import parts as P
 from geometry import at, origin_for
 import kit
 
-W, H = 90.0, 64.0
-HOLES = [(4.0, 4.0), (W - 4.0, 4.0), (4.0, H - 4.0), (W - 4.0, H - 4.0)]
+REV, DATE = 'C', '2026-09-28'   # rev C: 94 x 46 mm, one panel (rev B was 90 x 64)
+W, H = 94.0, 46.0              # two of them with a 2 mm gap: one 94 x 94 mm panel (panel.py)
+HOLES = [(4.0, 4.0), (W - 4.0, 4.0), (4.0, H - 4.0), (W - 4.0, 26.0)]   # the encoder takes the corner
 GAP = 11.0                     # socket 8.5 + header plastic 2.5
-STICK = (22.0, 44.0)
+STICK = (25.0, 31.1)
 STICK_HOLE = 27.0
-SHAFT = (70.0, 46.0)           # encoder shaft, on the bottom board
+SHAFT = (84.9, 38.0)           # encoder shaft, on the bottom board
 SHAFT_HOLE = 9.0
-LINK = (47.0, 45.0)
-EXP_B_PIN1 = (64.5, 58.3)      # EXP B runs left from here along the bottom edge
+LINK = (46.7, 34.5)
+EXP_A_PIN1 = (66.0, 26.0)      # EXP A and EXP B run left from here, one above the other
+EXP_B_PIN1 = (66.0, 37.0)
 ENC_SHAFT_LEN = 25.0           # EC11 shaft length from its PCB: reaches ~12 mm above the top board
 ACCESS_D = 4.5
 
 # ---------------------------------------------------------------- where the modules go
-U1_O = (64.29, 2.09)                          # SuperMini, USB-C at the nose edge
+U1_O = (67.0, 2.09)                           # SuperMini, USB-C at the nose edge
 U2_O = (39.2, 15.35)                          # DAC, rot 180: jack at the nose edge
-U4_O = (37.74, 41.4)                          # IMU, rot 90: chip +X to the nose
-U5_O = origin_for(M.KY023['stick'], 270, 'front', STICK)
+U4_O = (44.64, 15.3)                          # IMU, rot 90: chip +X to the nose
+U5_O = origin_for(M.KY023['stick'], 0, 'front', STICK)
 SW1_O = (SHAFT[0] - 7.5, SHAFT[1] - 2.5)
 BOOT = at(U1_O, M.SUPERMINI['boot'], 0)
 RST = at(U1_O, M.SUPERMINI['rst'], 0)
-OLED_PIN1 = (41.19, 5.0)
-MIC = (23.0, 12.0)
+OLED_PIN1 = (49.5, 3.5)
+MIC = (26.0, 9.0)
 
 # ---------------------------------------------------------------- spare GPIOs to the breakouts
 # The underside pads leave the SuperMini on a fixed escape (kit.supermini_escape) that ends in a
-# row just below the module. Pads on the module's left half go to EXP B on the bottom edge, the
-# right half to EXP A on the right edge, and each header takes its lines in the order they arrive,
-# so no two cross on the way in: EXP B left to right (TX/RX come down the far left of the module),
-# EXP A top to bottom starting with the rightmost line. Power sits where its risers arrive.
+# row just below the module. Both breakouts lie to the left of that row, EXP A above EXP B, with
+# a channel between them: the lines drop into it and run left, the leftmost on top. The top ones
+# climb into EXP A from below, peeling off right to left, so EXP A takes them in reverse order;
+# the rest drop into EXP B from above, in order. TX/RX come straight down the left of the module
+# onto EXP A's right-hand pair.
 POGO = M.SUPERMINI.get('pogo', [])             # [(pad, x, y, 'GPIOnn')]
 EXITS = kit.supermini_exits()                  # {pad: (x, y) where its escape line ends}
-EXP_A_N = 7                                    # 2 x 7 on the right edge, below the SuperMini
-EXP_B_N = 7                                    # 2 x 7 along the bottom edge
-_left = sorted((p for p in POGO if p[1] < M.SM_ROW / 2), key=lambda p: EXITS[p[0]][0])
-_right = sorted((p for p in POGO if p[1] >= M.SM_ROW / 2), key=lambda p: -EXITS[p[0]][0])
-EXP_A_NETS = [p[3] for p in _right] + ['+3V3', 'GND']
-_b_seq = ['GPIO43', 'GPIO44'] + [p[3] for p in _left] + ['+5V', 'GND', '+3V3', 'GND']
-
-
+EXP_A_N = 7                                    # 2 x 7, horizontal
+EXP_B_N = 7
+_by_x = [p[3] for p in sorted(POGO, key=lambda p: EXITS[p[0]][0])]
+_a_seq = ['GND', '+3V3'] + _by_x[:10][::-1] + ['GPIO43', 'GPIO44']   # GND on top: the channel walls in the bottom row
+_b_seq = ['GND', '+5V', 'GND', '+3V3'] + _by_x[10:]   # power at the thin end of the channel
+EXP_A_NETS = kit.right_to_left(_a_seq)
 EXP_B_NETS = kit.right_to_left(_b_seq)
 SPARE = [n for n in EXP_A_NETS + EXP_B_NETS if n and n.startswith('GPIO')]
 assert len(EXP_A_NETS) == 2 * EXP_A_N and len(EXP_B_NETS) == 2 * EXP_B_N
@@ -63,8 +64,8 @@ def _label(net):
     return {None: 'nc', '+3V3': '3V3', '+5V': '5V'}.get(net, net.replace('GPIO', '') if net else 'nc')
 
 
-EXP_A = M.breakout('EXP_A_2x7_Stack', 'EXP A', [_label(n) for n in EXP_A_NETS], rows=True)
-EXP_B = M.breakout('EXP_B_2x7_Stack', 'EXP B', [_label(n) for n in EXP_B_NETS], rows=True, skip_rows=(0,))
+EXP_A = M.breakout('EXP_A_2x7_Stack', 'EXP A', [_label(n) for n in EXP_A_NETS], rows=True, skip_rows=(0,))
+EXP_B = M.breakout('EXP_B_2x7_Stack', 'EXP B', [_label(n) for n in EXP_B_NETS], rows=True)
 LIB_EXTRA = [EXP_A, EXP_B]
 
 # ---------------------------------------------------------------- bottom board
@@ -100,17 +101,18 @@ BOTTOM_PARTS = {
 
 BOTTOM_PLACE = {
     'U1': (*U1_O, 0, 'front'), 'U2': (*U2_O, 180, 'front'), 'U4': (*U4_O, 90, 'front'),
-    'U5': (*U5_O, 270, 'front'), 'SW1': (*SW1_O, 0, 'front'), 'J1': (*LINK, 0, 'front'),
-    'J2': (3.0, 36.0, 90, 'front'), 'J3': (78.8, 60.7, 0, 'front'),
-    'J4': (84.6, 36.0, 0, 'front'), 'J5': (*EXP_B_PIN1, 270, 'front'),
-    'JP1': (32.725, 20.4, 0, 'front'), 'JP3': (27.645, 20.4, 0, 'front'),
-    'JP2': (30.185, 23.4, 0, 'front'), 'JP4': (25.105, 23.4, 0, 'front'),
-    'C1': (42.7, 2.65, 0, 'front'), 'C2': (50.6, 45.0, 0, 'front'), 'C3': (37.7, 45.3, 270, 'front'),
-    'R1': (40.4, 48.6, 270, 'front'), 'R2': (40.4, 52.2, 270, 'front'),
+    'U5': (*U5_O, 0, 'front'), 'SW1': (*SW1_O, 0, 'front'), 'J1': (*LINK, 0, 'front'),
+    'J2': (3.0, 36.0, 90, 'front'), 'J3': (90.6, 16.0, 90, 'front'),
+    'J4': (*EXP_A_PIN1, 270, 'front'), 'J5': (*EXP_B_PIN1, 270, 'front'),
+    # the DAC straps sit on the underside, below the DAC's strap row: reachable once it is all built
+    'JP1': (32.725, 20.4, 0, 'back'), 'JP3': (27.645, 20.4, 0, 'back'),
+    'JP2': (30.185, 23.4, 0, 'back'), 'JP4': (25.105, 23.4, 0, 'back'),
+    'C1': (42.1, 2.65, 90, 'front'), 'C2': (44.6, 19.5, 90, 'front'), 'C3': (44.6, 23.3, 90, 'front'),
+    'R1': (44.6, 27.1, 90, 'front'), 'R2': (44.6, 30.9, 90, 'front'),
     'H1': (*HOLES[0], 0, 'front'), 'H2': (*HOLES[1], 0, 'front'),
     'H3': (*HOLES[2], 0, 'front'), 'H4': (*HOLES[3], 0, 'front'),
 }
-BOTTOM_REF_AT = {'C1': (0, 1.7), 'C2': (0, 1.7), 'C3': (1.7, 0), 'R1': (-1.7, 0), 'R2': (-1.7, 0),
+BOTTOM_REF_AT = {'C1': None, 'C2': (-1.8, 0), 'C3': (-1.8, 0), 'R1': (-1.8, 0), 'R2': (-1.8, 0),
                  'JP1': None, 'JP2': None, 'JP3': None, 'JP4': None, 'J1': None, 'J2': None, 'J3': None, 'J4': None, 'J5': None,
                  'SW1': None, 'H1': None, 'H2': None, 'H3': None, 'H4': None}
 
@@ -119,33 +121,42 @@ def bottom_power(bd):
     """The SuperMini's pogo pads and its 5V/3V3 get a fixed escape (kit.supermini_fanout);
     Freerouting joins the ends to the breakouts, the DAC, the amp and the rest."""
     kit.supermini_fanout(bd, 'U1', U1_O, 0, 'front')
+    # EXP B's GND pins sit where the channel's lines wall them in on both layers: tie them to the
+    # link socket's GND (J1 pin 7) on the back, down the gap between the two, before routing
+    j5_13 = (EXP_B_PIN1[0] - 6 * 2.54, EXP_B_PIN1[1])
+    j1_7 = (LINK[0], LINK[1] + 3 * 2.54)
+    kit.track(bd, 'GND', 'B.Cu', [j5_13, (48.7, j5_13[1] + 1.3), (48.7, j1_7[1]), j1_7], 0.4)
+    # A GND spine along the bottom edge, from H3 to the encoder's lower lug. Nothing sits below it,
+    # so no line has to cross it, and it keeps the front pour in one piece however the lines fall
+    # (the escape bundle and the 5V run otherwise cut it into a left and a right half)
+    lug = at(SW1_O, (7.5, 8.1), 0)
+    kit.track(bd, 'GND', 'F.Cu', [HOLES[2], (7.0, H - 1.0), (lug[0], H - 1.0), lug], 0.5)
+    kit.lock_all(bd)
 
 
 def bottom_silk(bd, S):
     F, B = pcbnew.F_SilkS, pcbnew.B_SilkS
     for (x, name) in ((32.725, 'FLT'), (27.645, 'XSMT')):
-        kit.silk(bd, name, (x, 18.6), 0.8)
+        kit.silk(bd, name, (x, 18.0), 0.8, B)
     for (x, name) in ((30.185, 'DEMP'), (25.105, 'FMT')):
-        kit.silk(bd, name, (x, 25.9), 0.8)
-    kit.silk(bd, 'DAC straps', (9.6, 19.6), 0.8, justify='left')
-    kit.silk(bd, '1-2 = H  2-3 = L', (9.6, 21.1), 0.8, justify='left')
-    kit.silk(bd, 'open if set on', (9.6, 22.6), 0.8, justify='left')
-    kit.silk(bd, 'the DAC board', (9.6, 24.1), 0.8, justify='left')
-    kit.silk(bd, 'chip +X to nose', (47.0, 25.9), 0.8)
-    kit.arrow_up(bd, 54.0, 25.6)
-    kit.silk(bd, 'AMP (opt)', (3.0, 38.2), 0.8)
-    kit.silk(bd, 'QWIIC', (78.8, 56.3), 0.8)
-    for k, name in enumerate(_label(n) for n in EXP_B_NETS[:2]):    # EXP B pins 1, 2: the encoder sits above
-        kit.silk(bd, name, (EXP_B_PIN1[0] + 1.3, EXP_B_PIN1[1] + 2.54 * k), 0.8, justify='left')
-    kit.silk(bd, 'EXP A', (85.87, 33.6), 0.8)
-    kit.silk(bd, 'EXP B', (EXP_B_PIN1[0] - 6 * 2.54 - 3.8, EXP_B_PIN1[1] + 1.27), 0.8)
-    kit.silk(bd, 'R1 R2: fit only if', (34.4, 54.6), 0.8, justify='left')
-    kit.silk(bd, 'no module has them', (34.4, 55.9), 0.8, justify='left')
-    kit.silk(bd, 'SAMPLOOLER', (47.0, 31.2), 3.0, B, bold=True)
-    kit.silk(bd, f'stack bottom  rev {kit.REV}  {kit.DATE}', (47.0, 34.7), 1.2, B)
-    kit.silk(bd, 'M3 x 11 standoffs, 2x4 socket 8.5 mm', (47.0, 36.9), 1.0, B)
-    kit.silk(bd, 'willbearfruits / samplooler', (47.0, 38.9), 1.0, B)
-    kit.silk(bd, 'JLCJLCJLCJLC', (21.0, 45.0), 1.0, B)
+        kit.silk(bd, name, (x, 25.2), 0.8, B)
+    for k, t in enumerate(('DAC straps', '1-2 = H  2-3 = L', 'open if set on', 'the DAC board')):
+        kit.silk(bd, t, (48.0, 19.6 + 1.5 * k), 0.8, B)
+    kit.silk(bd, 'chip +X to nose', (52.0, 2.2), 0.8)
+    kit.arrow_up(bd, 59.0, 1.9)
+    kit.silk(bd, 'AMP (opt)', (1.0, 18.6), 0.8, justify='left')
+    kit.silk(bd, 'QWIIC', (86.6, 16.0), 0.8, rot=90)
+    kit.silk(bd, 'EXP A', (48.65, EXP_A_PIN1[1] + 1.27), 0.8, rot=90)
+    kit.silk(bd, 'EXP B', (48.65, EXP_B_PIN1[1] + 1.27), 0.8, rot=90)
+    for k, net in enumerate(EXP_A_NETS[:2]):    # EXP A pins 1, 2: the SuperMini sits above them
+        kit.silk(bd, _label(net), (EXP_A_PIN1[0] + 1.3, EXP_A_PIN1[1] + 2.54 * k), 0.8, justify='left')
+    # the back, behind the joystick: the only clear stretch
+    kit.silk(bd, 'SAMPLOOLER', (27.0, 30.0), 2.2, B, bold=True)
+    for k, (t, size) in enumerate(((f'stack bottom  rev {REV}  {DATE}', 0.9),
+                                   ('M3 x 11 standoffs, 2x4 socket 8.5 mm', 0.8),
+                                   ('willbearfruits / samplooler', 0.9), ('JLCJLCJLCJLC', 0.9),
+                                   ('R1 R2 (front): fit only if no', 0.8), ('module has I2C pull-ups', 0.8))):
+        kit.silk(bd, t, (27.0, 32.6 + 1.4 * k), size, B)
 
 
 BOTTOM = dict(
@@ -196,12 +207,12 @@ TOP_PARTS = {
 TOP_PLACE = {
     'J1': (*LINK, 180, 'back'),
     'U1': (*OLED_PIN1, 0, 'front'), 'U2': (*MIC, 0, 'front'),
-    'JP1': (38.6, 36.4, 0, 'front'), 'JP2': (45.4, 36.4, 0, 'front'),
-    'C1': (51.4, 36.4, 90, 'front'), 'C2': (54.4, 36.4, 90, 'front'), 'C3': (MIC[0], MIC[1] + 9.6, 0, 'front'),
+    'JP1': (70.5, 17.5, 0, 'front'), 'JP2': (77.0, 17.5, 0, 'front'),
+    'C1': (82.5, 16.3, 90, 'front'), 'C2': (85.5, 16.3, 90, 'front'), 'C3': (MIC[0] + 9.4, MIC[1] + 2.5, 90, 'front'),
     'H1': (*HOLES[0], 0, 'front'), 'H2': (*HOLES[1], 0, 'front'),
     'H3': (*HOLES[2], 0, 'front'), 'H4': (*HOLES[3], 0, 'front'),
 }
-TOP_REF_AT = {'C1': (0, 2.3), 'C2': (0, 2.3), 'C3': (2.6, 0), 'JP1': None, 'JP2': None, 'J1': (-1.27, -2.6),
+TOP_REF_AT = {'U2': None, 'C1': (0, 2.3), 'C2': (0, 2.3), 'C3': (0, 2.3), 'JP1': None, 'JP2': None, 'J1': (-1.27, -2.6),
               'H1': None, 'H2': None, 'H3': None, 'H4': None}
 
 
@@ -211,24 +222,23 @@ def top_silk(bd, S):
     usb_x = U1_O[0] + M.SM_ROW / 2
     for x, name in ((jack_x, 'LINE OUT'), (usb_x, 'USB-C')):
         kit.silk(bd, name, (x, 2.2), 1.0)
-    kit.silk(bd, 'MIC', (MIC[0], 3.2), 1.0)
+    kit.silk(bd, 'MIC', (MIC[0] + 9.4, 3.2), 1.0)
     kit.silk(bd, 'BOOT', (BOOT[0], BOOT[1] + 3.6), 0.9)
     kit.silk(bd, 'RST', (RST[0], RST[1] + 3.6), 0.9)
-    kit.silk(bd, 'tilt the nose down: faster', (45.0, 33.0), 0.8)
-    kit.arrow_up(bd, 62.0, 32.7)
-    sx, sy = STICK
-    kit.silk(bd, 'click: tilt   hold: menu', (sx + 1.5, sy + STICK_HOLE / 2 + 2.2), 0.9)
-    kit.silk(bd, 'turn: value', (SHAFT[0], SHAFT[1] + 8.4), 0.9)
-    kit.silk(bd, 'hold: record', (SHAFT[0], SHAFT[1] + 10.0), 0.9)
-    kit.silk(bd, 'OLED pin order', (36.6, 34.6), 0.8, justify='left')
-    kit.silk(bd, 'GND VCC: as is', (36.6, 38.7), 0.8, justify='left')
-    kit.silk(bd, 'VCC GND: cut 1-2, bridge 2-3', (36.6, 40.1), 0.8, justify='left')
-    kit.silk(bd, 'SAMPLOOLER', (45.0, 57.5), 2.4, bold=True)
-    kit.silk(bd, f'rev {kit.REV}', (45.0, 60.6), 0.9)
-    kit.silk(bd, 'SAMPLOOLER stack top', (45.0, 22.0), 1.6, B, bold=True)
-    kit.silk(bd, f'rev {kit.REV}  {kit.DATE}', (45.0, 24.4), 1.0, B)
-    kit.silk(bd, 'J1 header goes on THIS side, pins down', (45.0, 41.0), 0.9, B)
-    kit.silk(bd, 'JLCJLCJLCJLC', (72.0, 60.0), 1.0, B)
+    kit.silk(bd, 'OLED pin order', (68.8, 15.3), 0.8, justify='left')
+    kit.silk(bd, 'GND VCC: as is', (68.8, 19.6), 0.8, justify='left')
+    kit.silk(bd, 'VCC GND: cut 1-2, bridge 2-3', (68.8, 21.0), 0.8, justify='left')
+    kit.silk(bd, 'tilt the nose down: faster', (60.5, 31.6), 0.8)
+    kit.arrow_up(bd, 72.5, 31.3)
+    kit.silk(bd, 'stick  click: tilt  hold: menu', (60.5, 33.6), 0.9)
+    kit.silk(bd, 'knob  turn: value  hold: record', (60.5, 35.6), 0.9)
+    kit.silk(bd, 'SAMPLOOLER', (60.0, 40.6), 2.4, bold=True)
+    kit.silk(bd, f'rev {REV}', (60.0, 43.6), 0.9)
+    kit.silk(bd, 'SAMPLOOLER stack top', (53.0, 14.0), 1.6, B, bold=True)
+    kit.silk(bd, f'rev {REV}  {DATE}', (53.0, 16.4), 1.0, B)
+    kit.silk(bd, 'J1 header goes on THIS side,', (62.0, 37.2), 0.9, B)
+    kit.silk(bd, 'pins down', (62.0, 38.6), 0.9, B)
+    kit.silk(bd, 'JLCJLCJLCJLC', (60.0, 42.0), 1.0, B)
 
 
 TOP = dict(

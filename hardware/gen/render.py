@@ -43,9 +43,6 @@ def stack_board():
          '--user-origin', f'{kit.ORIGIN[0]}x{kit.ORIGIN[1]}mm', '-o', top_wrl, kit.paths(stack.TOP)[2]])
     b = pcbnew.LoadBoard(kit.paths(stack.BOTTOM)[2])
     fp = pcbnew.FOOTPRINT(b)
-    fp.SetReference('STACK')
-    fp.Reference().SetVisible(False)
-    fp.Value().SetVisible(False)
     fp.SetPosition(pcbnew.VECTOR2I_MM(*kit.ORIGIN))
     m = pcbnew.FP_3DMODEL()
     m.m_Filename = top_wrl
@@ -73,3 +70,8 @@ if __name__ == '__main__':
     render(mini, os.path.join(IMG, 'mini-front-plan.png'))
     render(mini, os.path.join(IMG, 'mini-back-plan.png'), side='bottom')
     render(mini, os.path.join(IMG, 'mini-side.png'), '-80,0,180', 0.9)
+    for name in ('stack', 'mini'):          # made by panel.py
+        panel = os.path.join(HW, f'panel-{name}', f'samplooler-panel-{name}.kicad_pcb')
+        if os.path.exists(panel):
+            render(panel, os.path.join(IMG, f'panel-{name}.png'), zoom=0.85, w=1400, h=1400)
+            render(panel, os.path.join(IMG, f'panel-{name}-back.png'), zoom=0.85, side='bottom', w=1400, h=1400)

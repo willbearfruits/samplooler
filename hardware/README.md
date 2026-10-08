@@ -4,9 +4,9 @@ Two PCB designs for the ESP32-S3 build. Both are generated from the Python in `g
 
 | | **Stack** | **Mini** |
 | - | - | - |
-| Boards | two, 90 × 64 mm, 11 mm apart on M3 standoffs | one, 82 × 56 mm, parts on both faces |
+| Boards | two, 94 × 46 mm, 11 mm apart on M3 standoffs, made as one 94 × 94 mm panel | one, 82 × 56 mm, parts on both faces |
 | Controls | joystick and encoder (hold the encoder to record) | encoder and a 12 mm record button |
-| Layout | bottom board: every module, the joystick, the encoder<br>top board: OLED, microphone | front: OLED, mic, encoder, REC, breakouts<br>back: SuperMini, DAC, IMU, amp header |
+| Layout | bottom board: every module, the joystick, the encoder, DAC straps underneath<br>top board: OLED, microphone | front: OLED, mic, encoder, REC, breakouts<br>back: SuperMini, DAC, IMU, amp header |
 | KiCad projects | `stack-bottom/`, `stack-top/` | `mini/` |
 
 Both use the kit wiring from `firmware/main/pins.h`, plus these extras:
@@ -27,12 +27,30 @@ Both use the kit wiring from `firmware/main/pins.h`, plus these extras:
 
 ## Order the boards (JLCPCB)
 
-Each board is a separate PCB order. Upload its zip from `fab/`:
+The stack's two boards come as one panel, 94 × 94 mm, so they fit JLC's 100 × 100 mm price.
+They are joined by three 5 mm tabs across a 2 mm slot, each tab with a row of 0.5 mm mouse-bite
+holes on both sides: snap them apart and file the nubs flush. Upload one zip from `fab/`:
 
 | Design | Upload |
 | - | - |
-| Stack | `samplooler-stack-bottom-jlcpcb.zip` and `samplooler-stack-top-jlcpcb.zip` |
-| Mini | `samplooler-mini-jlcpcb.zip` |
+| Stack | `samplooler-panel-stack-jlcpcb.zip` (both boards; the single-board zips are there too) |
+| Mini | `samplooler-mini-jlcpcb.zip` (the Mini on its own) |
+| Mini + Filter | `samplooler-panel-mini-jlcpcb.zip`: the Mini and the Samplooler Filter on one 82 × 94 mm panel |
+
+For either panel, also set **Panel by Customer**, and **Different Design** to 2. JLC
+counts two designs on one panel as a different-design order and may charge for it; check
+the price before you pay.
+
+The **Samplooler Filter** is a companion board designed for the Mini's panel: an analog
+resonant filter (DRIVE, CUTOFF, RESO, LEVEL, LP/BP/HP) for the looper's line out, powered from
+USB-C or from the Mini's 5V pin. It lives in its own project, `~/Projects/samplooler-filter`
+(circuit, simulation, build, README). The Mini panel joins the Mini's plain lower edge to the
+Filter's back edge with two tabs, placed between the Filter's jacks and its USB-C socket. As
+with everything here, neither board has been made yet.
+
+| Stack panel (render) | Mini + Filter panel (render) |
+| - | - |
+| ![](images/panel-stack.png) | ![](images/panel-mini.png) |
 
 | Setting | Value |
 | - | - |
@@ -40,14 +58,16 @@ Each board is a separate PCB order. Upload its zip from `fab/`:
 | Thickness | 1.6 mm FR-4 |
 | Surface | HASL lead-free, or ENIG |
 | Tracks / vias | 0.25 mm signal, 0.5–0.6 mm power, 0.6/0.3 mm vias, 0.5 mm to the edge: the standard process |
-| Order number | "Specify a location": each board carries a `JLCJLCJLCJLC` text on its back |
+| Order number | "Specify a location": each board carries a `JLCJLCJLCJLC` text on its back (the panel has two; JLC uses one) |
 
 The encoder's mounting lugs are plated slots, which the standard process covers. The stack's
 openings for the stick, the shaft, BOOT and RST are routed from the outline.
 
 The SMD parts are 0805 capacitors, two unfitted 0805 resistors and the pogo pins. The
 capacitors are easy by hand. If you'd rather have JLC fit them, `fab/*-bom.csv` and
-`fab/*-cpl.csv` are in JLC's SMT format. The Mini has parts on both faces.
+`fab/*-cpl.csv` are in JLC's SMT format. The panel's pair names each part with its board's
+prefix (`BC1` is the bottom board's C1, `TC1` the top's), and JLC may want tooling rails added
+for assembly, which the panel doesn't have. The Mini has parts on both faces.
 
 ## Parts
 
@@ -101,27 +121,24 @@ springs push it up. Two checks on your own module:
 Every GPIO the design doesn't use goes to a breakout pad with its number on the silkscreen.
 The pin order follows the fixed escape from the SuperMini (see
 [how the boards are laid out](#how-the-boards-are-laid-out)), which is why the numbers aren't
-sequential. On the stack, the rows sit under the top board, so fit **right-angle** headers
-there.
+sequential. On the stack, both rows sit in the middle of the bottom board, under the top
+board: solder wires to the pads, or fit plain straight headers (2.5 mm plastic plus about
+6 mm of pin clears the 11 mm gap) and connect to them before the top board goes on. There is
+no room for Dupont housings between the boards.
 
-**Stack, EXP A** (right edge, top to bottom)
-
-| | | |
-| -: | :-: | :-: |
-| 1 · 2 | 34 | 33 |
-| 3 · 4 | 21 | 18 |
-| 5 · 6 | 14 | 15 |
-| 7 · 8 | 16 | 17 |
-| 9 · 10 | 35 | 36 |
-| 11 · 12 | 37 | 38 |
-| 13 · 14 | 3V3 | GND |
-
-**Stack, EXP B** (bottom edge, left to right; pin 1 is top right)
+**Stack, EXP A** (upper row, left to right; pin 1 is top right)
 
 | | | | | | | | |
 | - | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| top | 43 TX | 39 | 41 | 45 | 47 | 5V | 3V3 |
-| bottom | 44 RX | 40 | 42 | 46 | 48 | GND | GND |
+| top | GND | 48 | 47 | 46 | 42 | 40 | 43 TX |
+| bottom | 3V3 | 37 | 38 | 45 | 41 | 39 | 44 RX |
+
+**Stack, EXP B** (lower row, left to right; pin 1 is top right)
+
+| | | | | | | | |
+| - | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| top | GND | GND | 36 | 17 | 15 | 18 | 33 |
+| bottom | 5V | 3V3 | 35 | 16 | 14 | 21 | 34 |
 
 **Mini, EXP A** (right edge, top to bottom)
 
@@ -157,19 +174,21 @@ and the drills are opened up. A minute with calipers confirms these:
 
 ### Stack
 
-1. **SMD first**: the capacitors, then any pogo pins under where the SuperMini goes.
-2. **DAC straps, JP1 to JP4.** The DAC board's own H1L to H4L bridges are on its back, out of
-   reach once it's mounted. If your DAC came with them set, leave JP1–JP4 open. If they're
+1. **Snap the panel apart** and file the tab nubs flush.
+2. **SMD first**: the capacitors, then any pogo pins under where the SuperMini goes.
+3. **DAC straps, JP1 to JP4**, on the underside of the bottom board, so you can change them
+   later. The DAC board's own H1L to H4L bridges are on its back, out of reach once it's
+   mounted. If your DAC came with them set, leave JP1–JP4 open. If they're
    open, bridge FLT = L, DEMP = L, XSMT = H, FMT = L here (1–2 = H, 2–3 = L). An open XSMT
    means a silent DAC. On the stack, XSMT's strap only has the H side: L would mute the DAC.
-3. **Joystick**: swap its right-angle header for a straight one.
-4. **Modules onto the bottom board**, each on straight headers with the plastic between module
+4. **Joystick**: swap its right-angle header for a straight one.
+5. **Modules onto the bottom board**, each on straight headers with the plastic between module
    and carrier. Then the encoder (25 mm shaft) and the 2×4 socket J1. Trim the tails
    underneath.
-5. **Top board**: the OLED and the mic (sound hole up) from the top, the 2×4 header J1 from
+6. **Top board**: the OLED and the mic (sound hole up) from the top, the 2×4 header J1 from
    underneath (plastic below the board, soldered on top). If your OLED's first two pins read
    VCC GND instead of GND VCC, cut the thin 1–2 bridges on JP1 and JP2 and solder 2–3 on both.
-6. **Stack**: four 11 mm standoffs on the bottom board, press the header into the socket,
+7. **Stack**: four 11 mm standoffs on the bottom board, press the header into the socket,
    screw down.
 
 To flash from the browser, hold BOOT while plugging in. Reach it through the hole in the top
@@ -209,9 +228,10 @@ forward, faster with angle.
 | - | - |
 | ERC, every schematic, every severity | 0 findings |
 | DRC with schematic parity, every board, every severity, on the saved copper fill that the Gerbers are plotted from | 0 findings |
-| Routing | every connection routed on all three boards |
+| Routing | every connection routed on all three boards, and no two tracks of different nets touching |
 | 3D mechanical model (`gen/mech.py`) | 0 collisions |
 | Stack: J1 socket against J1 header | mate pin for pin |
+| Stack panel (`gen/panel.py`) | fits 95 × 95 mm |
 
 The mechanical model covers:
 
@@ -239,26 +259,32 @@ off there. The mechanical model checks heights and solder order instead.
 
   All the lines end in one row just below the module.
 - **Breakout order:** each breakout takes those lines in the order they arrive, so no two
-  cross on the way in. That order is the pin numbering above.
+  cross on the way in. That order is the pin numbering above. On the stack, both rows lie
+  left of the escape with a channel between them: the lines drop into it and run left, the
+  top ones climb into EXP A from below (so EXP A takes them in reverse), the rest drop into
+  EXP B from above. TX and RX come straight down onto EXP A's right-hand pair.
 - **Routing:** Freerouting joins everything else. Its preferred directions and via cost are
   set per run, and the build keeps the best of a few settings. Afterwards it removes any
   escape stub the router made redundant.
 - **Ground:** both layers are GND pours, stitched with vias. A last step works on the fill as
   plotted: it ties any GND pad or pour pocket the routing walled in back to a plane, then DRC
-  confirms.
+  confirms. On the stack's bottom board, two GND tracks are laid before routing: a spine along
+  the bottom edge (the escape bundle would otherwise cut the pour in two) and a tie from EXP
+  B's GND pins to the link socket.
 - **Antenna:** no copper under the SuperMini's chip antenna.
 - **Stack link:** the 2×4 connector carries I2C (OLED) and I2S (mic) to the top board, with
   GND on its bottom row.
 
 ## Regenerating
 
-Everything under `stack-bottom/`, `stack-top/`, `mini/`, `lib/`, `fab/` and `images/` is
+Everything under `stack-bottom/`, `stack-top/`, `panel-stack/`, `mini/`, `lib/`, `fab/` and `images/` is
 generated by the scripts in `gen/`. Nothing was drawn by hand in the KiCad GUI.
 
 ```sh
 python3 hardware/gen/build.py              # both designs: library, schematics + ERC, PCBs, routing, DRC, fab files
 python3 hardware/gen/build.py mini         # one design
 python3 hardware/gen/build.py --check      # the mechanical model only
+python3 hardware/gen/panel.py              # the panels, from the built boards: panel-stack/, panel-mini/, fab/
 python3 hardware/gen/render.py             # images/
 ```
 
@@ -274,6 +300,7 @@ because it rewrites every file.
 | `gen/parts.py` | stock parts: footprints, LCSC numbers, mechanics |
 | `gen/kit.py` | shared steps: library, schematic layout, placement, SuperMini escape, routing, pours, GND rescue, DRC, fab |
 | `gen/mech.py` | the mechanical model |
+| `gen/panel.py` | the panels (stack; Mini + Filter) with mouse-bite tabs, and their merged BOM/CPL |
 | `gen/schematic.py`, `gen/footprints.py`, `gen/models.py` | writers for `.kicad_sch`, `.kicad_mod`, VRML bodies |
 | `lib/` | the generated symbol, footprint and 3D-model libraries |
 

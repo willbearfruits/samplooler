@@ -71,10 +71,10 @@
 			)
 		)
 	)
-	(fp_text user "5V GND"
-		(at -4.11 2.54 0)
+	(fp_text user "33 34"
+		(at -3.77 0 0)
 		(layer "F.SilkS")
-		(uuid "78da5803-bcb1-54ef-9228-8f1fe04fa05a")
+		(uuid "71a3208f-420e-5cfa-8146-ddfd9c36a11b")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -82,10 +82,21 @@
 			)
 		)
 	)
-	(fp_text user "47 48"
+	(fp_text user "18 21"
+		(at -3.77 2.54 0)
+		(layer "F.SilkS")
+		(uuid "b7dd9a33-43f8-5507-ac11-b9c6b2eade16")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "15 14"
 		(at -3.77 5.08 0)
 		(layer "F.SilkS")
-		(uuid "54109885-8f47-5f5d-ab01-910700d480e9")
+		(uuid "fbbe103d-3a2b-5034-a3f7-471ba7a4dc0a")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -93,10 +104,10 @@
 			)
 		)
 	)
-	(fp_text user "45 46"
+	(fp_text user "17 16"
 		(at -3.77 7.62 0)
 		(layer "F.SilkS")
-		(uuid "7c9fd0eb-eedc-5e6e-860a-37d1dd4614fb")
+		(uuid "d44430a8-1a25-52ff-8198-5bba2f152145")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -104,10 +115,10 @@
 			)
 		)
 	)
-	(fp_text user "41 42"
+	(fp_text user "36 35"
 		(at -3.77 10.16 0)
 		(layer "F.SilkS")
-		(uuid "b04161bf-9067-5f41-84c3-132cddf3cdb6")
+		(uuid "58c5e597-76c3-577d-8845-2e826951f125")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -115,10 +126,10 @@
 			)
 		)
 	)
-	(fp_text user "39 40"
-		(at -3.77 12.7 0)
+	(fp_text user "GND 3V3"
+		(at -4.45 12.7 0)
 		(layer "F.SilkS")
-		(uuid "97b239ac-5fd4-5bee-a3a8-39693ddc57c4")
+		(uuid "7762fed4-cc40-5325-9113-eafa01c3eab6")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -126,10 +137,10 @@
 			)
 		)
 	)
-	(fp_text user "43 44"
-		(at -3.77 15.24 0)
+	(fp_text user "GND 5V"
+		(at -4.11 15.24 0)
 		(layer "F.SilkS")
-		(uuid "f10c2377-ab03-5b2d-9866-921bb4616361")
+		(uuid "9b8dc5dc-cb1e-5765-90d2-9da75e4a8129")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -143,7 +154,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "3V3")
+		(pinfunction "33")
 		(pintype "passive")
 		(uuid "2c343110-e920-515a-a48f-138a5371179c")
 	)
@@ -153,7 +164,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "GND")
+		(pinfunction "34")
 		(pintype "passive")
 		(uuid "0cb5b3fa-548f-5e1d-8cf2-0e4e44791f2d")
 	)
@@ -163,7 +174,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "5V")
+		(pinfunction "18")
 		(pintype "passive")
 		(uuid "80d5ba29-8769-5b5c-bb6a-41633c9ced31")
 	)
@@ -173,7 +184,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "GND")
+		(pinfunction "21")
 		(pintype "passive")
 		(uuid "1421536e-29b9-5da9-91ce-13bad6d376a1")
 	)
@@ -183,7 +194,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "47")
+		(pinfunction "15")
 		(pintype "passive")
 		(uuid "838ed798-e913-55c3-8646-a2da028c64e7")
 	)
@@ -193,7 +204,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "48")
+		(pinfunction "14")
 		(pintype "passive")
 		(uuid "e02b3c89-0a7b-589b-add1-c9a74ba67976")
 	)
@@ -203,7 +214,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "45")
+		(pinfunction "17")
 		(pintype "passive")
 		(uuid "481eea52-1bd0-5d8b-b54c-2a1756306508")
 	)
@@ -213,7 +224,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "46")
+		(pinfunction "16")
 		(pintype "passive")
 		(uuid "1ac58fe6-2d77-5c12-a651-ce2c0b67cdc0")
 	)
@@ -223,7 +234,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "41")
+		(pinfunction "36")
 		(pintype "passive")
 		(uuid "1fa5b926-289c-59eb-8fee-feee9087a404")
 	)
@@ -233,7 +244,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "42")
+		(pinfunction "35")
 		(pintype "passive")
 		(uuid "d24f8c93-dbef-5402-949d-c98992eda231")
 	)
@@ -243,7 +254,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "39")
+		(pinfunction "GND")
 		(pintype "passive")
 		(uuid "dab922a9-dd78-5aac-a16d-1ee7ce701694")
 	)
@@ -253,7 +264,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "40")
+		(pinfunction "3V3")
 		(pintype "passive")
 		(uuid "396c0755-8de5-5994-815f-a6c78336383e")
 	)
@@ -263,7 +274,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "43")
+		(pinfunction "GND")
 		(pintype "passive")
 		(uuid "c0f40c31-f8cf-56bf-a5c8-7df2b0983656")
 	)
@@ -273,7 +284,7 @@
 		(drill 1.1)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(pinfunction "44")
+		(pinfunction "5V")
 		(pintype "passive")
 		(uuid "c0d0bb00-15c5-5aad-b1eb-7238d9b91902")
 	)

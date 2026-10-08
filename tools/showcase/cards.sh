@@ -29,7 +29,7 @@ cap() {   # name, headline, detail: text on a soft dark band at the bottom
     -font $REG -pointsize 32 -fill '#b8c0c8' -annotate +92+60 "$3" \
     "$C/$1.png"
 }
-cap stack1 'The Stack' 'two 90 × 64 mm boards, 11 mm apart on M3 standoffs, joined by a 2×4 socket'
+cap stack1 'The Stack' 'two 94 × 46 mm boards, 11 mm apart on M3 standoffs, joined by a 2×4 socket'
 cap stack2 'Bottom board: every module' 'SuperMini on pogo pins, PCM5102 DAC, MPU-6050, joystick, encoder, amp header, breakouts'
 cap mini1 'The Mini' 'one 82 × 56 mm board, no joystick: OLED, mic, encoder and a record button on the front'
 cap mini2 'Mini, back: the modules' 'SuperMini with pogo pins, DAC, IMU upside down, amp header; solder order worked out by the build'

@@ -386,13 +386,61 @@ def _route_once(bd, workdir, passes, variant, ses):
     return score, left, value, log
 
 
+def _seg_dist(a, b, c, d):
+    """Shortest distance between segments ab and cd (points as (x, y))."""
+    def pt(p, a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L = dx * dx + dy * dy
+        t = 0.0 if L == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L))
+        return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+
+    def cross(o, p, q):
+        return (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0])
+    if (cross(a, b, c) * cross(a, b, d) < 0) and (cross(c, d, a) * cross(c, d, b) < 0):
+        return 0.0
+    return min(pt(a, c, d), pt(b, c, d), pt(c, a, b), pt(d, a, b))
+
+
+def session_shorts(bd, ses):
+    """track_shorts() for a Freerouting session, on a scratch copy of the saved board."""
+    # after ImportSpecctraSES the SWIG wrapper of Tracks() breaks (Python 3.14): save, reload, count
+    b = pcbnew.LoadBoard(bd.path)
+    assert pcbnew.ImportSpecctraSES(b, ses)
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:       # SaveBoard writes a project file beside it
+        tmp = os.path.join(tmpdir, 'scratch.kicad_pcb')
+        pcbnew.SaveBoard(tmp, b)
+        scratch = type('Scratch', (), {})()
+        scratch.b = pcbnew.LoadBoard(tmp)
+        return track_shorts(scratch)
+
+
+def track_shorts(bd):
+    """Pairs of tracks of different nets on the same layer that touch. Freerouting now and then
+    hands back a session that 'routes everything' with two tracks crossing; DRC would call it a short."""
+    segs = [t for t in items(bd.b.Tracks()) if t.GetClass() == 'PCB_TRACK']
+    geo = [(t.GetLayer(), t.GetNetCode(), (pcbnew.ToMM(t.GetStart().x), pcbnew.ToMM(t.GetStart().y)),
+            (pcbnew.ToMM(t.GetEnd().x), pcbnew.ToMM(t.GetEnd().y)), pcbnew.ToMM(t.GetWidth())) for t in segs]
+    n = 0
+    for i, (la, na, a0, a1, wa) in enumerate(geo):
+        for lb, nb, b0, b1, wb in geo[i + 1:]:
+            if la == lb and na != nb and _seg_dist(a0, a1, b0, b1) < (wa + wb) / 2:
+                n += 1
+    return n
+
+
 def autoroute(bd, workdir, passes=250):
     """Freerouting with each of ROUTE_VARIANTS from the same start, stopping at the first that
-    routes everything; the one with the fewest connections left (then the best score) is kept."""
+    routes everything without shorts; the one with the fewest connections left (then the best
+    score) is kept. A session whose tracks short counts as leaving those shorts unrouted."""
     best = None
     for i, v in enumerate(ROUTE_VARIANTS):
         ses = os.path.join(workdir, f'route-{i}.ses')
         score, left, value, log = _route_once(bd, workdir, passes, v, ses)
+        if score and left == 0:
+            left = session_shorts(bd, ses)
+            if left:
+                score += f' [{left} shorts]'
         if score and (best is None or (left, -value) < (best[1], -best[2])):
             best = (score, left, value, log, ses, i)
         if left == 0:

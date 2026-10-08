@@ -27,6 +27,7 @@ python3 hardware/gen/build.py mini --no-route     # placement only, to look at
 python3 hardware/gen/build.py mini                # one design, routed: ~2-5 min
 python3 hardware/gen/build.py stack               # stack-bottom + stack-top
 .claude/skills/pcb-design/tools/report.sh         # DRC counts + what the router left, per board
+python3 hardware/gen/panel.py [stack|mini]        # one-piece panels: stack 94 x 94; Mini + Filter 82 x 94
 python3 hardware/gen/render.py                    # hardware/images/*.png
 ```
 
@@ -102,6 +103,25 @@ Close the projects in KiCad first: the build refuses to run while a `~*.lck` fil
   - It's deterministic for the same DSN but chaotic for small changes.
   - `autoroute_settings` must go inside `(structure …)` after the layer definitions.
   - GND is stripped from the DSN (the pours handle it), and clearances get a +10 µm margin.
+    Locked GND copper stays in as net-less obstacles, which is how pre-laid GND ties survive.
+  - It can report "0 unrouted" for a session with two tracks crossing. `kit.autoroute` checks
+    each such session for touching tracks of different nets (`session_shorts`) before accepting
+    it. Import a session into a scratch copy only: after `ImportSpecctraSES`, `Tracks()` on that
+    board breaks under Python 3.14 until it is saved and reloaded.
+- **Split ground:** a bundle of lines running on both layers can cut the pours in two, and
+  whether it does changes from one router run to the next. On the stack's bottom board a
+  locked GND spine along the free bottom edge keeps the front pour whole: nothing lives below
+  it, so no line has to cross it. `tools/islands.py` says `main planes joined: False` when
+  this happens.
+- **Panels (`gen/panel.py`):** copies the built boards (with their saved fill) onto one board,
+  redraws the outer edges with gaps for 5 mm tabs, and drills 0.5 mm mouse bites at 0.8 mm on
+  both edges of each tab. It never refills zones. DRC on the panel reports the bite holes as
+  hole-to-hole and the stack's link nets as unconnected: both expected. Keep tabs off parts at
+  the facing edges. `Duplicate()` needs `.Cast()`, and takes `addToParentGroup` on some item
+  types only. Boards from another project (the Filter) are aligned by their own outline, on the
+  line centres: `GetBoardEdgesBoundingBox` includes the 0.1 mm line width. `bite_in` moves the
+  holes into the slot for a board whose copper runs 0.3 mm from its edge. DRC on the Mini panel
+  reports the Filter's 0.3 mm pours against the Mini's 0.5 mm rule: expected.
 - **Island removal ("always"):** it keeps any island that touches a pad of the net. So a GND pad
   walled in by other nets keeps its own pocket, and the DRC reports it unconnected.
 - **pcbnew Python quirks:**

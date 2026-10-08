@@ -103,7 +103,7 @@ if __name__ == '__main__':
     args = ap.parse_args()
     chosen = args.designs or list(VARIANTS)
 
-    dirs = [b['dir'] for v in VARIANTS.values() for b in v.BOARDS]
+    dirs = [b['dir'] for n in chosen for b in VARIANTS[n].BOARDS]
     locks = kit.locked_projects(dirs)
     if locks and not args.check:
         sys.exit('KiCad has these open: ' + ', '.join(os.path.relpath(f, kit.HW) for f in locks) +

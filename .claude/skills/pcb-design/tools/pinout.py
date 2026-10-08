@@ -27,7 +27,7 @@ def horizontal(nets, title):
                       '| top | ' + ' | '.join(top) + ' |', '| bottom | ' + ' | '.join(bot) + ' |'])
 
 
-print(vertical(stack.EXP_A_NETS, 'Stack, EXP A'), end='\n\n')
+print(horizontal(stack.EXP_A_NETS, 'Stack, EXP A'), end='\n\n')
 print(horizontal(stack.EXP_B_NETS, 'Stack, EXP B'), end='\n\n')
 print(vertical(mini.EXP_A_NETS, 'Mini, EXP A'), end='\n\n')
 print(horizontal(mini.EXP_B_NETS, 'Mini, EXP B'))

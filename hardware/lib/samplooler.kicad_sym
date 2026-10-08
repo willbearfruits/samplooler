@@ -2048,7 +2048,7 @@
 			(pin passive line
 				(at -10.16 7.62 0)
 				(length 2.54)
-				(name "34"
+				(name "43"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2066,7 +2066,7 @@
 			(pin passive line
 				(at -10.16 5.08 0)
 				(length 2.54)
-				(name "21"
+				(name "40"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2084,7 +2084,7 @@
 			(pin passive line
 				(at -10.16 2.54 0)
 				(length 2.54)
-				(name "14"
+				(name "42"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2102,7 +2102,7 @@
 			(pin passive line
 				(at -10.16 0 0)
 				(length 2.54)
-				(name "16"
+				(name "46"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2120,7 +2120,7 @@
 			(pin passive line
 				(at -10.16 -2.54 0)
 				(length 2.54)
-				(name "35"
+				(name "47"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2138,7 +2138,7 @@
 			(pin passive line
 				(at -10.16 -5.08 0)
 				(length 2.54)
-				(name "37"
+				(name "48"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2156,7 +2156,7 @@
 			(pin passive line
 				(at -10.16 -7.62 0)
 				(length 2.54)
-				(name "3V3"
+				(name "GND"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2174,7 +2174,7 @@
 			(pin passive line
 				(at 10.16 7.62 180)
 				(length 2.54)
-				(name "33"
+				(name "44"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2192,7 +2192,7 @@
 			(pin passive line
 				(at 10.16 5.08 180)
 				(length 2.54)
-				(name "18"
+				(name "39"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2210,7 +2210,7 @@
 			(pin passive line
 				(at 10.16 2.54 180)
 				(length 2.54)
-				(name "15"
+				(name "41"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2228,7 +2228,7 @@
 			(pin passive line
 				(at 10.16 0 180)
 				(length 2.54)
-				(name "17"
+				(name "45"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2246,7 +2246,7 @@
 			(pin passive line
 				(at 10.16 -2.54 180)
 				(length 2.54)
-				(name "36"
+				(name "38"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2264,7 +2264,7 @@
 			(pin passive line
 				(at 10.16 -5.08 180)
 				(length 2.54)
-				(name "38"
+				(name "37"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2282,7 +2282,7 @@
 			(pin passive line
 				(at 10.16 -7.62 180)
 				(length 2.54)
-				(name "GND"
+				(name "3V3"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2369,7 +2369,7 @@
 			(pin passive line
 				(at -10.16 7.62 0)
 				(length 2.54)
-				(name "3V3"
+				(name "33"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2387,7 +2387,7 @@
 			(pin passive line
 				(at -10.16 5.08 0)
 				(length 2.54)
-				(name "5V"
+				(name "18"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2405,7 +2405,7 @@
 			(pin passive line
 				(at -10.16 2.54 0)
 				(length 2.54)
-				(name "47"
+				(name "15"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2423,7 +2423,7 @@
 			(pin passive line
 				(at -10.16 0 0)
 				(length 2.54)
-				(name "45"
+				(name "17"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2441,7 +2441,7 @@
 			(pin passive line
 				(at -10.16 -2.54 0)
 				(length 2.54)
-				(name "41"
+				(name "36"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2459,7 +2459,7 @@
 			(pin passive line
 				(at -10.16 -5.08 0)
 				(length 2.54)
-				(name "39"
+				(name "GND"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2477,7 +2477,7 @@
 			(pin passive line
 				(at -10.16 -7.62 0)
 				(length 2.54)
-				(name "43"
+				(name "GND"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2495,7 +2495,7 @@
 			(pin passive line
 				(at 10.16 7.62 180)
 				(length 2.54)
-				(name "GND"
+				(name "34"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2513,7 +2513,7 @@
 			(pin passive line
 				(at 10.16 5.08 180)
 				(length 2.54)
-				(name "GND"
+				(name "21"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2531,7 +2531,7 @@
 			(pin passive line
 				(at 10.16 2.54 180)
 				(length 2.54)
-				(name "48"
+				(name "14"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2549,7 +2549,7 @@
 			(pin passive line
 				(at 10.16 0 180)
 				(length 2.54)
-				(name "46"
+				(name "16"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2567,7 +2567,7 @@
 			(pin passive line
 				(at 10.16 -2.54 180)
 				(length 2.54)
-				(name "42"
+				(name "35"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2585,7 +2585,7 @@
 			(pin passive line
 				(at 10.16 -5.08 180)
 				(length 2.54)
-				(name "40"
+				(name "3V3"
 					(effects
 						(font
 							(size 1.27 1.27)
@@ -2603,7 +2603,7 @@
 			(pin passive line
 				(at 10.16 -7.62 180)
 				(length 2.54)
-				(name "44"
+				(name "5V"
 					(effects
 						(font
 							(size 1.27 1.27)
