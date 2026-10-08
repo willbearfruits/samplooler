@@ -204,7 +204,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     <tr><td>Board</td><td>ESP32-S3 SuperMini</td><td>ESP32-C3 SuperMini with 0.42" screen</td></tr>
     <tr><td>Take</td><td>20 s at 32 kHz</td><td>about 5 to 7 s at 16 kHz</td></tr>
     <tr><td>Screen</td><td>0.96" 128x64 two-colour</td><td>0.42" 72x40, on the board</td></tr>
-    <tr><td>Controls</td><td>button, encoder, joystick</td><td>button, optional encoder</td></tr>
+    <tr><td>Controls</td><td>record button, encoder</td><td>button, optional encoder</td></tr>
     <tr><td>Modes</td><td>TAPE (speed and pitch together) and GRAIN (pitch kept, freeze, scrub)</td><td>TAPE</td></tr>
     <tr><td>Effects</td><td>delay and stutter on the roll axis</td><td>none</td></tr>
     <tr><td>USB</td><td>MIDI port, USB sound card, plugin</td><td>power and flashing only</td></tr>
@@ -276,7 +276,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
 
 <section id="build">
   <h2>Build one</h2>
-  <p>Four small modules wired to the board: a microphone, an audio output, a tilt sensor, and on the S3 a screen, an encoder and a joystick. Wired point to point it takes an evening if you have soldered before.</p>
+  <p>Four small modules wired to the board: a microphone, an audio output, a tilt sensor, and on the S3 a screen, an encoder and a record button. Wired point to point it takes an evening if you have soldered before.</p>
   <p>For the S3 there are also two circuit boards: a two-board stack, and a one-board Mini without the joystick. They pass their electrical and design-rule checks but have not been made yet; the files and what to check before ordering are in <a href="https://github.com/willbearfruits/samplooler/tree/main/hardware">hardware/</a>.</p>
   <div class="table"><table>
     <tr><th>Part</th><th>What it does</th><th>Rough price</th></tr>
@@ -284,7 +284,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     <tr><td>INMP441</td><td>microphone</td><td>$1.50 to $3</td></tr>
     <tr><td>PCM5102A module</td><td>line out on a 3.5 mm jack</td><td>$2.50 to $5</td></tr>
     <tr><td>MPU6050 (GY-521)</td><td>tilt</td><td>$1 to $2.50</td></tr>
-    <tr><td>S3 only</td><td>0.96" OLED, EC11 encoder, joystick</td><td>about $4</td></tr>
+    <tr><td>S3 only</td><td>0.96" OLED, EC11 encoder, record button</td><td>about $4</td></tr>
   </table></div>
   <p>The output is line level: use headphones through a small amp, powered speakers, or a mixer. The full parts list, wiring, case printing and a first-power-on check are in the <a href="https://github.com/willbearfruits/samplooler/blob/main/docs/BUILD.md">build guide</a>.</p>
 </section>

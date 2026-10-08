@@ -357,7 +357,8 @@ static void bottom_strip(const ui_t *u)
     }
 }
 
-// The menu: a strip of three settings, the chosen one in a pill, its value in the middle.
+// The menu strip: the chosen setting's name in a pill (outlined while choosing, filled while editing),
+// its value at the right, and a slider or a hint underneath.
 static void menu_strip(const ui_t *u)
 {
     float target = u->menu ? 1.0f : 0.0f;
@@ -371,11 +372,12 @@ static void menu_strip(const ui_t *u)
     snprintf(b, sizeof b, "%d/%d", u->param + 1, u->param_n);
     oled_ftext(F_TINY, 2, top + 3, b);
     int nx = oled_ftext_w(F_TINY, b, 0) + 6;
-    oled_pill(F_SMALL, nx, top + 2, upper(u->param_name), true);
+    oled_pill(F_SMALL, nx, top + 2, upper(u->param_name), u->menu_edit);
     int vw = oled_ftext_w(F_MED, u->param_val, 0);
     oled_ftext(F_MED, OLED_W - 2 - vw, top + 2, u->param_val);
-    if (u->param_frac >= 0) slider(4, top + 13, OLED_W - 8, u->param_frac);
-    else oled_ftext_c(F_TINY, OLED_W / 2, top + 12, "TURN TO RUN", 1);
+    if (u->menu_edit && u->param_frac >= 0) slider(4, top + 13, OLED_W - 8, u->param_frac);
+    else if (u->param_frac < 0) oled_ftext_c(F_TINY, OLED_W / 2, top + 12, "PRESS TO RUN", 1);
+    else oled_ftext_c(F_TINY, OLED_W / 2, top + 12, "TURN: CHOOSE   PRESS: EDIT", 1);
 }
 
 static void toast(const ui_t *u)
@@ -582,12 +584,13 @@ void ui_draw(const ui_t *u)
     meter(OLED_W - 20, 1, 20, 7, u->meter_in, &peak_hold, u->clip);
 
     if (u->menu) {
-        oled_pill(F_SMALL, 0, 11, upper(u->param_name), true);
+        oled_pill(F_SMALL, 0, 11, upper(u->param_name), u->menu_edit);
         oled_rect(OLED_W - 20, 11, 20, 9, false);
         snprintf(line, sizeof line, "%d/%d", u->param + 1, u->param_n);
         oled_ftext_r(F_TINY, OLED_W - 1, 13, line, 0);
         oled_ftext(F_MED, 1, 22, u->param_val);
-        if (u->param_frac >= 0) slider(2, 34, OLED_W - 4, u->param_frac);
+        if (u->menu_edit && u->param_frac >= 0) slider(2, 34, OLED_W - 4, u->param_frac);
+        else oled_ftext(F_TINY, 1, 34, u->param_frac < 0 ? "PRESS TO RUN" : u->menu_edit ? "" : "PRESS TO EDIT");
         oled_flush();
         return;
     }

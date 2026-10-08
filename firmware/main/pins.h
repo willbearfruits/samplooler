@@ -16,8 +16,9 @@
 #define OLED_W        72   // 0.42" panel
 #define OLED_H        40
 #define PIN_AMP_SD    -1   // no speaker amp
-#define HAS_CONTROLS  1    // encoder only (HAS_JOY 0): turn = adjust, tap = next / tilt, hold = menu
+#define HAS_CONTROLS  1    // encoder: tap = menu / dive / back, hold = leave the menu, turn = choose or adjust
 #define HAS_JOY       0    // no joystick
+#define PIN_REC       -1   // no separate record button: BOOT records
 #define HAS_USB       0    // the C3 has no USB OTG
 #define PIN_ENC_A     0    // encoder CLK
 #define PIN_ENC_B     1    // encoder DT
@@ -36,10 +37,11 @@
 #define OLED_W        128  // the kit's 0.96" panel
 #define OLED_H        64
 #define PIN_AMP_SD    11   // kit speaker amp: driven high so the speaker plays; set -1 to leave it off
-#define HAS_CONTROLS  1    // the kit's joystick and encoder
-#define HAS_JOY       1
+#define HAS_CONTROLS  1    // encoder: tap = menu / dive / back, hold = leave the menu, turn = choose or adjust
+#define HAS_JOY       0    // 1 on a kit with the KY-023 joystick: Y sets the speed when tilt is off, X the pitch
+#define PIN_REC       3    // record button to GND (the Mini board's REC; the joystick's old click pin)
 #define HAS_USB       1    // native USB: console + MIDI + sound card
-#define PIN_JOY_X     2    // ADC1 (ADC2 dies with WiFi)
+#define PIN_JOY_X     2    // ADC1 (ADC2 dies with WiFi)   (HAS_JOY only)
 #define PIN_JOY_Y     1
 #define PIN_JOY_SW    3    // active low
 #define PIN_ENC_A     4

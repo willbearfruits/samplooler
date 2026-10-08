@@ -16,7 +16,7 @@ check. The pin tables here come from `firmware/main/pins.h`; the pin map page
 | Modes | TAPE and GRAIN | TAPE only |
 | Roll effects | left = delay, right = stutter | none |
 | Screen | 0.96" 128 x 64 OLED | the board's 0.42" 72 x 40 OLED |
-| Controls | EC11 encoder, KY-023 joystick, BOOT | BOOT, optional EC11 encoder |
+| Controls | record button, EC11 encoder, BOOT | BOOT, optional EC11 encoder |
 | USB | MIDI port, sound card, plugin | none (the C3 has no USB OTG) |
 | Sample slots | 8, on flash | 8, on flash |
 | Case | the kit's case | `enclosure/samplooler.scad` |
@@ -42,7 +42,7 @@ shipping. Expect them to move.
 | 1 | MPU6050 GY-521 breakout | $1 to 2.5 |
 | 1 | SSD1306 0.96" 128 x 64 OLED, 4-pin I2C | about $2 |
 | 1 | EC11 rotary encoder with push switch | $0.8 to 2 |
-| 1 | KY-023 joystick board | $0.6 to 1.5 |
+| 1 | 12 mm tactile button (record) | a few cents |
 | 0 or 1 | MAX98357A amp + small 4 or 8 ohm speaker (optional) | a few dollars |
 | | Hookup wire, heat-shrink, 3D-printed case | |
 
@@ -92,9 +92,7 @@ makes 3.3 V); everything else runs from 3V3. All GPIO logic is 3.3 V.
 | ENC A | 4 | encoder CLK |
 | ENC B | 5 | encoder DT |
 | ENC SW | 6 | encoder push |
-| JOY X | 2 | joystick VRx |
-| JOY Y | 1 | joystick VRy |
-| JOY SW | 3 | joystick SW |
+| REC | 3 | record button, other leg to GND (a 12 mm tactile button, or any momentary switch) |
 | AMP SD | 11 | MAX98357A SD (optional; the firmware drives it high so the speaker plays) |
 | BOOT | 0 | button on the board |
 
@@ -274,25 +272,17 @@ If the device ever restarts on its own, the screen says why for a few seconds (`
 
 ## 8. Controls
 
-### S3
+The same on both; the S3 has a record button, the C3 records with BOOT.
 
-| Control | Play mode | Menu mode |
-| - | - | - |
-| Encoder push, hold (or BOOT) | record | record |
-| Encoder turn | change the selected setting | change the selected setting |
-| Joystick long press (0.7 s) | enter menu mode | back to play mode |
-| Joystick click | tilt on or off | next setting |
-| Joystick up / down | speed when tilt is off | previous / next setting |
-| Joystick left / right | pitch in GRAIN mode | adjust the setting |
+| Control | Play | Menu: choosing | Menu: editing |
+| - | - | - | - |
+| Record button (or BOOT), hold | record | record | record |
+| Encoder tap | open the menu | edit the setting, or run Save / Load | back to the list |
+| Encoder turn | adjust the last setting (a toast shows it) | choose a setting | adjust it |
+| Encoder hold (0.5 s) | | leave the menu | leave the menu |
 
-### C3 mini
-
-| Control | Play mode | Menu mode |
-| - | - | - |
-| BOOT, hold | record | record |
-| Encoder turn | change the selected setting | change the selected setting |
-| Encoder hold (0.5 s) | enter menu mode | back to play mode |
-| Encoder tap | tilt on or off | next setting |
+On a kit that still has the joystick, build with `HAS_JOY 1` in `pins.h`: its Y axis sets the
+speed when Tilt is off and its X axis the pitch in GRAIN mode.
 
 ### Settings
 
@@ -301,7 +291,7 @@ If the device ever restarts on its own, the screen says why for a few seconds (`
 | Mic gain | 0 to 36 dB | 12 dB | |
 | Mode | TAPE, GRAIN | TAPE | GRAIN on the S3 only |
 | Pitch | semitones | 0 | GRAIN only |
-| Tilt | on, off | on | off: the S3 joystick sets the speed |
+| Tilt | on, off | on | off: plays at 1x (or at the joystick's Y with `HAS_JOY`) |
 | Speed max | 0.25 to 8x | 2x | speed at 45 degrees of tilt; above 2x the recording aliases audibly |
 | Speed min | 0 to 1x | 0.05x | the crawl when flat |
 | Snap | on, off | off | speeds quantised to octaves and fifths |

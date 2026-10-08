@@ -1,19 +1,16 @@
 // Samplooler: hold BOOT to record the mic, let go and it loops.
 // Tilt nose down to play forward faster, nose up to play backwards.
 // Roll left for a delay whose tail rings out, roll right to stutter the loop (S3).
-// Builds for the ESP32-S3 SuperMini kit (float, PSRAM, 0.96" OLED, joystick,
-// encoder) and the ESP32-C3 SuperMini (Q15, internal RAM, 0.42" OLED).
+// Builds for the ESP32-S3 SuperMini (float, PSRAM, 0.96" OLED, record button, encoder)
+// and the ESP32-C3 SuperMini (Q15, internal RAM, 0.42" OLED, encoder; BOOT records).
 //
-// Controls on the kit (BOOT is inside the case, so the encoder push records):
-//   encoder push    hold to record
-//   encoder turn    change the selected setting
-//   joystick long   menu mode on/off
-//   play mode:      click = tilt on/off; X = pitch (GRAIN); Y = speed when tilt is off
-//   menu mode:      flick up/down = previous/next setting; flick left/right = adjust; click = next setting
-// Controls on the C3 (encoder only, BOOT records):
-//   encoder turn    change the selected setting
-//   encoder hold    menu mode on/off (0.5 s)
-//   encoder tap     menu mode: next setting; play mode: tilt on/off
+// Controls (both; the S3 has a record button, the C3 records with BOOT):
+//   record button   hold to record
+//   encoder tap     play: open the menu; menu: dive into the setting (edit), or run Save/Load;
+//                   editing: back to the list
+//   encoder turn    play: adjust the last setting (a toast shows it); menu: choose; editing: adjust
+//   encoder hold    leave the menu (0.5 s)
+// With HAS_JOY (a kit with the joystick): Y sets the speed when tilt is off, X the pitch in GRAIN.
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -333,7 +330,7 @@ void app_main(void)
 
     int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0, idle_ms = 0;
     audio_stats_t last_stats = { 0 };
-    bool held = false, menu = false;
+    bool held = false, menu = false, menu_edit = false;
     float roll = 0, pitch = 0, speed_cmd = 1.0f, pitch_ratio = 1.0f, joy_pitch_st = 0;
 #if HAS_CONTROLS
     input_ev_t in = { 0 };
@@ -349,49 +346,44 @@ void app_main(void)
         bool down = gpio_get_level(PIN_BOOT) == 0 || midi_rec_hold;
 #if HAS_CONTROLS
         input_poll(&in);
-#if HAS_JOY
-        down = down || in.pressed;                            // the encoder push records too
-#endif
+        down = down || in.rec;
 #endif
         if (job != JOB_NONE) down = false;                    // a slot job owns the take
         idle_ms += 10;
         if (down) idle_ms = 0;
 #if HAS_CONTROLS
-        if (in.enc || in.tap || in.hold || in.pressed || in.joy_click || in.joy_long || in.flick_l || in.flick_r || in.flick_u || in.flick_d) idle_ms = 0;
+        if (in.enc || in.tap || in.hold || in.pressed || in.rec) idle_ms = 0;
 #endif
         held_n = down ? (held_n < 3 ? held_n + 1 : 3) : (held_n > 0 ? held_n - 1 : 0);
         bool now = held_n == 3 ? true : held_n == 0 ? false : held;
         if (now != held) { held = now; recorder_set_record(held); }
 
 #if HAS_CONTROLS
-#if HAS_JOY
-        if (in.joy_long) { menu = !menu; ESP_LOGI(TAG, "%s mode", menu ? "menu" : "play"); }
-#else
-        if (in.hold) { menu = !menu; ESP_LOGI(TAG, "%s mode", menu ? "menu" : "play"); }
+        // the encoder: tap opens the menu, dives into a setting, runs an action or climbs back out;
+        // hold leaves the menu; turn chooses in the list, adjusts while editing or in play mode
         if (in.tap) {
-            if (menu) { param = (param + 1) % P_N; char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%d/%d %s %s", param + 1, P_N, param_name[param], v); }
-            else { S.tilt = !S.tilt; setting_changed(); ESP_LOGI(TAG, "tilt %s", S.tilt ? "on" : "off"); }
+            if (!menu) { menu = true; menu_edit = false; ESP_LOGI(TAG, "menu"); }
+            else if (menu_edit) menu_edit = false;
+            else if (param == P_SAVE || param == P_LOAD) param_adjust(param, +1);
+            else menu_edit = true;
         }
+        if (in.hold && menu) { menu = false; menu_edit = false; ESP_LOGI(TAG, "play"); }
+        if (in.enc) {
+            if (menu && !menu_edit) param = ((param + in.enc) % P_N + P_N) % P_N;
+            else { param_adjust(param, in.enc); apply_settings(); if (!menu) toast = 1500; }
+            char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%d/%d %s %s", param + 1, P_N, param_name[param], v);
+        }
+#if HAS_JOY
+        joy_pitch_st = in.has_joy && !menu ? 12.0f * in.jx : 0.0f;
 #endif
-        if (in.enc) { param_adjust(param, in.enc); apply_settings(); char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%s %s", param_name[param], v); if (!menu) toast = 1500; }
-        if (menu) {
-            if (in.flick_d || in.joy_click) param = (param + 1) % P_N;
-            if (in.flick_u) param = (param + P_N - 1) % P_N;
-            if (in.flick_r) { param_adjust(param, +1); apply_settings(); }
-            if (in.flick_l) { param_adjust(param, -1); apply_settings(); }
-            joy_pitch_st = 0.0f;
-        } else {
-            if (in.joy_click) { S.tilt = !S.tilt; setting_changed(); ESP_LOGI(TAG, "tilt %s", S.tilt ? "on" : "off"); }
-            joy_pitch_st = in.has_joy ? 12.0f * in.jx : 0.0f;
-        }
 #endif
 
         if (tick % 2 == 0) {                                 // 50 Hz control rate
             if (has_imu) imu_poll(&roll, &pitch);
             float u;
             if (S.tilt && has_imu) u = (TILT_USE_ROLL ? roll : pitch) * TILT_SIGN / TILT_FULL_DEG;
-#if HAS_CONTROLS
-            else if (in.has_joy && !menu) u = in.jy;   // no joystick: has_joy is false
+#if HAS_JOY
+            else if (in.has_joy && !menu) u = in.jy;
 #endif
             else u = 1.0f;
             speed_cmd = (!S.tilt && !has_imu) ? 1.0f : control_to_speed(u);
@@ -415,8 +407,10 @@ void app_main(void)
                 int v[8] = { 0 };
                 v[1] = (int)(64 + pitch * 64.0f / 90.0f); v[2] = (int)(64 + roll * 64.0f / 90.0f);
                 v[3] = (int)(64 + speed_cmd * 63.0f / REC_SPEED_LIMIT); v[4] = (int)(recorder_position() * 127.0f);
-#if HAS_CONTROLS
+#if HAS_JOY
                 v[5] = (int)(64 + in.jx * 63.0f); v[6] = (int)(64 + in.jy * 63.0f);
+#else
+                v[5] = v[6] = 64;
 #endif
                 v[7] = (int)(meter_in * 127.0f);
                 for (int c = 1; c < 8; c++) {
@@ -458,13 +452,13 @@ void app_main(void)
                 .pitch_ratio = pitch_ratio, .tilt_pitch = TILT_USE_ROLL ? roll : pitch, .tilt_roll = TILT_USE_ROLL ? pitch : roll,
                 .has_imu = has_imu, .tilt_on = S.tilt, .pos = recorder_position(), .rec_fill = recorder_record_fill(),
                 .loop_s = recorder_loop_seconds(), .max_s = recorder_max_seconds(), .meter_in = meter_in, .meter_out = meter_out,
-                .clip = clip_hold > 0, .cpu = audio_cpu_percent(), .menu = menu, .param = param, .param_n = P_N,
+                .clip = clip_hold > 0, .cpu = audio_cpu_percent(), .menu = menu, .menu_edit = menu_edit, .param = param, .param_n = P_N,
                 .param_name = param_name[param], .param_val = pv, .param_frac = param_frac(param), .toast_ms = toast,
                 .busy_text = job != JOB_NONE ? job_text : NULL, .busy_frac = slots_progress(),
                 .note = result_ms > 0 ? result_text : tick < 700 ? diag_note() : NULL,
                 .idle_ms = recorder_state() == REC_IDLE ? idle_ms : 0,
             };
-#if HAS_CONTROLS
+#if HAS_JOY
             u.has_joy = in.has_joy;
 #endif
 #if !REC_FIXED_POINT

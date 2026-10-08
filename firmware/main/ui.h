@@ -18,7 +18,7 @@ typedef struct {
     bool  fx_delay, fx_stutter;
     int   cpu;
     // menu and the transient setting toast
-    bool  menu;
+    bool  menu, menu_edit;           // the list, or editing the chosen setting
     int   param, param_n;
     const char *param_name, *param_val;
     float param_frac;                // 0..1 position of the value in its range, <0 for actions

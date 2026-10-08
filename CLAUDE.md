@@ -73,8 +73,11 @@ releases `vX.Y.Z`.
 ## Firmware architecture (`firmware/main/`)
 
 **One source tree, two targets, selected by `CONFIG_IDF_TARGET_ESP32C3`.** `pins.h` defines per-target
-pins and capability flags (`HAS_USB`, `HAS_JOY`, `HAS_CONTROLS`, `OLED_ENABLE`, `OLED_W/H`); code is
-gated on those flags rather than on the target directly. `recorder.h` picks the sample type:
+pins and capability flags (`HAS_USB`, `HAS_JOY`, `HAS_CONTROLS`, `PIN_REC`, `OLED_ENABLE`, `OLED_W/H`);
+code is gated on those flags rather than on the target directly. Controls are one scheme on both chips:
+a record button (`PIN_REC`, GPIO 3 on the S3; the C3 uses BOOT) and the encoder (tap = menu / dive /
+back, hold = leave, turn = choose or adjust; `menu` and `menu_edit` in `main.c`). `HAS_JOY` is 0; set
+it to 1 for a kit with the joystick (Y = speed when tilt is off, X = pitch in GRAIN). `recorder.h` picks the sample type:
 
 | | S3 | C3 |
 | - | - | - |

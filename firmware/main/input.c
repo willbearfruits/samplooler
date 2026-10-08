@@ -75,6 +75,11 @@ void input_init(void)
         .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE,
     };
     ESP_ERROR_CHECK(gpio_config(&in));
+#if PIN_REC >= 0
+    gpio_config_t rec = { .pin_bit_mask = 1ULL << PIN_REC, .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
+    ESP_ERROR_CHECK(gpio_config(&rec));
+    ESP_LOGI(TAG, "record button on %d", PIN_REC);
+#endif
 
 #if SOC_PCNT_SUPPORTED
     pcnt_unit_config_t uc = { .high_limit = 30000, .low_limit = -30000 };
@@ -172,6 +177,9 @@ void input_poll(input_ev_t *ev)
     }
     ev->pressed = pressed; ev->held_ms = held;
     was_pressed = pressed;
+#if PIN_REC >= 0
+    ev->rec = gpio_get_level(PIN_REC) == 0;
+#endif
 
 #if HAS_JOY
     static bool joy_was, joy_long_fired;

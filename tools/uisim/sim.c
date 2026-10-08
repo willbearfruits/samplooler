@@ -42,7 +42,8 @@ int main(void) {
     u.clip = false; u.toast_ms = 900; u.param = 0; u.param_name = "Mic gain"; u.param_val = "18 dB"; u.param_frac = 0.5f;
     frames(&u, 2); dump("17_toast");
     u.toast_ms = 0; u.menu = true; u.param = 4; u.param_name = "Speed max"; u.param_val = "8.00x"; u.param_frac = 1.0f;
-    frames(&u, 2); dump("18_menu_sliding"); frames(&u, 10); dump("19_menu_open");
+    frames(&u, 2); dump("18_menu_sliding"); frames(&u, 10); dump("19_menu_list");
+    u.menu_edit = true; frames(&u, 1); dump("19b_menu_edit"); u.menu_edit = false;
     u.param = 11; u.param_name = "Save"; u.param_val = "-> slot 3"; u.param_frac = -1; frames(&u, 1); dump("20_menu_save");
     u.menu = false; frames(&u, 10);
     u.busy_text = "SAVING 3"; u.busy_frac = 0.6f; frames(&u, 12); dump("21_saving");

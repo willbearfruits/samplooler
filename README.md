@@ -28,7 +28,7 @@ a round of fixes once real parts arrive. Reports of builds, good or bad, are wel
 | Modes | tape (speed and pitch together) and grain (apart) | tape |
 | Roll effects | tape delay, stutter | none |
 | Screen | 0.96" 128 × 64 OLED | the board's 0.42" 72 × 40 OLED |
-| Controls | encoder, joystick, record button | record button, optional encoder |
+| Controls | record button, encoder | record button, optional encoder |
 | With a computer | USB MIDI and sound card, VST3 plugin | none |
 | Parts, roughly | $15 to $25 | $10 to $17 |
 
