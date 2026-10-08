@@ -23,6 +23,12 @@ typedef struct {
     const char *param_name, *param_val;
     float param_frac;                // 0..1 position of the value in its range, <0 for actions
     int   toast_ms;                  // >0: show the setting bar for that long
+    // a slot job in progress (the output is muted meanwhile), and a short note: the job's result, or the
+    // reason for the last reboot when it was not a clean one ("CRASH: slot save", "BROWNOUT")
+    const char *busy_text;           // "SAVING 3", NULL when idle
+    float       busy_frac;           // 0..1
+    const char *note;                // NULL for none
 } ui_t;
 
 void ui_draw(const ui_t *u);         // draws one frame and flushes; call at 20 fps
+void ui_fault(const char *l1, const char *l2);   // a boot failure that stops the device: two short lines, stays on

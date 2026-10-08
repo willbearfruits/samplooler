@@ -26,7 +26,7 @@ Brainstormed 2026-09-21. Nothing here is started. The line input (PCM1808) note 
 
 - Loop window from the joystick (a sub-case of splices).
 - ~~Save and recall takes as WAV~~ done as 8 slots on flash (2026-09-21). USB drive mode still open.
-- Settings saved to NVS.
+- ~~Settings saved to NVS~~ done 2026-10-08 (`firmware/main/settings.c`).
 - USB MIDI + USB audio + JUCE plugin: done 2026-09-21 (see README).
 - Speed snapping to semitones as well as octaves and fifths.
 - GRAIN mode on the C3 in Q15.

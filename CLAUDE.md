@@ -14,7 +14,8 @@ https://github.com/willbearfruits/samplooler (branch `main`).
 points to it and to the project page (https://willbearfruits.github.io/samplooler/, deployed from
 `site/` by CI). No board has been made and no case printed yet: keep the README's Status section and
 all public text honest about that. `docs/DESIGN.md` is the design note; `docs/IDEAS.md` is unbuilt
-ideas only.
+ideas only; `docs/PRODUCTION.md` is the production-readiness review (what was hardened, what is open,
+what the first hardware test should check).
 
 ## Commands
 
@@ -32,16 +33,20 @@ idf.py -B build-c3 -DSDKCONFIG=sdkconfig.c3 build flash monitor
 
 `sdkconfig` and `sdkconfig.c3` are generated and gitignored (`set-target` regenerates them), so config
 changes belong in `sdkconfig.defaults`, `.esp32s3` or `.esp32c3`: CI and the published images are built
-from those alone. On the S3 the USB firmware replaces the serial console (see USB mode below): for
-`idf.py flash monitor`, power it up with the encoder held; otherwise reflash with `tools/flash.sh` and
-read logs with `sl_midi.py log`.
+from those alone. The app builds with `-Werror`. The two build dirs share `managed_components/`: the C3
+build (which needs no USB components) empties it, so the next S3 build fetches them again (network).
+On the S3 the USB firmware replaces the serial console (see USB mode below): for `idf.py flash monitor`,
+power it up with the encoder held; otherwise reflash with `tools/flash.sh` and read logs with
+`sl_midi.py log`.
 
 - `tools/release.sh [esp32s3|esp32c3]` — build both, write merged 0x0 images `samplooler-<target>.bin`
-  to `dist/` (with SHA256SUMS) and copy them into `site/firmware/`.
+  to `dist/` (plus the app-only `-app.bin` for 0x10000 updates that keep the slots, the `.elf` for decoding
+  crash reports, and SHA256SUMS) and copy the merged images into `site/firmware/`.
 - `tools/flash.sh` — reflash an S3 that is running the USB firmware: sends SysEx `F0 7D 52 F7` to reboot
   into download mode, then esptool with `--after watchdog_reset`.
-- `python3 tools/sl_midi.py log|reboot|cc N V|note N [on|off]` — talk to the S3 over raw ALSA MIDI
-  (no pip deps). `log` is the only way to see S3 logs in USB mode.
+- `python3 tools/sl_midi.py log|status|reboot|cc N V|note N [on|off]` — talk to the S3 over raw ALSA MIDI
+  (no pip deps). `log` is the only way to see S3 logs in USB mode; `status` asks for the status line and
+  the last crash report (SysEx `F0 7D 53 F7`) and decodes the backtrace against `build/samplooler.elf`.
 - `tools/uisim/run.sh` — compiles `firmware/main/ui.c` + `oled.c` on the host against stubs, renders
   every screen state for both targets to `tools/uisim/out/sheet.png` and `out/c3/sheet.png`. This is the
   way to check UI changes without hardware; there is no unit test suite.
@@ -59,7 +64,8 @@ as the local toolchain) for pushes to `main`, pull requests and `v*` tags. On `m
 deploys `site/` with the fresh images in `site/firmware/` and the showcase video as
 `site/media/showcase.mp4` (both gitignored); a `v*` tag attaches the images and SHA256SUMS to a
 release. The flasher manifest's `version` (`site/firmware/manifest.json`) is set by hand; the app's own
-version string is the git describe output.
+version string is `git describe --match 'v*'` (the hardware `checkpoint/*` tags are ignored), so tag
+releases `vX.Y.Z`.
 
 ## Firmware architecture (`firmware/main/`)
 
@@ -84,23 +90,39 @@ that the audio task picks up per block. The audio path must not allocate, log, u
 libm (built with `-O3 -ffast-math -Wdouble-promotion`); the C3 path must stay integer.
 
 **`main.c`** owns the settings table (Mic gain, Mode, Pitch, Tilt, Speed max/min, Snap, Grain, Volume,
-Input, Slot, Save, Load — indexed `P_*`), tilt→speed mapping (`TILT_SIGN`, `TILT_USE_ROLL`, dead zones),
-and the MIDI map:
+Input, Slot, Save, Load — indexed `P_*`; the struct is `settings_t` in `settings.h`), tilt→speed mapping
+(`TILT_SIGN`, `TILT_USE_ROLL`, dead zones), the slot jobs, and the MIDI map:
 - CC 20+`p` carries setting `p` both ways, for the settings before Save/Load (`p < P_SAVE`).
 - CC 1–7 go out on change: pitch, roll, speed, play position, joystick x, joystick y, input level.
 - Notes in: 60 records while held, 61 loads, 63 saves. Notes out: 60 while recording, 62 while playing.
 
 Adding a setting means updating the table, `param_adjust`, `param_text`, `setting_to_127` /
-`setting_from_127`, and the plugin (`enum Param` in `plugin/Source/PluginProcessor.h`, the parameter
-list in `PluginProcessor.cpp`) to keep them in sync.
+`setting_from_127`, the NVS field list in `settings.c` (a new 4-character tag; old blobs still load),
+and the plugin (`enum Param` in `plugin/Source/PluginProcessor.h`, the parameter list in
+`PluginProcessor.cpp`) to keep them in sync. Call `setting_changed()` after any change made outside
+`param_adjust`; `settings.c` writes NVS 3 s later, never while recording.
 
 **USB mode (S3).** At boot, unless the encoder is held, the Serial/JTAG console is replaced by a TinyUSB
 composite device (MIDI + stereo UAC2 at `REC_SAMPLE_RATE`). All four IN endpoints are used, so there is
-no CDC console: `esp_log` is redirected to SysEx `F0 7D 4C <text> F7`. SysEx `F0 7D 52 F7` reboots into
-ROM download mode. The UAC playback stream can be the record source (Input = USB).
+no CDC console: `esp_log` is redirected to SysEx `F0 7D 4C <text> F7`. SysEx in: `F0 7D 52 F7` ('R')
+reboots into ROM download mode (after `app_prepare_reboot()`: settings flushed, output muted);
+`F0 7D 53 F7` ('S') logs the status line and crash report. The UAC playback stream can be the record
+source (Input = USB). The serial number is `SL-` + the factory MAC; every MIDI write goes through one
+spinlock (logs come from any task).
 
-**Slots** (`slots.c`, `partitions.csv`): 8 WAV files on a FAT/wear-levelling flash partition, accessed
-via `recorder_take()` / `recorder_load_begin/end()` from the UI task, never while recording.
+**Slots** (`slots.c`, `partitions.csv`): 8 WAV files on a FAT/wear-levelling flash partition. Save and
+load are chunked jobs (`slots_*_begin` / `slots_step`) driven by `job_poll()` in `main.c`: the output is
+muted first (`audio_set_mute`, a 20 ms fade), the file moves in 16 KB steps so the screen and MIDI stay
+alive, recording is ignored meanwhile. The take is reached through `recorder_take()` /
+`recorder_load_begin/end()`, never while recording. A save goes to `slot.tmp` and is renamed at the end.
+
+**Robustness** (`diag.c`, `audio.c`, `oled.c`, `imu.c`). `diag_init()` is the first call in `app_main`;
+`diag_crumb("step")` brackets risky steps (flash writes, USB start) and a `--wrap` of `esp_panic_handler`
+keeps the panic text and backtrace in RTC memory, so the next boot shows `CRASH: step` / `BROWNOUT` /
+`WATCHDOG` on the screen and in the log. The audio task counts DMA overruns, underruns and read errors
+(`audio_get_stats`); call `audio_flash_hint()` before any flash write so stalls it causes are filed
+separately. The speaker amp is enabled by the audio task after 50 ms of good clock. A screen or IMU
+that stops answering is backed off and retried, not waited for. The task watchdog resets the device.
 
 ## Other parts
 

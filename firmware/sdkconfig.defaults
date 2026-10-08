@@ -13,3 +13,10 @@ CONFIG_FREERTOS_HZ=1000
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_FATFS_LFN_HEAP=y
+
+# Production: the I2S ISR and its overflow callbacks stay in IRAM (they run while flash is being written),
+# a task that hangs for 5 s resets the device instead of just logging (diag.c then reports WATCHDOG), and
+# the main task gets room for FATFS, NVS and printf with floats on top of the UI.
+CONFIG_I2S_ISR_IRAM_SAFE=y
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144

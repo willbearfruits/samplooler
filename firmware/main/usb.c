@@ -6,16 +6,37 @@
 #include <stdatomic.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_attr.h"
+#include "esp_mac.h"
 #include "soc/rtc_cntl_reg.h"
+#include "soc/usb_serial_jtag_reg.h"
+#include "hal/usb_serial_jtag_ll.h"
+#include "esp_private/periph_ctrl.h"
+#include "driver/gpio.h"
 #include "tusb.h"
 #include "usb_device_uac.h"
 #include "usb/usb_itf.h"
 #include "recorder.h"
+#include "diag.h"
 
 static const char *TAG = "usb";
+extern char usb_serial[];                    // usb_descriptors.c; filled from the chip's MAC before enumeration
+void app_prepare_reboot(void);               // main.c: flush settings, mute
+
+// One lock for every writer of the MIDI IN endpoint: the UI task's CCs and notes, and log lines from any
+// task (TinyUSB's FIFO has one producer by design). A mutex, not a spinlock: the write can claim the
+// endpoint, which takes TinyUSB's own mutex. A writer that cannot get it in time drops its message.
+static SemaphoreHandle_t midi_lock;
+static uint32_t midi_write(const uint8_t *m, uint32_t n, TickType_t wait)
+{
+    if (!midi_lock || xSemaphoreTake(midi_lock, wait) != pdTRUE) return 0;
+    uint32_t w = tud_midi_stream_write(0, m, n);
+    xSemaphoreGive(midi_lock);
+    return w;
+}
 
 // ---- audio rings: single producer, single consumer, mono int16 ----
 #define RING_N 4096                          // frames, 128 ms at 32 kHz
@@ -77,18 +98,51 @@ void usb_midi_send_cc(uint8_t cc, uint8_t val)
 {
     if (!tud_midi_mounted()) return;
     uint8_t m[3] = { 0xB0, cc & 0x7F, val & 0x7F };
-    tud_midi_stream_write(0, m, 3);
+    midi_write(m, 3, 1);
 }
 void usb_midi_send_note(uint8_t note, uint8_t vel, bool on)
 {
     if (!tud_midi_mounted()) return;
     uint8_t m[3] = { on ? 0x90 : 0x80, note & 0x7F, vel & 0x7F };
-    tud_midi_stream_write(0, m, 3);
+    midi_write(m, 3, 1);
 }
 
+// Host-driven flashing with no buttons: detach from the bus so the host forgets this device, hand the USB pads
+// back to the built-in Serial/JTAG controller, ask the ROM for download mode on the next reset, and restart.
+// The ROM then enumerates as 303a:1001 and esptool works as usual. The bare "force download boot + restart"
+// left the host confused often enough (same sequence as Arduino-ESP32's usb_persist_restart).
 static void reboot_to_download(void)
 {
-    REG_WRITE(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT);
+    app_prepare_reboot();
+    diag_crumb("bl detach");
+    tud_disconnect();                                   // OTG pull-up off
+    vTaskDelay(pdMS_TO_TICKS(20));
+    // SE0 for 100 ms: D-/D+ (GPIO19/20) driven low as plain GPIOs, so the host registers a clean detach
+    CLEAR_PERI_REG_MASK(RTC_CNTL_USB_CONF_REG, RTC_CNTL_SW_HW_USB_PHY_SEL | RTC_CNTL_SW_USB_PHY_SEL | RTC_CNTL_USB_PAD_ENABLE);
+    PERIPH_RCC_ATOMIC() {                               // IDF gated the USJ clock at boot (USJ unused)
+        usb_serial_jtag_ll_enable_bus_clock(true);
+        usb_serial_jtag_ll_reset_register();
+    }
+    usb_serial_jtag_ll_phy_enable_pad(false);
+    usb_serial_jtag_ll_phy_enable_external(false);      // internal PHY
+    gpio_set_direction(GPIO_NUM_19, GPIO_MODE_OUTPUT_OD);
+    gpio_set_direction(GPIO_NUM_20, GPIO_MODE_OUTPUT_OD);
+    gpio_set_level(GPIO_NUM_19, 0);
+    gpio_set_level(GPIO_NUM_20, 0);
+    diag_crumb("bl se0");
+    vTaskDelay(pdMS_TO_TICKS(100));
+    gpio_reset_pin(GPIO_NUM_19);
+    gpio_reset_pin(GPIO_NUM_20);
+    // hand the pads to USB-Serial/JTAG and wait (<= 1 s) for the host to reset the bus: it has seen us
+    REG_WRITE(USB_SERIAL_JTAG_INT_CLR_REG, USB_SERIAL_JTAG_USB_BUS_RESET_INT_CLR);
+    usb_serial_jtag_ll_phy_enable_pad(true);
+    diag_crumb("bl usj");
+    for (int i = 0; i < 100; i++) {
+        if (REG_READ(USB_SERIAL_JTAG_INT_RAW_REG) & USB_SERIAL_JTAG_USB_BUS_RESET_INT_RAW) break;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    diag_crumb("bl restart");
+    REG_WRITE(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT);   // consumed by the ROM on the next boot
     esp_restart();
 }
 
@@ -106,6 +160,7 @@ void usb_midi_poll(usb_midi_handler_t h)
             if (b == 0xF7) {
                 in_sysex = false;
                 if (sxn >= 2 && sx[0] == 0x7D && sx[1] == 'R') { ESP_LOGW(TAG, "reboot to download mode"); vTaskDelay(pdMS_TO_TICKS(50)); reboot_to_download(); }
+                else if (sxn >= 2 && sx[0] == 0x7D && sx[1] == 'S') diag_log_status();
                 continue;
             }
             if (in_sysex) { if (sxn < (int)sizeof sx) sx[sxn++] = b; continue; }
@@ -131,7 +186,7 @@ static int midi_log_vprintf(const char *fmt, va_list ap)
     pkt[k++] = 0xF0; pkt[k++] = 0x7D; pkt[k++] = 'L';
     for (int i = 0; i < n; i++) { char c = line[i]; if (c == '\n' || c == '\r') continue; pkt[k++] = (uint8_t)c & 0x7F; }
     pkt[k++] = 0xF7;
-    if (tud_midi_stream_write(0, pkt, k) < (uint32_t)k) { /* buffer full: the line is lost, never block */ }
+    if (midi_write(pkt, k, 0) < (uint32_t)k) { /* busy or full: the line is lost, never block */ }
     return n;
 }
 
@@ -139,14 +194,20 @@ bool usb_connected(void) { return tud_mounted(); }
 
 bool usb_start(void)
 {
+    uint8_t mac[6] = { 0 };
+    esp_read_mac(mac, ESP_MAC_EFUSE_FACTORY);           // one serial per chip, so two devices on one host stay apart
+    snprintf(usb_serial, 16, "SL-%02X%02X%02X%02X", mac[2], mac[3], mac[4], mac[5]);
+    diag_crumb("usb start");
     uac_device_config_t cfg = {
         .skip_tinyusb_init = false,            // the component brings up the PHY, tusb and its task
         .output_cb = spk_cb, .input_cb = mic_cb,
         .spk_itf_num = ITF_AUDIO_SPK, .mic_itf_num = ITF_AUDIO_MIC,
     };
-    if (uac_device_init(&cfg) != ESP_OK) { ESP_LOGE(TAG, "USB init failed"); return false; }
+    if (uac_device_init(&cfg) != ESP_OK) { ESP_LOGE(TAG, "USB init failed"); diag_crumb(NULL); return false; }
+    diag_crumb(NULL);
+    midi_lock = xSemaphoreCreateMutex();
     esp_log_set_vprintf(midi_log_vprintf);     // the Serial/JTAG console is gone now; logs ride on SysEx
-    ESP_LOGI(TAG, "USB composite up: MIDI + audio %d Hz, logs over SysEx", REC_SAMPLE_RATE);
+    ESP_LOGI(TAG, "USB composite up: MIDI + audio %d Hz, logs over SysEx, serial %s", REC_SAMPLE_RATE, usb_serial);
     return true;
 }
 #endif

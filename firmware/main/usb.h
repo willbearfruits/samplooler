@@ -1,6 +1,6 @@
 // USB on the S3: class compliant MIDI and a UAC2 sound card at the engine's sample rate.
-// Logs go out as SysEx (F0 7D 4C <text> F7) and SysEx F0 7D 52 F7 reboots into the ROM
-// download mode so `tools/flash.sh` can reflash without touching BOOT.
+// Logs go out as SysEx (F0 7D 4C <text> F7). In: F0 7D 52 F7 ('R') reboots into the ROM download mode
+// so `tools/flash.sh` can reflash without touching BOOT; F0 7D 53 F7 ('S') logs the status and crash report.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>

@@ -254,6 +254,28 @@ static void menu_panel(const ui_t *u)
     oled_text(2, top + 14 + 4, "<"); oled_text(OLED_W - 8, top + 14 + 4, ">");
 }
 
+// A slot job: the body is replaced by its name and a progress bar; the header keeps the state.
+static void busy_panel(const ui_t *u)
+{
+    const int top = 20;
+    oled_rect(0, top, OLED_W, 28, false);
+    oled_frame(8, top, OLED_W - 16, 28);
+    int w = (int)strlen(u->busy_text) * 12;
+    oled_text2((OLED_W - w) / 2, top + 4, u->busy_text);
+    slider(16, top + 20, OLED_W - 32, u->busy_frac);
+}
+
+// A note in the bottom strip's place: the job result, or why the last boot was not a clean one.
+static void note_bar(const char *s)
+{
+    const int y = 47;
+    oled_rect(0, y, OLED_W, OLED_H - y, false);
+    oled_frame(0, y, OLED_W, 17);
+    int w = (int)strlen(s) * 6; if (w > OLED_W - 6) w = OLED_W - 6;
+    oled_text((OLED_W - w) / 2, y + 5, s);
+    oled_invert(1, y + 1, OLED_W - 2, 15);
+}
+
 static void toast(const ui_t *u)
 {
     int t = u->toast_ms;
@@ -281,9 +303,22 @@ void ui_draw(const ui_t *u)
     ui_t v = *u; v.clip = clip_flash > 0;
     header(&v);
     wave_panel(&v);
-    if (u->toast_ms > 0 && !u->menu) toast(&v); else bottom_strip(&v);
+    if (u->busy_text) busy_panel(&v);
+    if (u->note && !u->menu) note_bar(u->note);
+    else if (u->toast_ms > 0 && !u->menu) toast(&v); else bottom_strip(&v);
     menu_panel(&v);
     if (flash > 0) { flash--; oled_invert(0, 0, OLED_W, OLED_H); }
+    oled_flush();
+}
+
+void ui_fault(const char *l1, const char *l2)
+{
+    oled_clear();
+    oled_text2(4, 1, "SAMPLOOLER");
+    int w = (int)strlen(l1) * 12;
+    oled_text2((OLED_W - w) / 2, 24, l1); oled_invert((OLED_W - w) / 2 - 3, 22, w + 6, 18);
+    w = (int)strlen(l2) * 6;
+    oled_text((OLED_W - w) / 2, 48, l2);
     oled_flush();
 }
 
@@ -311,9 +346,18 @@ void ui_draw(const ui_t *u)
         return;
     }
 
-    if (u->state == REC_PLAYING) snprintf(line, sizeof line, "%s %s%.2fx", u->mode == REC_MODE_GRAIN ? "GRN" : "TAPE", u->speed_now < 0 ? "<" : ">", (double)fabsf(u->speed_now));
-    else snprintf(line, sizeof line, "%s %s", u->mode == REC_MODE_GRAIN ? "GRAIN" : "TAPE", u->state == REC_RECORDING ? "rec" : "");
-    oled_text(0, 10, line);
+    if (u->busy_text) {                                                 // a slot job: its name and a bar
+        oled_text(0, 10, u->busy_text);
+        slider(2, 21, OLED_W - 4, u->busy_frac);
+        oled_flush();
+        return;
+    }
+    if (u->note) { oled_text(0, 10, u->note); oled_invert(0, 9, OLED_W, 9); }
+    else {
+        if (u->state == REC_PLAYING) snprintf(line, sizeof line, "%s %s%.2fx", u->mode == REC_MODE_GRAIN ? "GRN" : "TAPE", u->speed_now < 0 ? "<" : ">", (double)fabsf(u->speed_now));
+        else snprintf(line, sizeof line, "%s %s", u->mode == REC_MODE_GRAIN ? "GRAIN" : "TAPE", u->state == REC_RECORDING ? "rec" : "");
+        oled_text(0, 10, line);
+    }
 
     // waveform strip with the head
     const int top = 19, mid = 24, half = 5;
@@ -333,6 +377,15 @@ void ui_draw(const ui_t *u)
     if (t > 1) t = 1;
     if (t < -1) t = -1;
     oled_rect(OLED_W / 2 + (int)(t * (OLED_W / 2 - 2)) - 1, y_tilt - 2, 3, 5, true);
+    oled_flush();
+}
+
+void ui_fault(const char *l1, const char *l2)
+{
+    oled_clear();
+    oled_text(0, 0, "SAMPLOOLER");
+    oled_text(0, 14, l1); oled_invert(0, 13, OLED_W, 9);
+    oled_text(0, 26, l2);
     oled_flush();
 }
 #endif

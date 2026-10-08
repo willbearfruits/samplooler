@@ -32,6 +32,8 @@
 #include "usb.h"
 #include "slots.h"
 #include "fx.h"
+#include "diag.h"
+#include "settings.h"
 #if HAS_CONTROLS
 #include "input.h"
 #endif
@@ -46,22 +48,8 @@ static const char *TAG = "main";
 #define ROLL_FULL_DEG  45.0f
 #define ROLL_SIGN      1.0f
 
-// ---- settings, editable from the encoder ----
+// ---- settings, editable from the encoder (settings_t is in settings.h; NVS keeps a copy) ----
 static void apply_settings(void);
-typedef struct {
-    int   mic_db;        // 0..36
-    int   mode;          // REC_MODE_TAPE / REC_MODE_GRAIN
-    int   pitch_st;      // -24..24 semitones (GRAIN)
-    bool  tilt;          // tilt drives the speed
-    float spd_max;       // 0.25..REC_SPEED_LIMIT
-    float spd_min;       // 0..1, the crawl at flat
-    bool  snap;          // quantise speed to octaves and fifths
-    int   grain_ms;      // 20..200
-    int   vol_pct;       // 0..150
-    int   input;         // AUDIO_IN_MIC / AUDIO_IN_USB
-    int   slot;          // 0..SLOT_N-1
-} settings_t;
-
 static settings_t S = { .mic_db = 12, .mode = REC_MODE_TAPE, .pitch_st = 0, .tilt = true,
                         .spd_max = 2.0f, .spd_min = 0.05f, .snap = false, .grain_ms = 50, .vol_pct = 100,
                         .input = AUDIO_IN_MIC, .slot = 0 };
@@ -71,6 +59,7 @@ static const char *param_name[P_N] = { "Mic gain", "Mode", "Pitch", "Tilt", "Spe
 static void slot_save(void);
 static void slot_load(void);
 static void midi_send_setting(int p);
+static void setting_changed(void) { settings_changed(); }
 
 #if HAS_CONTROLS
 static void param_adjust(int p, int d)
@@ -87,9 +76,10 @@ static void param_adjust(int p, int d)
     case P_VOL:    S.vol_pct += 5 * d; if (S.vol_pct < 0) S.vol_pct = 0; if (S.vol_pct > 150) S.vol_pct = 150; break;
     case P_INPUT:  S.input = d > 0 ? AUDIO_IN_USB : AUDIO_IN_MIC; break;
     case P_SLOT:   S.slot += d; if (S.slot < 0) S.slot = 0; if (S.slot >= SLOT_N) S.slot = SLOT_N - 1; break;
-    case P_SAVE:   if (d > 0) slot_save(); break;
-    case P_LOAD:   if (d > 0) slot_load(); break;
+    case P_SAVE:   if (d > 0) slot_save(); return;
+    case P_LOAD:   if (d > 0) slot_load(); return;
     }
+    setting_changed();
     midi_send_setting(p);
 }
 #endif
@@ -113,18 +103,53 @@ static void param_text(int p, char *b, size_t n)
     }
 }
 
+// Slot jobs. The output fades out first (a flash erase stalls both cores; muted, that is silence rather
+// than a stutter), the file is moved in chunks from the 10 ms loop so the screen and MIDI stay alive,
+// then the output fades back in. Recording is ignored while a job runs: both directions touch the take.
+static enum { JOB_NONE, JOB_SAVE, JOB_LOAD } job;
+static int  job_wait;                       // ticks spent waiting for silence
+static char job_text[32], result_text[40];
+static int  result_ms;
 static void slot_save(void)
 {
-    int n = 0; const int16_t *t = recorder_take(&n);
-    if (!t || n <= 0) { ESP_LOGW(TAG, "nothing to save"); return; }
-    slots_save(S.slot, t, n);
+    if (job != JOB_NONE || slots_busy()) return;
+    int n = 0;
+    if (!recorder_take(&n) || n <= 0) { ESP_LOGW(TAG, "nothing to save"); snprintf(result_text, sizeof result_text, "NOTHING TO SAVE"); result_ms = 1500; return; }
+    job = JOB_SAVE; job_wait = 0; snprintf(job_text, sizeof job_text, "SAVING %d", S.slot + 1);
+    audio_set_mute(true);
 }
 static void slot_load(void)
 {
-    int max = 0; int16_t *b = recorder_load_begin(&max);
-    if (!b) return;
-    int n = slots_load(S.slot, b, max);
-    recorder_load_end(n);
+    if (job != JOB_NONE || slots_busy() || recorder_state() == REC_RECORDING) return;
+    if (!slots_length(S.slot)) { snprintf(result_text, sizeof result_text, "SLOT %d EMPTY", S.slot + 1); result_ms = 1500; return; }
+    job = JOB_LOAD; job_wait = 0; snprintf(job_text, sizeof job_text, "LOADING %d", S.slot + 1);
+    audio_set_mute(true);
+}
+static void job_poll(void)
+{
+    if (job == JOB_NONE) return;
+    if (!slots_busy()) {
+        if (!audio_silent() && ++job_wait < 20) return;              // the fade takes 20 ms; 200 ms at most
+        bool started = false;
+        if (job == JOB_SAVE) { int n = 0; const int16_t *t = recorder_take(&n); started = slots_save_begin(S.slot, t, n); }
+        else { int max = 0; int16_t *b = recorder_load_begin(&max); started = b && slots_load_begin(S.slot, b, max); }
+        if (!started) { snprintf(result_text, sizeof result_text, "%s FAILED", job == JOB_SAVE ? "SAVE" : "LOAD"); result_ms = 2000; job = JOB_NONE; audio_set_mute(false); }
+        return;
+    }
+    if (slots_step()) return;
+    bool ok = slots_result_ok();
+    if (job == JOB_LOAD) recorder_load_end(ok ? slots_loaded() : 0);
+    snprintf(result_text, sizeof result_text, "%s %d%s", job == JOB_SAVE ? "SAVED" : "LOADED", S.slot + 1, ok ? "" : " FAILED");
+    result_ms = 1500; job = JOB_NONE;
+    audio_set_mute(false);
+}
+
+// Before a reboot: the settings that were still waiting, and no click on the way out.
+void app_prepare_reboot(void)
+{
+    settings_flush(&S);
+    audio_set_mute(true);
+    vTaskDelay(pdMS_TO_TICKS(40));
 }
 
 // ---- MIDI map ----
@@ -172,7 +197,7 @@ static inline void midi_send_setting_unused_guard(void) { (void)midi_send_settin
 static volatile bool midi_rec_hold;
 static void midi_in(uint8_t st, uint8_t d1, uint8_t d2)
 {
-    if (st == 0xB0 && d1 >= 20 && d1 < 20 + P_SAVE) { setting_from_127(d1 - 20, d2); apply_settings(); }
+    if (st == 0xB0 && d1 >= 20 && d1 < 20 + P_SAVE) { setting_from_127(d1 - 20, d2); apply_settings(); setting_changed(); }
     else if (st == 0x90 && d2 > 0) {
         if (d1 == 60) midi_rec_hold = true;
         else if (d1 == 61) slot_load();
@@ -260,16 +285,19 @@ static float param_frac(int p) { return p >= P_SAVE ? -1.0f : setting_to_127(p) 
 
 void app_main(void)
 {
+    diag_init();
+#if PIN_AMP_SD >= 0
+    // The speaker amp stays off until the audio task has seen 50 ms of good clock (audio_amp_enable),
+    // so the I2S start-up and the DAC's wake-up never reach the speaker.
+    gpio_config_t amp = { .pin_bit_mask = 1ULL << PIN_AMP_SD, .mode = GPIO_MODE_OUTPUT, .pull_down_en = GPIO_PULLDOWN_ENABLE };
+    gpio_config(&amp);
+    gpio_set_level(PIN_AMP_SD, 0);
+#endif
     vTaskDelay(pdMS_TO_TICKS(300));
     ESP_LOGI(TAG, "samplooler on %s: hold BOOT to record, tilt to play", CONFIG_IDF_TARGET);
 
     gpio_config_t btn = { .pin_bit_mask = 1ULL << PIN_BOOT, .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
     gpio_config(&btn);
-#if PIN_AMP_SD >= 0
-    gpio_config_t amp = { .pin_bit_mask = 1ULL << PIN_AMP_SD, .mode = GPIO_MODE_OUTPUT };
-    gpio_config(&amp);
-    gpio_set_level(PIN_AMP_SD, 1);
-#endif
 
     i2c_master_bus_handle_t bus = i2c_start();
     bool has_imu = imu_init(bus);
@@ -283,7 +311,14 @@ void app_main(void)
     input_init();
 #endif
     audio_i2s_init();
-    if (!recorder_init()) { ESP_LOGE(TAG, "halt"); while (1) vTaskDelay(1000); }
+    if (!recorder_init()) {
+        ESP_LOGE(TAG, "halt");
+#if OLED_ENABLE
+        if (oled_present()) ui_fault(REC_FIXED_POINT ? "NO RAM" : "NO PSRAM", "for the take");
+#endif
+        while (1) vTaskDelay(1000);
+    }
+    settings_init(&S);
     slots_init();
     apply_settings();
     audio_run();
@@ -297,6 +332,7 @@ void app_main(void)
 #endif
 
     int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0;
+    audio_stats_t last_stats = { 0 };
     bool held = false, menu = false;
     float roll = 0, pitch = 0, speed_cmd = 1.0f, pitch_ratio = 1.0f, joy_pitch_st = 0;
 #if HAS_CONTROLS
@@ -308,6 +344,8 @@ void app_main(void)
         tick++;
 
         usb_midi_poll(midi_in);
+        job_poll();
+        settings_poll(&S);
         bool down = gpio_get_level(PIN_BOOT) == 0 || midi_rec_hold;
 #if HAS_CONTROLS
         input_poll(&in);
@@ -315,6 +353,7 @@ void app_main(void)
         down = down || in.pressed;                            // the encoder push records too
 #endif
 #endif
+        if (job != JOB_NONE) down = false;                    // a slot job owns the take
         held_n = down ? (held_n < 3 ? held_n + 1 : 3) : (held_n > 0 ? held_n - 1 : 0);
         bool now = held_n == 3 ? true : held_n == 0 ? false : held;
         if (now != held) { held = now; recorder_set_record(held); }
@@ -326,7 +365,7 @@ void app_main(void)
         if (in.hold) { menu = !menu; ESP_LOGI(TAG, "%s mode", menu ? "menu" : "play"); }
         if (in.tap) {
             if (menu) { param = (param + 1) % P_N; char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%d/%d %s %s", param + 1, P_N, param_name[param], v); }
-            else { S.tilt = !S.tilt; ESP_LOGI(TAG, "tilt %s", S.tilt ? "on" : "off"); }
+            else { S.tilt = !S.tilt; setting_changed(); ESP_LOGI(TAG, "tilt %s", S.tilt ? "on" : "off"); }
         }
 #endif
         if (in.enc) { param_adjust(param, in.enc); apply_settings(); char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%s %s", param_name[param], v); if (!menu) toast = 1500; }
@@ -337,7 +376,7 @@ void app_main(void)
             if (in.flick_l) { param_adjust(param, -1); apply_settings(); }
             joy_pitch_st = 0.0f;
         } else {
-            if (in.joy_click) { S.tilt = !S.tilt; ESP_LOGI(TAG, "tilt %s", S.tilt ? "on" : "off"); }
+            if (in.joy_click) { S.tilt = !S.tilt; setting_changed(); ESP_LOGI(TAG, "tilt %s", S.tilt ? "on" : "off"); }
             joy_pitch_st = in.has_joy ? 12.0f * in.jx : 0.0f;
         }
 #endif
@@ -405,6 +444,7 @@ void app_main(void)
             if (audio_in_clips() > 0) clip_hold = 50; else if (clip_hold > 0) clip_hold--;
         }
         if (toast > 0) toast -= 10;
+        if (result_ms > 0) result_ms -= 10;
 #if OLED_ENABLE
         if (tick % 5 == 0 && oled_present()) {
             char pv[24]; param_text(param, pv, sizeof pv);
@@ -415,6 +455,8 @@ void app_main(void)
                 .loop_s = recorder_loop_seconds(), .max_s = recorder_max_seconds(), .meter_in = meter_in, .meter_out = meter_out,
                 .clip = clip_hold > 0, .cpu = audio_cpu_percent(), .menu = menu, .param = param, .param_n = P_N,
                 .param_name = param_name[param], .param_val = pv, .param_frac = param_frac(param), .toast_ms = toast,
+                .busy_text = job != JOB_NONE ? job_text : NULL, .busy_frac = slots_progress(),
+                .note = result_ms > 0 ? result_text : tick < 700 ? diag_note() : NULL,
             };
 #if HAS_CONTROLS
             u.has_joy = in.has_joy;
@@ -425,9 +467,16 @@ void app_main(void)
             ui_draw(&u);
         }
 #endif
-        if (tick % 100 == 0)
+        if (tick % 100 == 0) {
             ESP_LOGI(TAG, "%-4s %s speed %+5.2f (cmd %+5.2f) pitch %.2f pos %3d%%  pitch %+5.1f roll %+5.1f  mic %ddB  cpu %2d%%",
                      state_name(s), S.mode == REC_MODE_GRAIN ? "GRN" : "TAPE", (double)recorder_speed_now(), (double)speed_cmd,
                      (double)pitch_ratio, (int)(recorder_position() * 100.0f), (double)pitch, (double)roll, S.mic_db, audio_cpu_percent());
+            audio_stats_t a; audio_get_stats(&a);               // dropouts are worth a line of their own, when they happen
+            if (a.rx_ovf != last_stats.rx_ovf || a.tx_ovf != last_stats.tx_ovf || a.read_err != last_stats.read_err)
+                ESP_LOGW(TAG, "audio: %lu rx overruns, %lu tx underruns, %lu read errors since boot (%lu flash stalls)",
+                         (unsigned long)a.rx_ovf, (unsigned long)a.tx_ovf, (unsigned long)a.read_err, (unsigned long)a.stalls_flash);
+            last_stats = a;
+        }
+        if (tick % 6000 == 0) diag_log_status();                // once a minute, for the long soak logs
     }
 }

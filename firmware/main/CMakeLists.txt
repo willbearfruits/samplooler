@@ -1,11 +1,16 @@
-set(srcs "main.c" "audio.c" "recorder_f32.c" "recorder_q15.c" "imu.c" "oled.c" "input.c" "slots.c" "usb.c" "fx.c" "ui.c")
-set(reqs driver esp_driver_i2s esp_driver_i2c esp_driver_gpio esp_driver_pcnt esp_adc esp_timer fatfs wear_levelling)
+set(srcs "main.c" "audio.c" "recorder_f32.c" "recorder_q15.c" "imu.c" "oled.c" "input.c" "slots.c" "usb.c" "fx.c" "ui.c" "diag.c" "settings.c")
+set(reqs driver esp_driver_i2s esp_driver_i2c esp_driver_gpio esp_driver_pcnt esp_adc esp_timer fatfs wear_levelling nvs_flash esp_app_format esp_system esp_hw_support)
+if(CONFIG_IDF_TARGET_ARCH_XTENSA)
+    list(APPEND reqs xtensa)
+endif()
 if(CONFIG_IDF_TARGET_ESP32S3)
     list(APPEND srcs "usb/usb_descriptors.c")
     list(APPEND reqs usb)
 endif()
 idf_component_register(SRCS ${srcs} INCLUDE_DIRS "." REQUIRES ${reqs})
-target_compile_options(${COMPONENT_LIB} PRIVATE -O3 -ffast-math -fno-math-errno -Wall -Wextra -Wdouble-promotion)
+target_compile_options(${COMPONENT_LIB} PRIVATE -O3 -ffast-math -fno-math-errno -Wall -Wextra -Wdouble-promotion -Werror)
+# Panics are recorded in RTC memory by diag.c's __wrap_esp_panic_handler before the real handler runs.
+target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=esp_panic_handler" "-u __wrap_esp_panic_handler")
 
 if(CONFIG_IDF_TARGET_ESP32S3)
     # Our tusb_config.h and the UAC part's headers go to TinyUSB itself (and to usb_device_uac through it).

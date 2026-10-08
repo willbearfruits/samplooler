@@ -20,15 +20,16 @@ static const uint8_t cfg_desc[] = {
 };
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index) { (void)index; return cfg_desc; }
 
+char usb_serial[16] = "SL-000000";    // set from the chip's MAC in usb_start()
 static const char *strings[] = {
     (const char[]){ 0x09, 0x04 },
     "willbearfruits",            // 1
-    "Samplooler",          // 2
-    "GR-0001",                   // 3
-    "Samplooler MIDI",     // 4
-    "Samplooler audio",    // 5
-    "Samplooler in",       // 6 speaker (host -> device)
-    "Samplooler out",      // 7 mic (device -> host)
+    "Samplooler",                // 2
+    usb_serial,                  // 3
+    "Samplooler MIDI",           // 4
+    "Samplooler audio",          // 5
+    "Samplooler in",             // 6 speaker (host -> device)
+    "Samplooler out",            // 7 mic (device -> host)
 };
 static uint16_t desc_str[32];
 uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)

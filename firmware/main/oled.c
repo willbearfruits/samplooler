@@ -1,6 +1,7 @@
 #include "oled.h"
 #include <string.h>
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "font5x7.h"
 
 static const char *TAG = "oled";
@@ -18,6 +19,10 @@ static const char *TAG = "oled";
 
 static i2c_master_dev_handle_t dev;
 static bool present;
+static int  fails;                          // consecutive failed flushes
+static int64_t t_retry;                     // when to probe again after giving up
+#define FAIL_LIMIT 3
+#define RETRY_US   2000000
 static uint8_t fb[PAGES][OLED_W];
 static uint8_t txbuf[1 + PAGES * OLED_W];
 
@@ -29,11 +34,8 @@ static bool cmd(const uint8_t *c, int n)
     return i2c_master_transmit(dev, b, n + 1, 50) == ESP_OK;
 }
 
-bool oled_init(i2c_master_bus_handle_t bus)
+static bool bring_up(void)
 {
-    if (i2c_master_probe(bus, ADDR, 20) != ESP_OK) { ESP_LOGW(TAG, "no SSD1306 at 0x3C"); return false; }
-    i2c_device_config_t cfg = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = ADDR, .scl_speed_hz = 400000 };
-    if (i2c_master_bus_add_device(bus, &cfg, &dev) != ESP_OK) return false;
     // 72x40 sequence as u8g2's ssd1306_72x40 (40-line multiplex, no display offset);
     // 128x64 is the standard SSD1306 bring-up. Both use the internal charge pump.
     static const uint8_t init[] = {
@@ -63,13 +65,31 @@ bool oled_init(i2c_master_bus_handle_t bus)
         if (!cmd(init + i, n)) { ESP_LOGW(TAG, "init failed"); return false; }
         i += n;
     }
-    present = true;
+    present = true; fails = 0;
     oled_clear(); oled_flush();
     ESP_LOGI(TAG, "%dx%d ready", OLED_W, OLED_H);
     return true;
 }
 
-bool oled_present(void) { return present; }
+bool oled_init(i2c_master_bus_handle_t bus)
+{
+    if (i2c_master_probe(bus, ADDR, 20) != ESP_OK) { ESP_LOGW(TAG, "no SSD1306 at 0x3C"); return false; }
+    i2c_device_config_t cfg = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = ADDR, .scl_speed_hz = 400000 };
+    if (i2c_master_bus_add_device(bus, &cfg, &dev) != ESP_OK) return false;
+    return bring_up();
+}
+
+// A panel that stops answering (loose wire, or a brown-out on its side) is dropped after FAIL_LIMIT flushes,
+// so the UI loop is not held up by I2C timeouts, and probed again every two seconds.
+bool oled_present(void)
+{
+    if (present || !dev) return present;
+    int64_t now = esp_timer_get_time();
+    if (now < t_retry) return false;
+    t_retry = now + RETRY_US;
+    if (bring_up()) ESP_LOGI(TAG, "panel is back");
+    return present;
+}
 void oled_clear(void)   { memset(fb, 0, sizeof fb); }
 
 void oled_pixel(int x, int y, bool on)
@@ -158,8 +178,15 @@ void oled_flush(void)
 {
     if (!present) return;
     const uint8_t win[] = { 0x21, COL_OFFSET, COL_OFFSET + OLED_W - 1, 0x22, 0x00, PAGES - 1 };
-    if (!cmd(win, sizeof win)) return;
-    txbuf[0] = 0x40;                            // control byte: data follows
-    memcpy(txbuf + 1, fb, sizeof fb);
-    i2c_master_transmit(dev, txbuf, sizeof txbuf, 100);   // 361 bytes (72x40) or 1025 (128x64): 9 or 26 ms at 400 kHz
+    bool ok = cmd(win, sizeof win);
+    if (ok) {
+        txbuf[0] = 0x40;                        // control byte: data follows
+        memcpy(txbuf + 1, fb, sizeof fb);
+        ok = i2c_master_transmit(dev, txbuf, sizeof txbuf, 100) == ESP_OK;   // 361 bytes (72x40) or 1025 (128x64): 9 or 26 ms at 400 kHz
+    }
+    if (ok) { fails = 0; return; }
+    if (++fails >= FAIL_LIMIT) {
+        present = false; t_retry = esp_timer_get_time() + RETRY_US;
+        ESP_LOGW(TAG, "panel stopped answering: check its SDA/SCL/power; retrying every 2 s");
+    }
 }

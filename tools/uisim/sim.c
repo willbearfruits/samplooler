@@ -40,5 +40,14 @@ int main(void) {
     dump("9_menu_sliding"); for (int i = 0; i < 10; i++) ui_draw(&u); dump("9_menu_open");
     u.param = 11; u.param_name = "Save"; u.param_val = "-> slot 3"; u.param_frac = -1;
     ui_draw(&u); dump("9_menu_save");
+    u.menu = false; u.busy_text = "SAVING 3"; u.busy_frac = 0.6f;
+    for (int i = 0; i < 12; i++) ui_draw(&u);
+    dump("a_saving");
+    u.busy_text = NULL; u.note = "SAVED 3";
+    ui_draw(&u); dump("b_note_saved");
+    u.state = REC_IDLE; u.note = "CRASH: slot save";
+    ui_draw(&u); dump("c_note_crash");
+    ui_fault("NO PSRAM", "for the take");
+    dump("d_fault");
     return 0;
 }

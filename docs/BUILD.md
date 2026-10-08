@@ -229,20 +229,32 @@ idf.py -B build-c3 -DSDKCONFIG=sdkconfig.c3 build flash monitor
 
 The first build downloads the USB components. An S3 that is already running the
 USB firmware can be reflashed with `tools/flash.sh`, which asks it over MIDI to
-reboot into download mode.
+reboot into download mode. Updating keeps your saved slots and settings as long as
+the flash is not erased: the browser flasher asks before erasing, and `tools/flash.sh`
+never does.
 
 ## 7. First power-on
 
 To watch the serial log on the S3, hold the encoder push while plugging in. That
 keeps the plain serial console and skips USB MIDI and audio. The C3 always has it.
 
-1. The log names the chip, the take length and whether the MPU6050 answered.
+1. The log names the firmware version, the reset reason, the chip, the take length and
+   whether the MPU6050 answered.
 2. Hold record, speak, release. Flat on the desk it loops slowly forward.
 3. Tilt nose down: faster. Nose up: backwards, faster with angle.
 4. Wave it about: no zipper noise, no click at the loop seam.
 5. Hold record for longer than the take length: recording stops at the limit,
    playback still works.
 6. Without the MPU6050 it plays forward at 1x and says so in the log. Nothing crashes.
+7. Change a setting, wait five seconds, power-cycle: the setting is still there.
+8. Save the loop to a slot (menu, Save): the sound fades out, the screen shows `SAVING n`
+   with a bar for some seconds, then `SAVED n`, and the loop fades back in. Load it back.
+9. S3 in USB mode: `python3 tools/sl_midi.py status` prints a status line. After a minute
+   of playing, its audio counters (rx ovf, tx ovf, read err) should still be 0; flash stalls
+   count the save you just did.
+
+If the device ever restarts on its own, the screen says why for a few seconds (`CRASH: …`,
+`BROWNOUT`, `WATCHDOG`) and `sl_midi.py status` prints the crash report with a backtrace.
 
 ### When something is wrong
 
@@ -254,7 +266,10 @@ keeps the plain serial console and skips USB MIDI and audio. The C3 always has i
 | No MIDI port after flashing, `lsusb` shows `303a:0009` | The S3 stayed in download mode. Unplug and plug in again. |
 | No MIDI port, serial console instead | The encoder push was held at power-on. Plug in again without holding it. |
 | Block at the right end of the input meter | The mic clipped. Turn Mic gain down. |
-| Screen blank | Check SDA/SCL and 3V3 to the OLED. The rest works without it. |
+| Screen blank | Check SDA/SCL and 3V3 to the OLED. The rest works without it, and the screen comes back by itself once it answers again. |
+| Screen says `NO PSRAM` | The S3 module has no PSRAM (or it is not the FH4R2). The firmware needs it for the take. |
+| Screen says `BROWNOUT` after boot | The supply dipped: a weak USB port or cable, or the speaker amp drawing from the 3V3 pin. |
+| Settings lost after a power cycle | They are written three seconds after the last change, never while recording. Wait, then unplug. |
 | Board does not enumerate for flashing | Hold BOOT, tap RESET, release BOOT, then flash. |
 
 ## 8. Controls
