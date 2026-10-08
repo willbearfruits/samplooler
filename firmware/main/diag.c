@@ -155,8 +155,8 @@ size_t diag_status(char *buf, size_t n)
     audio_stats_t a; audio_get_stats(&a);
     const esp_app_desc_t *app = esp_app_get_description();
     int k = snprintf(buf, n,
-                     "v %s | up %lus | cpu %d%% (max %d%%) | audio blocks %lu rx ovf %lu tx ovf %lu read err %lu flash stalls %lu"
-                     " | heap int %u (min %u, largest %u) psram %u | stack free audio %u main %u",
+                     "v %s | up %lus | cpu %d%% (max %d%%) | audio blocks %lu rx ovf %lu tx ovf %lu read err %lu flash stalls %lu\n"
+                     "heap int %u (min %u, largest %u) psram %u | stack free audio %u main %u",
                      app->version, (unsigned long)(esp_timer_get_time() / 1000000), a.cpu_avg, a.cpu_max,
                      (unsigned long)a.blocks, (unsigned long)a.rx_ovf, (unsigned long)a.tx_ovf, (unsigned long)a.read_err,
                      (unsigned long)a.stalls_flash,
@@ -170,6 +170,9 @@ size_t diag_status(char *buf, size_t n)
 void diag_log_status(void)
 {
     char b[400];
-    diag_status(b, sizeof b);       ESP_LOGI(TAG, "status: %s", b);
+    diag_status(b, sizeof b);       // two lines: a log line over MIDI holds about 190 characters
+    char *nl = strchr(b, '\n');
+    if (nl) { *nl = 0; ESP_LOGI(TAG, "status: %s", b); ESP_LOGI(TAG, "status: %s", nl + 1); }
+    else ESP_LOGI(TAG, "status: %s", b);
     diag_crash_report(b, sizeof b); ESP_LOGI(TAG, "crash: %s", b);
 }
