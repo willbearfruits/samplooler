@@ -34,6 +34,20 @@ a round of fixes once real parts arrive. Reports of builds, good or bad, are wel
 
 Both need an INMP441 microphone, a PCM5102A line-out module and an MPU-6050 tilt sensor.
 
+## Get one
+
+- **Buy one**: built by hand in Haifa. Write and ask about price and shipping:
+  [Dogme84@gmail.com](mailto:Dogme84@gmail.com?subject=Samplooler) ·
+  [WhatsApp](https://wa.me/972539263808).
+- **Build it in the workshop**: the [ESP32 workshop](https://willbearfruits.github.io/serious-shit/workshop-esp32.html),
+  7 meetings at MEZO, Haifa, 2,200 ₪, kit included. You leave with an S3 board that runs Samplooler and
+  [TWOFOLD](https://github.com/willbearfruits/twofold).
+- **Build it yourself**: everything is below.
+
+**One board, two instruments.** The S3 version uses the same board and wiring as
+[TWOFOLD](https://github.com/willbearfruits/twofold), a small USB sound card with an EQ, effects and a screen.
+Flash one, flash the other.
+
 ## Build one
 
 - **Flash** it from the [project page](https://willbearfruits.github.io/samplooler/) in Chrome or
@@ -72,4 +86,7 @@ idf.py -B build-c3 -DSDKCONFIG=sdkconfig.c3 build flash monitor
 - Case, circuit boards, docs and images: CC BY-SA 4.0 ([enclosure/LICENSE](enclosure/LICENSE),
   [hardware/LICENSE](hardware/LICENSE)).
 
-Made in Haifa by Serious S.H.I.T.
+---
+
+Part of [Serious S.H.I.T.](https://willbearfruits.github.io/): instruments, tools and workshops made in Haifa by
+Yaniv Schonfeld (Willbear). If Samplooler is useful to you, [support it on Patreon](https://www.patreon.com/Seriousshit).
