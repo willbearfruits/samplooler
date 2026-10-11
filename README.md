@@ -16,10 +16,10 @@ the box. It leaves echoes when the delay is on, stutters with the stutter, juggl
 **Project page and browser flasher:** https://willbearfruits.github.io/samplooler/  
 **A 90-second tour with sound:** [on the project page](https://willbearfruits.github.io/samplooler/#video)
 (the file is [hardware/images/samplooler-showcase-full.mp4](hardware/images/samplooler-showcase-full.mp4)).
-It is rendered, not filmed: the sound is the firmware's own playback engine running on a computer. It shows the
-earlier screen design.
+It is rendered, not filmed: the sound is the firmware's own playback engine running on a computer, and the screen
+is the firmware's own drawing code.
 
-![The Samplooler stack, rendered](site/img/showcase.jpg)
+![A frame from the showcase: the stack tipped nose-up, the loop running backwards on its screen](site/img/showcase.jpg)
 
 ## Status
 

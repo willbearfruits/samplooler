@@ -50,8 +50,8 @@ if [ "$STAGE" -le 4 ]; then
   for p in shell lid dac imu esp oled buttons mic plunger; do
     openscad -q -D 'part="none"' -D "sel=\"$p\"" -o "$WORK/case/$p.stl" "$S/parts.scad"
   done
-  [ -f "$R/tools/uisim/out/c3/5_play_delay.pbm" ] || "$R/tools/uisim/run.sh" >/dev/null
-  python3 "$S/c3screen.py" "$R/tools/uisim/out/c3/5_play_delay.pbm" "$WORK/case/c3screen.png"
+  [ -f "$R/tools/uisim/out/c3/09_play_forward.pbm" ] || "$R/tools/uisim/run.sh" >/dev/null
+  python3 "$S/c3screen.py" "$R/tools/uisim/out/c3/09_play_forward.pbm" "$WORK/case/c3screen.png"
   blender -b -P "$S/case.py" -- "$WORK/case" "$WORK/case/c3screen.png" "$WORK/frames-case" 2>&1 | quiet
 fi
 if [ "$STAGE" -le 5 ]; then
