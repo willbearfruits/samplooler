@@ -6,12 +6,20 @@ A small looper you play by tilting it. Hold the button and make a sound; let go 
 the box forward and the loop runs faster, tip it back and it runs backwards, roll it sideways for a
 tape delay or a stutter.
 
-![The Samplooler stack, rendered, its screen showing a loop playing backwards](site/img/showcase.jpg)
+![The Samplooler screen: a tape between two reels with a stick-figure operator running on it, forwards, backwards, with delay echoes, stuttering, juggling grains and flung off its feet at 8x](site/img/tour.gif)
+
+The loop is a tape between two reels, and a small operator runs on it: forwards, backwards, as fast as you tip
+the box. It leaves echoes when the delay is on, stutters with the stutter, juggles in GRAIN mode, gets flung at
+8x, and falls asleep if you leave it alone. That's the firmware's own drawing code, rendered on a computer
+([tools/uisim/tour.sh](tools/uisim/tour.sh)).
 
 **Project page and browser flasher:** https://willbearfruits.github.io/samplooler/  
 **A 90-second tour with sound:** [on the project page](https://willbearfruits.github.io/samplooler/#video)
 (the file is [hardware/images/samplooler-showcase-full.mp4](hardware/images/samplooler-showcase-full.mp4)).
-It is rendered, not filmed: the sound is the firmware's own playback engine running on a computer.
+It is rendered, not filmed: the sound is the firmware's own playback engine running on a computer. It shows the
+earlier screen design.
+
+![The Samplooler stack, rendered](site/img/showcase.jpg)
 
 ## Status
 

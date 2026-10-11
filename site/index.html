@@ -96,6 +96,7 @@ esp-web-install-button button,.flashbox .btn{width:100%}
 .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .gallery figure{margin:0}
 .gallery img.oled{border:5px solid #111;border-radius:3px}
+video.tour{width:100%;max-width:816px;height:auto;display:block;margin:0 0 16px;border:6px solid #111;border-radius:3px;background:#0c0c0e}
 .gallery figcaption{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px}
 code,kbd{font-family:var(--mono);font-size:.9em}
 pre{font-family:var(--mono);font-size:13px;background:var(--paper);border:1px solid var(--soft);padding:12px;overflow-x:auto}
@@ -142,7 +143,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   </div>
   <figure>
     <img src="img/c3-case.png" alt="The Samplooler case, rendered: a small red box with a screen window and a microphone grille." width="900" height="650">
-    <img class="screen" src="img/screen-5_play_delay.png" alt="The screen while a loop plays: the waveform, the play head and the speed, 2.30x." width="396" height="204">
+    <img class="screen" src="img/s3-delay.png" alt="The screen while a loop plays with the delay on: the tape between two reels, and three ghost runners trailing the stick-figure operator." width="408" height="216">
   </figure>
 </section>
 
@@ -151,7 +152,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   <video controls preload="none" playsinline poster="img/showcase.jpg" width="1280" height="720">
     <source src="media/showcase.mp4" type="video/mp4">
   </video>
-  <p>Rendered, not filmed: no Samplooler has been built yet. The sound is the firmware's own playback engine running on a computer, given the same moves the 3D model makes, and the screen is the firmware's own drawing code.</p>
+  <p>Rendered, not filmed: no Samplooler has been built yet. The sound is the firmware's own playback engine running on a computer, given the same moves the 3D model makes, and the screen is the firmware's own drawing code. The screen in this video is the earlier design; the current one, with the tape and its operator, is under <a href="#screens">Screens</a>.</p>
 </section>
 
 <section id="how">
@@ -216,15 +217,25 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
 
 <section id="screens">
   <h2>Screens</h2>
+  <p>The loop is a tape running between two reels, and a small stick-figure operator lives on it. It runs with the tape, forwards or backwards, as fast as you tip the box. Turn the delay on and its echoes trail behind; stutter the loop and the operator stutters too; in GRAIN mode it juggles; tip all the way and it's flung off its feet. Leave it alone and it falls asleep.</p>
+  <video class="tour" autoplay muted loop playsinline preload="metadata" poster="img/tour-poster.png" width="816" height="432" aria-label="The Samplooler screen through a short session: boot, record, play forwards and backwards, delay, stutter, grains, flung at 8x, the slow crawl">
+    <source src="img/tour.mp4" type="video/mp4">
+  </video>
   <div class="gallery">
-    <figure><img class="oled" src="img/screen-2_idle.png" alt="Ready screen" loading="lazy"><figcaption>ready</figcaption></figure>
-    <figure><img class="oled" src="img/screen-4_recording.png" alt="Recording screen" loading="lazy"><figcaption>recording</figcaption></figure>
-    <figure><img class="oled" src="img/screen-6_grain_stutter.png" alt="Loop playing backwards in GRAIN mode with stutter" loading="lazy"><figcaption>backwards, GRAIN, stutter</figcaption></figure>
-    <figure><img class="oled" src="img/screen-9_menu_save.png" alt="Menu: save to slot 3" loading="lazy"><figcaption>menu, save to a slot</figcaption></figure>
-    <figure><img class="oled" src="img/c3-screen-5_play_delay.png" alt="C3 screen while a loop plays" loading="lazy"><figcaption>mini, looping</figcaption></figure>
+    <figure><img class="oled" src="img/s3-ready.png" alt="READY: an empty tape between two reels, the operator standing on it" loading="lazy"><figcaption>ready</figcaption></figure>
+    <figure><img class="oled" src="img/s3-recording.png" alt="REC: the operator sings into a microphone while the tape fills" loading="lazy"><figcaption>recording</figcaption></figure>
+    <figure><img class="oled" src="img/s3-reverse.png" alt="LOOP at -1.60x: the operator runs backwards" loading="lazy"><figcaption>tipped back: backwards</figcaption></figure>
+    <figure><img class="oled" src="img/s3-delay.png" alt="DELAY: three echoes of the operator trail behind it" loading="lazy"><figcaption>rolled left: delay</figcaption></figure>
+    <figure><img class="oled" src="img/s3-stutter.png" alt="STUTTER: the operator doubled and jittering" loading="lazy"><figcaption>rolled right: stutter</figcaption></figure>
+    <figure><img class="oled" src="img/s3-grain.png" alt="GRAIN mode: the operator juggles while it runs" loading="lazy"><figcaption>GRAIN: juggling</figcaption></figure>
+    <figure><img class="oled" src="img/s3-flung.png" alt="8x: the operator flung off its feet, tumbling" loading="lazy"><figcaption>all the way down: flung</figcaption></figure>
+    <figure><img class="oled" src="img/s3-menu-save.png" alt="The menu: save the loop to slot 3" loading="lazy"><figcaption>menu, save to a slot</figcaption></figure>
+    <figure><img class="oled" src="img/s3-asleep.png" alt="The screensaver: the operator asleep, Zs rising" loading="lazy"><figcaption>left alone: asleep</figcaption></figure>
+    <figure><img class="oled" src="img/c3-looping.png" alt="The mini's 72x40 screen while a loop plays" loading="lazy"><figcaption>mini, looping</figcaption></figure>
+    <figure><img class="oled" src="img/c3-ready.png" alt="The mini's 72x40 screen, ready" loading="lazy"><figcaption>mini, ready</figcaption></figure>
     <figure><img src="img/c3-case-open.png" alt="The case with the lid lifted: DAC, tilt sensor and board in their cradles" loading="lazy"><figcaption>mini case, lid off</figcaption></figure>
   </div>
-  <p style="font-size:14px;color:var(--muted)">Screens are rendered from the firmware's own drawing code on a computer. The case is a render; it has not been printed yet.</p>
+  <p style="font-size:14px;color:var(--muted)">Screens are rendered from the firmware's own drawing code on a computer (<code>tools/uisim/tour.sh</code> makes the video). The case is a render; it has not been printed yet.</p>
 </section>
 
 <section id="get">
