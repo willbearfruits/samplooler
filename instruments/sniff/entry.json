@@ -1,0 +1,22 @@
+{
+  "name": "SNIFF",
+  "summary": "The Wi-Fi around you as sound. Every device gets a note and plays it each time it sends something. HUNT finds one by ear.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "wifi",
+    "tilt"
+  ],
+  "status": "simulator",
+  "status_note": "Not tried on a board yet.",
+  "image": "images/play.gif",
+  "more": [
+    "images/splash.gif",
+    "images/hunt.gif",
+    "images/storm.gif",
+    "images/ghost.gif"
+  ],
+  "added": "2026-10-14"
+}

@@ -1,0 +1,24 @@
+{
+  "name": "BAND",
+  "summary": "Six players on one board: drums you knock or draw on a grid, bass, lead, keys, ocarina and tuned feedback, in one key and tempo. Syncs with a SING.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt",
+    "joystick",
+    "wifi"
+  ],
+  "status": "board",
+  "status_note": "Runs on a board: about 45 % CPU idle, 55 % with drums, bass, keys and lead playing, no dropouts (2026-10-15). Not played much yet.",
+  "image": "images/band-together.gif",
+  "more": [
+    "images/band-splash.gif",
+    "images/band-drums-grid.gif",
+    "images/band-keys-comp.gif",
+    "images/band-lead-arp.gif"
+  ],
+  "added": "2026-10-15"
+}

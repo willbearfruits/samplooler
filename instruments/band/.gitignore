@@ -1,0 +1,10 @@
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+tools/sim/obj/
+tools/sim/sim
+tools/sim/out/
+__pycache__/
+firmware/build-host/
+out/

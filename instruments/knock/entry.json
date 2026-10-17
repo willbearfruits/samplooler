@@ -1,0 +1,21 @@
+{
+  "name": "KNOCK",
+  "summary": "Knock on the box to play drums. Each side is a different drum. Hold REC while you knock and it loops.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt"
+  ],
+  "status": "simulator",
+  "status_note": "Not tried on a board yet.",
+  "image": "images/knock-play.gif",
+  "more": [
+    "images/knock-splash.gif",
+    "images/knock-stick.gif",
+    "images/knock-marimba.gif"
+  ],
+  "added": "2026-10-14"
+}

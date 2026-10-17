@@ -1,0 +1,23 @@
+{
+  "name": "JAM",
+  "summary": "Drums, bass, breath and howl, looped on top of each other in one key and one tempo. Turn the knob to pick the one you play.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt"
+  ],
+  "status": "board",
+  "status_note": "Runs on a board: 48 % CPU, no dropouts (2026-10-14). Not played much yet.",
+  "image": "images/jam-jam.gif",
+  "more": [
+    "images/jam-splash.gif",
+    "images/jam-drums.gif",
+    "images/jam-bass-follow.gif",
+    "images/jam-breath.gif",
+    "images/jam-howl_layer.gif"
+  ],
+  "added": "2026-10-14"
+}

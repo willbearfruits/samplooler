@@ -1,0 +1,24 @@
+{
+  "name": "SING",
+  "summary": "Sing and it tunes you, sings harmonies and a choir with you, or turns you into a vocoder. Hold REC to loop it; tilt to play the loop faster or backwards. Syncs with a BAND.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt",
+    "joystick",
+    "wifi"
+  ],
+  "hardware_note": "Best with headphones or the line out: the board's speaker sits next to the mic.",
+  "status": "board",
+  "status_note": "Runs on a board: 25-35 % CPU, no dropouts (2026-10-15). Not played much yet.",
+  "image": "images/sing-voices.gif",
+  "more": [
+    "images/sing-splash.gif",
+    "images/sing-sing.gif",
+    "images/sing-tilt.gif"
+  ],
+  "added": "2026-10-15"
+}

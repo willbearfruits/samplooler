@@ -1,0 +1,75 @@
+# Checks every entry, builds each one's firmware with ESP-IDF and runs its simulator, on every push and pull
+# request. On main it also publishes the page (site/ plus the images and firmware) to GitHub Pages: the
+# browser flasher needs the firmware on the same origin.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 tools/library.py check
+      - run: python3 tools/library.py core
+      - id: ids
+        run: echo "ids=$(python3 tools/library.py ids)" >> "$GITHUB_OUTPUT"
+
+  entry:
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.check.outputs.ids) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.1          # the release the core is developed on
+          target: esp32s3
+          path: instruments/${{ matrix.id }}/firmware
+          command: idf.py build
+      - name: The simulator
+        run: |
+          if [ -x instruments/${{ matrix.id }}/tools/sim/run.sh ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq python3-pil
+            instruments/${{ matrix.id }}/tools/sim/run.sh
+          else
+            echo "no simulator"
+          fi
+      - run: python3 tools/library.py collect ${{ matrix.id }} dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: entry-${{ matrix.id }}
+          path: dist
+
+  pages:
+    if: github.ref == 'refs/heads/main'
+    needs: entry
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: entry-*
+          merge-multiple: true
+          path: dist
+      - run: python3 tools/library.py site --dist dist --out _site
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v5

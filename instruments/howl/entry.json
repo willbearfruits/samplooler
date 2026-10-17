@@ -1,0 +1,22 @@
+{
+  "name": "HOWL",
+  "summary": "Feedback in tune. Only the notes of a chord can build up into a howl. Tip the box to bring it in, lean to pick the note.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt",
+    "speaker"
+  ],
+  "hardware_note": "The AIR sounds need the speaker; the others work on headphones.",
+  "status": "simulator",
+  "status_note": "Not tried on a board yet.",
+  "image": "images/howl.gif",
+  "more": [
+    "images/splash.gif",
+    "images/shepard.gif"
+  ],
+  "added": "2026-10-14"
+}

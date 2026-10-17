@@ -1,0 +1,38 @@
+# ESP32-S3 SuperMini (ESP32-S3FH4R2): 4 MB flash, 2 MB PSRAM. Same flash layout as the Samplooler, so
+# its sample slots (the FAT partition) survive a round trip between the two firmwares.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_QUAD=y
+CONFIG_SPIRAM_SPEED_80M=y
+
+# Console over the native USB Serial/JTAG until the app switches the port to MIDI + audio.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_UART_DEFAULT=n
+
+# 1 ms tick so the 10 ms control loop is exact.
+CONFIG_FREERTOS_HZ=1000
+
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# The I2S ISR stays in IRAM, a task that hangs for 5 s resets the device, room for printf with floats.
+CONFIG_I2S_ISR_IRAM_SAFE=y
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=12288
+
+# Wi-Fi only listens (Sniff): it keeps nothing in NVS.
+CONFIG_ESP_WIFI_NVS_ENABLED=n
+
+# USB composite: MIDI + UAC2 sound card (2 in, 2 out, 32 kHz, 16-bit). Descriptors and tusb_config.h are ours (main/usb/).
+CONFIG_USB_DEVICE_UAC_AS_PART=y
+CONFIG_UAC_SAMPLE_RATE=32000
+CONFIG_UAC_SPEAKER_CHANNEL_NUM=2
+CONFIG_UAC_MIC_CHANNEL_NUM=2
+CONFIG_UAC_BIT_RESOLUTION_16=y
+CONFIG_UAC_SUPPORT_MACOS=y
+CONFIG_UAC_TINYUSB_TASK_CORE=0
+CONFIG_UAC_SPK_TASK_CORE=0
+CONFIG_UAC_MIC_TASK_CORE=0

@@ -1,0 +1,7 @@
+# The sound runs from internal RAM: code fetched from flash through the cache (which shares the SPI bus with
+# PSRAM) made the same audio cost several times more on the board (measured on JAM, 2026-10-14).
+[mapping:chirp_audio]
+archive: libmain.a
+entries:
+    inst_synth (noflash)
+    looper (noflash)

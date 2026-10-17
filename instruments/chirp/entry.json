@@ -1,0 +1,22 @@
+{
+  "name": "CHIRP",
+  "summary": "The Bluetooth devices around you, played as birds. Phones, earbuds and watches sing on three wires.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "bluetooth",
+    "tilt"
+  ],
+  "status": "simulator",
+  "status_note": "Not tried on a board yet.",
+  "image": "images/chorus.gif",
+  "more": [
+    "images/splash.gif",
+    "images/arrive.gif",
+    "images/clocks.gif",
+    "images/swarm.gif"
+  ],
+  "added": "2026-10-14"
+}

@@ -1,0 +1,24 @@
+{
+  "name": "WRECK",
+  "summary": "A breakcore machine that turns into a doom machine: one knob from a chopped, rolled, crushed break at twice the tempo down to one chord held under a break slowed into thunder.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt",
+    "joystick",
+    "wifi"
+  ],
+  "hardware_note": "Sample a real break from the mic or over USB (the board is a USB sound card).",
+  "status": "simulator",
+  "status_note": "Built 2026-10-16 in the simulator; not run on a board yet.",
+  "image": "images/wreck-sweep.gif",
+  "more": [
+    "images/wreck-splash.gif",
+    "images/wreck-beat-grid.gif",
+    "images/wreck-kit-sample.gif"
+  ],
+  "added": "2026-10-16"
+}

@@ -1,0 +1,11 @@
+# The sound runs from internal RAM: code fetched from flash through the cache (which shares the SPI bus with
+# PSRAM) cost a block 10x what the same code costs from IRAM (measured on the board, 2026-10-14).
+[mapping:jam_audio]
+archive: libmain.a
+entries:
+    layer_drums (noflash)
+    layer_bass (noflash)
+    layer_breath (noflash)
+    layer_howl (noflash)
+    instrument (noflash)
+    looper (noflash)

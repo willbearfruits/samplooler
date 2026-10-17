@@ -1,0 +1,20 @@
+{
+  "name": "HUFF",
+  "summary": "Blow at the mic and tilt the box for the notes. Ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt"
+  ],
+  "status": "simulator",
+  "status_note": "Not tried on a board yet.",
+  "image": "images/play.gif",
+  "more": [
+    "images/splash.gif",
+    "images/breath-setup.gif"
+  ],
+  "added": "2026-10-14"
+}

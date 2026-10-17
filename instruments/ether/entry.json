@@ -1,0 +1,24 @@
+{
+  "name": "ETHER",
+  "summary": "SNIFF and CHIRP at once: the Wi-Fi on the ground, the Bluetooth in the air, in one key and one tempo.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "wifi",
+    "bluetooth",
+    "joystick"
+  ],
+  "hardware_note": "Without a joystick, BALANCE is in the menu.",
+  "status": "board",
+  "status_note": "Runs on a board with both radios on: 44 % CPU, no dropouts (2026-10-14). Not played much yet.",
+  "image": "images/play.gif",
+  "more": [
+    "images/splash.gif",
+    "images/balance.gif",
+    "images/hunt.gif",
+    "images/storm.gif"
+  ],
+  "added": "2026-10-14"
+}
