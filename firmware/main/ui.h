@@ -1,6 +1,5 @@
 // The screen. main.c fills a ui_t once per frame and calls ui_draw(); everything visual lives here.
 // 128x64: a 16-row header band (the yellow strip on two-colour panels) and a 48-row body.
-// 72x40: the compact layout.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>

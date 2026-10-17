@@ -1,6 +1,5 @@
 #include "fx.h"
 #include "recorder.h"
-#if !REC_FIXED_POINT
 #include <stdlib.h>
 #include <string.h>
 #include "esp_heap_caps.h"
@@ -102,4 +101,3 @@ void IRAM_ATTR fx_process(float *buf, int n)
     }
     dly_active = any;
 }
-#endif

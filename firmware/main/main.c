@@ -1,10 +1,9 @@
 // Samplooler: hold BOOT to record the mic, let go and it loops.
 // Tilt nose down to play forward faster, nose up to play backwards.
-// Roll left for a delay whose tail rings out, roll right to stutter the loop (S3).
-// Builds for the ESP32-S3 SuperMini (float, PSRAM, 0.96" OLED, record button, encoder)
-// and the ESP32-C3 SuperMini (Q15, internal RAM, 0.42" OLED, encoder; BOOT records).
+// Roll left for a delay whose tail rings out, roll right to stutter the loop.
+// Builds for the ESP32-S3 SuperMini (float, PSRAM, 0.96" OLED, record button, encoder).
 //
-// Controls (both; the S3 has a record button, the C3 records with BOOT):
+// Controls:
 //   record button   hold to record
 //   encoder tap     play: open the menu; menu: dive into the setting (edit), or run Save/Load;
 //                   editing: back to the list
@@ -317,9 +316,7 @@ void app_main(void)
 
     i2c_master_bus_handle_t bus = i2c_start();
     bool has_imu = imu_init(bus);
-#if !REC_FIXED_POINT
     fx_init();
-#endif
 #if OLED_ENABLE
     oled_init(bus);
 #endif
@@ -330,7 +327,7 @@ void app_main(void)
     if (!recorder_init()) {
         ESP_LOGE(TAG, "halt");
 #if OLED_ENABLE
-        if (oled_present()) ui_fault(REC_FIXED_POINT ? "NO RAM" : "NO PSRAM", "for the take");
+        if (oled_present()) ui_fault("NO PSRAM", "for the take");
 #endif
         while (1) vTaskDelay(1000);
     }
@@ -365,14 +362,12 @@ void app_main(void)
     slots_init();
     apply_settings();
     audio_run();
-#if HAS_USB
     bool keep_console = false;
 #if HAS_CONTROLS
     keep_console = gpio_get_level(PIN_ENC_SW) == 0;      // encoder held at power-on: stay on the Serial/JTAG console
 #endif
     if (keep_console) ESP_LOGW(TAG, "encoder held at boot: USB MIDI/audio off, console kept");
     else { vTaskDelay(pdMS_TO_TICKS(200)); ESP_LOGI(TAG, "switching the USB port to MIDI + audio + CDC console"); usb_start(); }
-#endif
 
     int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0, idle_ms = 0;
     audio_stats_t last_stats = { 0 };
@@ -445,7 +440,6 @@ void app_main(void)
 #endif
             else u = 1.0f;
             speed_cmd = (!S.tilt && !has_imu) ? 1.0f : control_to_speed(u);
-#if !REC_FIXED_POINT
             {   // roll: left of the dead zone feeds the delay, right of it grabs a stutter
                 float r = has_imu ? roll * ROLL_SIGN : 0.0f;
                 float a = fabsf(r) < ROLL_DEAD_DEG ? 0.0f : (fabsf(r) - ROLL_DEAD_DEG) / (ROLL_FULL_DEG - ROLL_DEAD_DEG);
@@ -453,7 +447,6 @@ void app_main(void)
                 fx_set_delay(r < 0 ? a : 0.0f);
                 fx_set_stutter(r > 0 ? a : 0.0f);
             }
-#endif
             if (S.snap) speed_cmd = snap_speed(speed_cmd);
             recorder_set_speed(speed_cmd);
             float st = (float)S.pitch_st + joy_pitch_st;
@@ -519,9 +512,7 @@ void app_main(void)
 #if HAS_JOY
             u.has_joy = in.has_joy;
 #endif
-#if !REC_FIXED_POINT
             u.fx_delay = fx_delay_active(); u.fx_stutter = fx_stutter_active();
-#endif
             ui_draw(&u);
         }
 #endif

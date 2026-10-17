@@ -1,10 +1,4 @@
 dependencies:
   idf: "^5.0"
-  espressif/tinyusb:
-    version: "^0.19.0"
-    rules:
-      - if: "target in [esp32s3]"
-  espressif/usb_device_uac:
-    version: "^1.1.1"
-    rules:
-      - if: "target in [esp32s3]"
+  espressif/tinyusb: "^0.19.0"
+  espressif/usb_device_uac: "^1.1.1"

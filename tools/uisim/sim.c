@@ -16,11 +16,9 @@ int main(void) {
     oled_init(NULL);
     ui_t u = { .state = REC_IDLE, .mode = REC_MODE_TAPE, .spd_max = 8, .pitch_ratio = 1, .has_imu = true, .tilt_on = true, .has_joy = true,
                .max_s = 20, .meter_in = 0.55f, .meter_out = 0.4f, .cpu = 9, .param_n = 13, .param = 4, .param_name = "Speed max", .param_val = "8.00x", .param_frac = 1.0f };
-#if !CONFIG_IDF_TARGET_ESP32C3
     frames(&u, 12); dump("01_splash_walk");
     frames(&u, 13); dump("02_splash_trip");
     frames(&u, 16); dump("03_splash_title");
-#endif
     frames(&u, 60); dump("04_idle");
     frames(&u, 2);  dump("05_idle_gag");
     u.state = REC_RECORDING; u.rec_fill = 0.35f; u.meter_in = 0.8f;
@@ -33,10 +31,8 @@ int main(void) {
     u.fx_delay = false; u.tilt_roll = 35; u.fx_stutter = true; frames(&u, 5); dump("12_stutter");
     u.fx_stutter = false; u.tilt_roll = 2;
     u.frozen = true; u.speed_now = -1.6f; u.speed_cmd = -1.6f; u.tilt_pitch = -25; frames(&u, 6); dump("12b_frozen"); u.frozen = false;
-#if !CONFIG_IDF_TARGET_ESP32C3
     u.mode = REC_MODE_GRAIN; u.pitch_ratio = 1.5f; u.speed_now = 0.9f; u.speed_cmd = 0.9f; frames(&u, 8); dump("13_grain_juggle");
     u.mode = REC_MODE_TAPE; u.pitch_ratio = 1;
-#endif
     u.speed_now = 8.0f; u.speed_cmd = 8.0f; u.tilt_pitch = 44; frames(&u, 6); dump("14_fast_tumble");
     u.speed_now = 0.03f; u.speed_cmd = 0.03f; u.tilt_pitch = 1; frames(&u, 30); dump("15_crawl");
     u.speed_now = 1.0f; u.speed_cmd = 1.0f; u.tilt_pitch = 8; u.clip = true; frames(&u, 3); dump("16_clip");

@@ -1,4 +1,4 @@
-// Roll-tilt effects after the recorder, S3 float path only.
+// Roll-tilt effects after the recorder.
 //   roll left   tape-style delay: the angle sets how much goes in and how long the tail rings.
 //               The wet return is always open, so rolling back flat lets the tail decay by itself.
 //   roll right  stutter: the first tilt grabs a slice of what is playing and loops it; tilting

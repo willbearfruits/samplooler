@@ -54,17 +54,6 @@ static inline void scope_push(float x)
 }
 void audio_scope(int8_t *dst) { int w = scope_w; for (int i = 0; i < AUDIO_SCOPE_N; i++) dst[i] = scope[(w + i) & (AUDIO_SCOPE_N - 1)]; }
 
-#if REC_FIXED_POINT
-// One-pole DC blocker, Q15 coefficient. Cheaper than a biquad and enough for a mic.
-static int32_t dc_x1, dc_y1;
-static inline int16_t dc_block(int32_t x)
-{
-    int32_t y = x - dc_x1 + ((dc_y1 * 32440) >> 15);   // pole at 0.99: about 25 Hz corner at 16 kHz
-    dc_x1 = x; dc_y1 = y;
-    if (y > 32767) y = 32767; else if (y < -32768) y = -32768;
-    return (int16_t)y;
-}
-#else
 typedef struct { float b0, b1, b2, a1, a2, z1, z2; } biquad_t;
 static biquad_t hp;
 static void biquad_highpass(biquad_t *q, float fc, float qf)
@@ -87,7 +76,6 @@ static inline float softclip(float x)
     if (x < -1.5f) return -1.0f;
     return x - x * x * x * (4.0f / 27.0f);
 }
-#endif
 
 // A DMA queue overflow means the task was late for a block. Within 500 ms of a flash write it is the
 // write (the cache goes off and both cores stall for every page or sector); otherwise it is a real overrun.
@@ -129,9 +117,7 @@ static void IRAM_ATTR audio_task(void *arg)
     rec_sample_t *in  = malloc(FRAMES * sizeof(rec_sample_t));
     rec_sample_t *out = malloc(FRAMES * sizeof(rec_sample_t));
     assert(raw && in && out);
-#if !REC_FIXED_POINT
     biquad_highpass(&hp, 80.0f, 0.707f);
-#endif
     const uint32_t budget = (uint32_t)FRAMES * (CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ * 1000000u / REC_SAMPLE_RATE);
 
     esp_task_wdt_add(NULL);          // a stuck audio task (5 s without a block) resets the device
@@ -165,30 +151,6 @@ static void IRAM_ATTR audio_task(void *arg)
         if (want != mic_slot) { if (++slot_vote > 50) { mic_slot = want; slot_vote = 0; } }
         else slot_vote = 0;
 
-#if REC_FIXED_POINT
-        int shift = 8 - (mic_db + 3) / 6;                                         // 6 dB per bit
-        if (shift < 2) shift = 2;
-        if (shift > 8) shift = 8;
-        int32_t pk = 0, clips = 0;
-        for (int f = 0; f < frames; f++) {
-            int32_t v = (raw[2 * f + mic_slot] >> 8) >> shift;
-            if (v > 32767) { v = 32767; clips++; } else if (v < -32768) { v = -32768; clips++; }
-            int32_t a = v < 0 ? -v : v; if (a > pk) pk = a;
-            in[f] = dc_block(v);
-            scope_push(in[f] * (1.0f / 32768.0f));
-        }
-        if (pk * (1.0f / 32768.0f) > in_peak) in_peak = pk * (1.0f / 32768.0f);
-        in_clips += clips;
-        recorder_process(in, out, frames);
-        int32_t opk = 0;
-        const int32_t mq = (int32_t)(mg * 256.0f);
-        for (int f = 0; f < frames; f++) {
-            int32_t o = out[f]; int32_t a = o < 0 ? -o : o; if (a > opk) opk = a;
-            int32_t v = ((o * mq) >> 8) << 15;                                    // -6 dB of headroom at the DAC
-            raw[2 * f] = v; raw[2 * f + 1] = v;
-        }
-        if (opk * (1.0f / 32768.0f) > out_peak) out_peak = opk * (1.0f / 32768.0f);
-#else
         // dB to linear without powf: 10^(db/20) = 2^(db/6.0206)
         const float k = exp2f((float)mic_db / 6.0206f) / 8388608.0f;
         float pk = 0; int clips = 0;
@@ -223,7 +185,6 @@ static void IRAM_ATTR audio_task(void *arg)
         }
         if (opk > out_peak) out_peak = opk;
         usb_audio_out_push(usb_out, frames);
-#endif
         uint32_t used = esp_cpu_get_cycle_count() - c0;
         int pct = (int)((uint64_t)used * 100 / budget);
         cpu_pct += (pct - cpu_pct) / 8;
@@ -237,19 +198,10 @@ static void IRAM_ATTR audio_task(void *arg)
 
 void audio_run(void)
 {
-#if CONFIG_IDF_TARGET_ESP32C3
-    ESP_LOGI(TAG, "I2S full duplex, %d Hz, %d-frame blocks, Q15, single core at priority %d",
-             REC_SAMPLE_RATE, FRAMES, configMAX_PRIORITIES - 2);
-#else
     ESP_LOGI(TAG, "I2S full duplex, %d Hz, %d-frame blocks, float, core 1", REC_SAMPLE_RATE, FRAMES);
-#endif
     ESP_ERROR_CHECK(i2s_channel_enable(tx));         // after the log line: a console write takes longer than the DMA ring
     ESP_ERROR_CHECK(i2s_channel_enable(rx));
-#if CONFIG_IDF_TARGET_ESP32C3
-    xTaskCreate(audio_task, "audio", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
-#else
     xTaskCreatePinnedToCore(audio_task, "audio", 8192, NULL, 6, NULL, 1);
-#endif
 }
 
 int audio_cpu_percent(void) { return cpu_pct; }

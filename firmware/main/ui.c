@@ -25,7 +25,7 @@ static float run_ph;             // the figure's leg cycle
 
 static int   clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
-static bool  __attribute__((unused)) starts(const char *s, const char *p) { return s && strncmp(s, p, strlen(p)) == 0; }
+static bool  starts(const char *s, const char *p) { return s && strncmp(s, p, strlen(p)) == 0; }
 static const char *upper(const char *s)        // pills shout; the small face keeps a few lowercase unit letters
 {
     static char b[32]; int i = 0;
@@ -34,7 +34,7 @@ static const char *upper(const char *s)        // pills shout; the small face ke
 }
 static float __attribute__((unused)) ease_t(int t) { float p = t > 8 ? 1.0f : t / 8.0f; p = 1.0f - p; return 1.0f - p * p * p; }   // ease-out over 8 frames
 
-// ---------------------------------------------------------------- pieces shared by both panels
+// ---------------------------------------------------------------- pieces
 
 // Segmented meter, LED style, with peak hold and a clip flash.
 static void meter(int x, int y, int w, int h, float v, float *hold, bool clip)
@@ -61,7 +61,7 @@ static void slider(int x, int y, int w, float frac)
 // A stick figure. (x, floor) is where the feet touch. dir +1 faces right, -1 left. 11 rows tall:
 // head rows 0..2, body 3..7, legs 7..10. Poses carry their own arms and legs.
 enum { P_STAND, P_RUN, P_MIC, P_CARRY, P_FLAT, P_SHRUG, P_JUMP, P_SLEEP, P_SIT };
-static void __attribute__((unused)) figure(int x, int floor, int pose, int dir, int ph)   // the 72x40 panel has mini_figure
+static void figure(int x, int floor, int pose, int dir, int ph)
 {
     int hy = floor - 10;                                        // head centre row
     if (pose == P_FLAT || pose == P_SLEEP) {                    // lying: head to the left, feet to the right
@@ -135,7 +135,7 @@ static void tumble(int cx, int cy, float a)
 }
 
 // A cassette, 13 x 8, top-left corner (x, y).
-static void __attribute__((unused)) cassette(int x, int y)
+static void cassette(int x, int y)
 {
     oled_rframe(x, y, 13, 8, 1);
     oled_circle(x + 3, y + 4, 1, true); oled_circle(x + 9, y + 4, 1, true);
@@ -154,7 +154,6 @@ static void reel(int cx, int cy, int r, float a)
 }
 
 // ---------------------------------------------------------------- 128x64
-#if OLED_H >= 64
 
 #define FIG_FLOOR   28           // the figure stands on the tape's top edge
 #define TAPE_TOP    28
@@ -520,138 +519,4 @@ void ui_fault(const char *l1, const char *l2)
     oled_hline_pat(0, 51, OLED_W, 0x55, true);
     oled_flush();
 }
-
-// ---------------------------------------------------------------- 72x40
-#else
-
-#define FIG_FLOOR 17
-#define TAPE_TOP  17
-#define TAPE_BOT  31
-#define TAPE_MID  24
-#define TAPE_X0   9
-#define TAPE_X1   62
-#define TAPE_W    (TAPE_X1 - TAPE_X0 + 1)
-
-static float fig_x = 36;
-
-static void tape_motion(const ui_t *u)
-{
-    float v = u->state == REC_RECORDING ? 1.0f : u->state == REC_PLAYING ? u->speed_now : 0.0f;
-    reel_a += v * 9.0f;  while (reel_a >= 360) reel_a -= 360;  while (reel_a < 0) reel_a += 360;
-    tape_x += v * 1.5f;  while (tape_x >= 4) tape_x -= 4;      while (tape_x < 0) tape_x += 4;
-    run_ph += fabsf(v) * 0.5f; if (run_ph >= 4) run_ph -= 4;
-}
-
-// An 8-row figure for the small panel.
-static void mini_figure(int x, int floor, int pose, int dir, int ph)
-{
-    if (pose == P_SLEEP || pose == P_FLAT) { oled_circle(x - 4, floor - 1, 1, true); oled_line(x - 2, floor - 1, x + 4, floor - 1, true); return; }
-    oled_rect(x - 1, floor - 8, 2, 2, true);                    // head
-    oled_line(x, floor - 6, x, floor - 3, true);
-    if (pose == P_RUN) {
-        static const int8_t L[4][2] = { { 2, -2 }, { 1, -1 }, { -2, 2 }, { -1, 1 } };
-        oled_line(x, floor - 3, x + L[ph & 3][0] * dir, floor, true);
-        oled_line(x, floor - 3, x + L[ph & 3][1] * dir, floor, true);
-        oled_line(x - 2 * dir, floor - 5, x + 2 * dir, floor - 6, true);
-    } else if (pose == P_CARRY || pose == P_JUMP) {
-        oled_line(x, floor - 3, x - 1, floor, true); oled_line(x, floor - 3, x + 1, floor, true);
-        oled_line(x, floor - 5, x - 2, floor - 8, true); oled_line(x, floor - 5, x + 2, floor - 8, true);
-    } else {
-        oled_line(x, floor - 3, x - 1, floor, true); oled_line(x, floor - 3, x + 1, floor, true);
-        oled_line(x - 2, floor - 4, x + 2, floor - 4, true);
-        if (pose == P_MIC) oled_disc(x + 3 * dir, floor - 6, 1, true);
-    }
-}
-
-void ui_draw(const ui_t *u)
-{
-    fr++;
-    char line[28];
-    if (u->idle_ms > 180000 && u->state == REC_IDLE) {
-        oled_clear();
-        int x = 10 + (fr / 40) % 50, floor = 20 + (fr / 97) % 12;
-        mini_figure(x, floor, P_SLEEP, 1, 0);
-        oled_ftext(F_TINY, x + 2 + (fr / 4) % 5, floor - 6 - (fr / 4) % 5, "Z");
-        oled_flush();
-        return;
-    }
-    tape_motion(u);
-    oled_clear();
-    // header: state and time, the input meter at the right
-    if (u->state == REC_RECORDING) snprintf(line, sizeof line, "REC %ds", (int)(u->rec_fill * (float)u->max_s));
-    else if (u->state == REC_PLAYING) snprintf(line, sizeof line, "LOOP %.1fs", (double)u->loop_s);
-    else snprintf(line, sizeof line, "READY");
-    oled_pill(F_TINY, 0, 0, line, u->state != REC_IDLE);
-    meter(OLED_W - 20, 1, 20, 7, u->meter_in, &peak_hold, u->clip);
-
-    if (u->menu) {
-        oled_pill(F_SMALL, 0, 11, upper(u->param_name), u->menu_edit);
-        oled_rect(OLED_W - 20, 11, 20, 9, false);
-        snprintf(line, sizeof line, "%d/%d", u->param + 1, u->param_n);
-        oled_ftext_r(F_TINY, OLED_W - 1, 13, line, 0);
-        oled_ftext(F_MED, 1, 22, u->param_val);
-        if (u->menu_edit && u->param_frac >= 0) slider(2, 34, OLED_W - 4, u->param_frac);
-        else oled_ftext(F_TINY, 1, 34, u->param_frac < 0 ? "PRESS TO RUN" : u->menu_edit ? "" : "PRESS TO EDIT");
-        oled_flush();
-        return;
-    }
-    if (u->busy_text) {
-        int x = 10 + (int)(u->busy_frac * 50);
-        mini_figure(x, 17, P_CARRY, 1, 0);
-        oled_rframe(x - 4, 4, 9, 5, 1);
-        oled_ftext(F_SMALL, 1, 22, u->busy_text);
-        slider(2, 34, OLED_W - 4, u->busy_frac);
-        oled_flush();
-        return;
-    }
-
-    // the tape between two small reels
-    for (int x = TAPE_X0 - 1; x <= TAPE_X1 + 1; x++) if (((x - (int)tape_x) & 3) != 0) { oled_pixel(x, TAPE_TOP, true); oled_pixel(x, TAPE_BOT, true); }
-    reel(4, TAPE_MID, 4, reel_a); reel(OLED_W - 5, TAPE_MID, 4, reel_a);
-    recorder_envelope(env, TAPE_W);
-    const int half = 5;
-    int fill_x = u->state == REC_RECORDING ? (int)(u->rec_fill * (TAPE_W - 1)) : TAPE_W - 1;
-    for (int x = 0; x < TAPE_W; x++) {
-        if (u->state == REC_RECORDING && x > fill_x) continue;
-        int col = u->state == REC_RECORDING ? (int)((float)x / (float)(fill_x ? fill_x : 1) * (TAPE_W - 1)) : x;
-        int h = u->state == REC_IDLE ? 0 : env[clampi(col, 0, TAPE_W - 1)] * half / 255;
-        if (h > 0) oled_rect(TAPE_X0 + x, TAPE_MID - h, 1, 2 * h + 1, true); else if ((x & 1) == 0) oled_pixel(TAPE_X0 + x, TAPE_MID, true);
-    }
-    if (u->state == REC_RECORDING) { if ((fr / 3) & 1) oled_rect(TAPE_X0 + fill_x, TAPE_TOP + 1, 1, TAPE_BOT - TAPE_TOP - 1, true); }
-    else if (u->state == REC_PLAYING) oled_invert(TAPE_X0 + (int)(u->pos * (TAPE_W - 1)), TAPE_TOP + 1, 1, TAPE_BOT - TAPE_TOP - 1);
-
-    // the operator on top of the tape
-    if (u->note) { oled_pill(F_SMALL, 0, 8, u->note, true); }
-    else if (u->state == REC_IDLE) mini_figure(36, FIG_FLOOR, P_STAND, 1, 0);
-    else if (u->state == REC_RECORDING) mini_figure(36, FIG_FLOOR, P_MIC, 1, 0);
-    else {
-        float v = u->speed_now; int dir = v >= 0 ? 1 : -1;
-        fig_x += v * 0.5f; fig_x = clampf(fig_x, 16, 56);
-        if (fabsf(v) < 0.3f) fig_x += (36 - fig_x) * 0.05f;
-        if (fabsf(v) >= 4.5f) tumble((int)fig_x, FIG_FLOOR - 4, fr * 0.6f * dir);
-        else mini_figure((int)fig_x, FIG_FLOOR, fabsf(v) < 0.08f ? P_STAND : P_RUN, dir, (int)run_ph);
-    }
-
-    // bottom: speed and the tilt line
-    if (u->state == REC_PLAYING) snprintf(line, sizeof line, "%s%.2f", u->speed_now < 0 ? "-" : "", (double)fabsf(u->speed_now));
-    else snprintf(line, sizeof line, "%s%s", u->mode == REC_MODE_GRAIN ? "GRAIN" : "TAPE", u->frozen ? " HOLD" : "");
-    oled_ftext(F_SMALL, 0, 34, line);
-    int y_tilt = OLED_H - 3, x0 = 30;
-    oled_hline_pat(x0, y_tilt, OLED_W - x0, 0x55, true);
-    oled_rect(x0 + (OLED_W - x0) / 2, y_tilt - 2, 1, 5, true);
-    float t = clampf(u->tilt_on ? u->tilt_pitch / 45.0f : (u->spd_max > 0 ? u->speed_cmd / u->spd_max : 0), -1, 1);
-    oled_rect(x0 + (OLED_W - x0) / 2 + (int)(t * ((OLED_W - x0) / 2 - 2)) - 1, y_tilt - 1, 3, 3, true);
-    oled_flush();
-}
-
-void ui_fault(const char *l1, const char *l2)
-{
-    oled_clear();
-    oled_ftext(F_SMALL, 0, 0, "SAMPLOOLER");
-    mini_figure(66, 16, P_STAND, 1, 0);
-    oled_pill(F_SMALL, 0, 12, l1, true);
-    oled_ftext(F_SMALL, 0, 26, l2);
-    oled_flush();
-}
-#endif
 #endif

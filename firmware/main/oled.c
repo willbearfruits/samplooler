@@ -7,15 +7,8 @@
 static const char *TAG = "oled";
 #define ADDR        0x3C
 #define PAGES       (OLED_H / 8)
-#if OLED_W == 72
-#define COL_OFFSET  28          // the 72-wide panel sits at RAM columns 28..99
-#define MUX         0x27        // 40 lines
-#define COMPINS     0x12
-#else
-#define COL_OFFSET  0
 #define MUX         (OLED_H - 1)
 #define COMPINS     (OLED_H == 64 ? 0x12 : 0x02)
-#endif
 
 static i2c_master_dev_handle_t dev;
 static bool present;
@@ -36,16 +29,12 @@ static bool cmd(const uint8_t *c, int n)
 
 static bool bring_up(void)
 {
-    // 72x40 sequence as u8g2's ssd1306_72x40 (40-line multiplex, no display offset);
-    // 128x64 is the standard SSD1306 bring-up. Both use the internal charge pump.
+    // The standard SSD1306 bring-up, with the internal charge pump.
     static const uint8_t init[] = {
         0xAE,             // display off
         0xD5, 0x80,       // clock divide / oscillator
         0xA8, MUX,        // multiplex
         0xD3, 0x00,       // display offset 0
-#if OLED_W == 72
-        0xAD, 0x30,       // internal IREF (0.42" panel)
-#endif
         0x8D, 0x14,       // charge pump on
         0x40,             // start line 0
         0xA6,             // normal (not inverted)
@@ -281,12 +270,12 @@ int oled_pill(const gfx_font_t *f, int x, int y, const char *s, bool filled)
 void oled_flush(void)
 {
     if (!present) return;
-    const uint8_t win[] = { 0x21, COL_OFFSET, COL_OFFSET + OLED_W - 1, 0x22, 0x00, PAGES - 1 };
+    const uint8_t win[] = { 0x21, 0, OLED_W - 1, 0x22, 0x00, PAGES - 1 };
     bool ok = cmd(win, sizeof win);
     if (ok) {
         txbuf[0] = 0x40;                        // control byte: data follows
         memcpy(txbuf + 1, fb, sizeof fb);
-        ok = i2c_master_transmit(dev, txbuf, sizeof txbuf, 100) == ESP_OK;   // 361 bytes (72x40) or 1025 (128x64): 9 or 26 ms at 400 kHz
+        ok = i2c_master_transmit(dev, txbuf, sizeof txbuf, 100) == ESP_OK;   // 1025 bytes: 26 ms at 400 kHz
     }
     if (ok) { fails = 0; return; }
     if (++fails >= FAIL_LIMIT) {

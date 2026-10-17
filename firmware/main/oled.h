@@ -1,4 +1,4 @@
-// SSD1306 over I2C (address 0x3C): the 0.42" 72x40 panel or the 0.96" 128x64.
+// SSD1306 over I2C (address 0x3C): the 0.96" 128x64 panel.
 // Framebuffer pushed in one transfer from the UI task. Never called from the audio task.
 #pragma once
 #include <stdbool.h>

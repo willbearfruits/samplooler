@@ -1,5 +1,4 @@
 #include "usb.h"
-#if HAS_USB
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -210,4 +209,3 @@ bool usb_start(void)
     ESP_LOGI(TAG, "USB composite up: MIDI + audio %d Hz, logs over SysEx, serial %s", REC_SAMPLE_RATE, usb_serial);
     return true;
 }
-#endif

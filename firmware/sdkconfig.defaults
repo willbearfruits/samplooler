@@ -1,8 +1,8 @@
-# Shared by both targets. Target-specific settings live in sdkconfig.defaults.esp32s3 / .esp32c3.
+# Chip-specific settings live in sdkconfig.defaults.esp32s3.
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
-# Console over the native USB Serial/JTAG on both chips, so `idf.py monitor` just works.
+# Console over the native USB Serial/JTAG, so `idf.py monitor` just works.
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_ESP_CONSOLE_UART_DEFAULT=n
 

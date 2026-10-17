@@ -1,4 +1,0 @@
-# ESP32-C3 SuperMini (ESP32-C3FH4: 400 KB SRAM, no PSRAM, no FPU, one core)
-CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_160=y
-# Keep RAM for the take: a smaller main task stack than the S3's (it still runs FATFS and NVS); no WiFi/BT are linked anyway.
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=5120

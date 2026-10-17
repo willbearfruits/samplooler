@@ -5,12 +5,7 @@
 #include <string.h>
 #include <math.h>
 #include "driver/gpio.h"
-#include "soc/soc_caps.h"
-#if SOC_PCNT_SUPPORTED
 #include "driver/pulse_cnt.h"
-#else
-#include "freertos/portmacro.h"
-#endif
 #if HAS_JOY
 #include "esp_adc/adc_oneshot.h"
 #endif
@@ -20,30 +15,7 @@
 #include "esp_log.h"
 
 static const char *TAG = "input";
-#if SOC_PCNT_SUPPORTED
 static pcnt_unit_handle_t pcnt;
-#else
-// No pulse counter on the C3: decode the quadrature in a GPIO ISR.
-// state = (A<<1)|B; a valid step changes one bit, a bounce that changes both counts 0.
-static volatile int32_t sw_count;
-static uint8_t sw_prev;
-static void IRAM_ATTR enc_isr(void *arg)
-{
-    (void)arg;
-    static const int8_t step[16] = { 0, -1, 1, 0,  1, 0, 0, -1,  -1, 0, 0, 1,  0, 1, -1, 0 };
-    uint8_t now = (gpio_get_level(PIN_ENC_A) << 1) | gpio_get_level(PIN_ENC_B);
-    sw_count += step[(sw_prev << 2) | now];
-    sw_prev = now;
-}
-static portMUX_TYPE enc_mux = portMUX_INITIALIZER_UNLOCKED;
-static int enc_take(void)
-{
-    portENTER_CRITICAL(&enc_mux);
-    int c = sw_count; sw_count = 0;
-    portEXIT_CRITICAL(&enc_mux);
-    return c;
-}
-#endif
 static int enc_acc;
 static bool was_pressed, long_fired;
 static int64_t t_press;
@@ -81,7 +53,6 @@ void input_init(void)
     ESP_LOGI(TAG, "record button on %d", PIN_REC);
 #endif
 
-#if SOC_PCNT_SUPPORTED
     pcnt_unit_config_t uc = { .high_limit = 30000, .low_limit = -30000 };
     ESP_ERROR_CHECK(pcnt_new_unit(&uc, &pcnt));
     pcnt_glitch_filter_config_t gf = { .max_glitch_ns = 1000 };
@@ -99,15 +70,6 @@ void input_init(void)
     ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt));
     ESP_ERROR_CHECK(pcnt_unit_start(pcnt));
     ESP_LOGI(TAG, "encoder on %d/%d (PCNT), push on %d", PIN_ENC_A, PIN_ENC_B, PIN_ENC_SW);
-#else
-    sw_prev = (gpio_get_level(PIN_ENC_A) << 1) | gpio_get_level(PIN_ENC_B);
-    ESP_ERROR_CHECK(gpio_set_intr_type(PIN_ENC_A, GPIO_INTR_ANYEDGE));
-    ESP_ERROR_CHECK(gpio_set_intr_type(PIN_ENC_B, GPIO_INTR_ANYEDGE));
-    ESP_ERROR_CHECK(gpio_install_isr_service(0));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(PIN_ENC_A, enc_isr, NULL));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(PIN_ENC_B, enc_isr, NULL));
-    ESP_LOGI(TAG, "encoder on %d/%d (GPIO ISR), push on %d", PIN_ENC_A, PIN_ENC_B, PIN_ENC_SW);
-#endif
 
 #if HAS_JOY
     adc_oneshot_unit_init_cfg_t ac = { .unit_id = ADC_UNIT_1 };
@@ -155,12 +117,8 @@ void input_poll(input_ev_t *ev)
 {
     memset(ev, 0, sizeof *ev);
     int cnt = 0;
-#if SOC_PCNT_SUPPORTED
     pcnt_unit_get_count(pcnt, &cnt);
     pcnt_unit_clear_count(pcnt);
-#else
-    cnt = enc_take();
-#endif
     enc_acc += cnt * ENC_DIR;
     ev->enc = enc_acc / ENC_STEPS;
     enc_acc -= ev->enc * ENC_STEPS;

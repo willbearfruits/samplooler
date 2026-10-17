@@ -12,15 +12,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "audio.h"
-#include "sdkconfig.h"
-#if CONFIG_IDF_TARGET_ARCH_XTENSA
 #include "esp_cpu.h"
 #include "esp_cpu_utils.h"
 #include "esp_debug_helpers.h"
 #include "xtensa_context.h"
-#else
-#include "riscv/rvruntime-frames.h"
-#endif
 
 static const char *TAG = "diag";
 
@@ -72,7 +67,6 @@ void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info)
     copy_str(s_pan.reason, (g_panic_abort && g_panic_abort_details) ? g_panic_abort_details : info->reason,
              sizeof s_pan.reason);
     s_pan.n = 0;
-#if CONFIG_IDF_TARGET_ARCH_XTENSA
     const XtExcFrame *fr = (const XtExcFrame *)info->frame;
     if (fr) {
         esp_backtrace_frame_t f = { .pc = fr->pc, .sp = fr->a1, .next_pc = fr->a0, .exc_frame = fr };
@@ -80,10 +74,6 @@ void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info)
         while (s_pan.n < BT_DEPTH && f.next_pc && esp_backtrace_get_next_frame(&f))
             s_pan.pc[s_pan.n++] = esp_cpu_get_call_addr(esp_cpu_process_stack_pc(f.pc));
     }
-#else
-    const RvExcFrame *fr = (const RvExcFrame *)info->frame;   // no frame pointers on the C3: pc and ra only
-    if (fr) { s_pan.pc[s_pan.n++] = fr->mepc; s_pan.pc[s_pan.n++] = fr->ra; }
-#endif
     __real_esp_panic_handler(info);
 }
 

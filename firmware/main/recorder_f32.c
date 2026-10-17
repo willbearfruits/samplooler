@@ -1,5 +1,4 @@
 #include "recorder.h"
-#if !REC_FIXED_POINT
 #include <string.h>
 #include <math.h>
 #include "esp_heap_caps.h"
@@ -228,4 +227,3 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
 
     pos_i = ip; pos_f = fp; speed = sp; pitch = pc;
 }
-#endif

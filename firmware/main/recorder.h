@@ -5,23 +5,13 @@
 //          head at the chosen speed while each grain plays at the chosen pitch.
 //          Speed 0 freezes the sound; backwards scrubbing keeps words intelligible.
 // No allocation in the audio path, no double math, no libm calls.
-//
-//   S3 (FPU, PSRAM): float, 32 kHz, 20 s, both modes.          recorder_f32.c
-//   C3 (no FPU, no PSRAM): Q15, 16 kHz, RAM-sized take, TAPE.  recorder_q15.c
+// Float, 32 kHz, a 20 s take in PSRAM: recorder_f32.c.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
-#include "sdkconfig.h"
 
-#if CONFIG_IDF_TARGET_ESP32C3
-#define REC_FIXED_POINT  1
-#define REC_SAMPLE_RATE  16000
-typedef int16_t rec_sample_t;
-#else
-#define REC_FIXED_POINT  0
 #define REC_SAMPLE_RATE  32000
 typedef float rec_sample_t;
-#endif
 
 #define REC_SPEED_LIMIT  8.0f       // |speed| ceiling; above 2x the recording aliases audibly
 #define REC_PITCH_MIN    0.25f
