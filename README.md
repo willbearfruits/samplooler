@@ -41,8 +41,7 @@ Anyone can add one ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Get one
 
-- **Buy one**: built by hand in Haifa, and comes loaded with [SING](instruments/sing). Write and ask about
-  price and shipping:
+- **Buy one**: built by hand in Haifa. Write and ask about price and shipping:
   [Dogme84@gmail.com](mailto:Dogme84@gmail.com?subject=Samplooler) ·
   [WhatsApp](https://wa.me/972539263808).
 - **Build it in the workshop**: the [ESP32 workshop](https://willbearfruits.github.io/serious-shit/workshop-esp32.html),

@@ -5,8 +5,8 @@ Hold the button and make a sound. Let go and it loops. Tilt the box and the loop
 This manual is for the Samplooler firmware 0.1 on the Stack, the two-board ESP32-S3 version. Building one is in
 [BUILD.md](BUILD.md).
 
-A Stack bought ready-made comes loaded with SING, the voice processor in [instruments/sing](../instruments/sing/).
-To play the Samplooler on it, flash it as in [Updating the firmware](#updating-the-firmware).
+A Stack bought ready-made comes loaded with the Samplooler. The other instruments in
+[instruments/](../instruments/) flash onto the same boards, and the Samplooler flashes back the same way.
 
 ![The screen: a tape between two reels and the operator running on it](../media/tour.gif)
 
