@@ -1,0 +1,148 @@
+(footprint "SSD1306_0.96in_I2C_Under"
+	(version 20241229)
+	(generator "samplooler_gen")
+	(generator_version "1.0")
+	(layer "F.Cu")
+	(descr "SSD1306 0.96in OLED hung under the board, glass up through a window: header soldered with its plastic on the glass side. Pin order as seen from above: P1 P2 SCL SDA.")
+	(tags "module breakout header")
+	(fp_rect
+		(start -9.84 -26.3)
+		(end 17.46 1.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "f3fb11c8-173d-5257-a224-204b7ea03c99")
+	)
+	(fp_rect
+		(start -10.09 -26.55)
+		(end 17.71 1.75)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "cf831463-8344-515c-9f77-b0dae8e83688")
+	)
+	(fp_rect
+		(start -9.84 -26.3)
+		(end 17.46 1.5)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "c230a5fc-d53a-599f-84d6-c06c8e51986e")
+	)
+	(property "Reference" "REF**"
+		(at 3.81 -17 0)
+		(layer "F.SilkS")
+		(uuid "d06e2ff8-34f8-56c5-a204-b94dee967977")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "SSD1306_0.96in_I2C_Under"
+		(at 3.81 2.7 0)
+		(layer "F.Fab")
+		(uuid "375ed954-4b1b-5827-bac8-b49749c45ae3")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(fp_text user "${REFERENCE}"
+		(at 3.81 -9.9 0)
+		(layer "F.Fab")
+		(uuid "0ba5fb3b-ef16-58d9-a2dd-016a7d05c664")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_rect
+		(start -9.54 -21.9)
+		(end 17.16 -2.6)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "31d27a3f-6f9c-5606-af6d-482a01a9e988")
+	)
+	(fp_rect
+		(start -7.06 -15.4)
+		(end 14.68 -4.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "0f2c9691-859f-51e0-a6e7-83336f59d198")
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "P1")
+		(pintype "passive")
+		(uuid "ba4ec04c-2ab7-57b0-a88c-7799253373cd")
+	)
+	(pad "2" thru_hole circle
+		(at 2.54 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "P2")
+		(pintype "passive")
+		(uuid "8dec5daa-f2d6-5b25-ac24-742caaa1c46c")
+	)
+	(pad "3" thru_hole circle
+		(at 5.08 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SCL")
+		(pintype "passive")
+		(uuid "86d909e2-03c2-5c2b-9def-226d77fc800b")
+	)
+	(pad "4" thru_hole circle
+		(at 7.62 0)
+		(size 1.8 1.8)
+		(drill 1.1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(pinfunction "SDA")
+		(pintype "passive")
+		(uuid "8d865091-c132-5e32-8c59-64d90ed5ce13")
+	)
+	(model "${KIPRJMOD}/../lib/samplooler.3dshapes/SSD1306_0.96in_I2C_Under.wrl"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 0.3937 0.3937 0.3937)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(embedded_fonts no)
+)

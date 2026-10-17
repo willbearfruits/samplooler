@@ -1,0 +1,50 @@
+name: Add an instrument
+description: Send in an instrument without a pull request. Give a link to the code or attach a zip, and it gets added for you.
+title: "Add: "
+labels: [new instrument]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Name
+      description: In capitals, up to 12 characters, as it shows on the screen.
+      placeholder: KNOCK
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What it does
+      description: One or two sentences, as you would tell a friend.
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: The code
+      description: A link to a repository, or drag a zip of the folder in here.
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Has it run on a board?
+      options:
+        - Yes, and I have played it
+        - It runs on a board, but I have not played it much
+        - Only in the simulator
+        - Not yet
+    validations:
+      required: true
+  - type: textarea
+    id: images
+    attributes:
+      label: Pictures
+      description: A GIF or screenshot of the screen while it plays (the simulator makes them). Drag them in.
+  - type: checkboxes
+    id: licence
+    attributes:
+      label: Licence
+      options:
+        - label: I wrote this (or have the right to share it), and it can be shared under GPL-3.0 (the code) and CC BY-SA 4.0 (images and text).
+          required: true

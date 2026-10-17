@@ -1,12 +1,13 @@
-# Checks every entry, builds each one's firmware with ESP-IDF and runs its simulator, on every push and pull
-# request. On main it also publishes the page (site/ plus the images and firmware) to GitHub Pages: the
-# browser flasher needs the firmware on the same origin.
-name: build
+# Checks every instrument, builds each one's firmware with ESP-IDF and runs its simulator, when an
+# instrument, the core or this tooling changes. Each build is kept as an artifact (entry-<id>).
+name: instruments
 
 on:
   push:
     branches: [main]
+    paths: [instruments/**, core/**, tools/library.py, tools/core_files.txt, .github/workflows/library.yml]
   pull_request:
+    paths: [instruments/**, core/**, tools/library.py, tools/core_files.txt, .github/workflows/library.yml]
   workflow_dispatch:
 
 jobs:
@@ -50,26 +51,3 @@ jobs:
           name: entry-${{ matrix.id }}
           path: dist
 
-  pages:
-    if: github.ref == 'refs/heads/main'
-    needs: entry
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: entry-*
-          merge-multiple: true
-          path: dist
-      - run: python3 tools/library.py site --dist dist --out _site
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: _site
-      - id: deploy
-        uses: actions/deploy-pages@v5

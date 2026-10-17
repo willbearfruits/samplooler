@@ -1,9 +1,7 @@
-# Samplooler Library
+# Instruments
 
-Other instruments for the [Samplooler](https://github.com/willbearfruits/samplooler)'s ESP32-S3 boards: the
-Stack, the Mini and the breadboard kit. Each one is its own firmware. Flash one from the
-[library page](https://willbearfruits.github.io/samplooler-library/), play it, and flash the Samplooler back
-the same way. Anyone can add an instrument.
+Other instruments for the [Samplooler](../README.md) Stack. Each one is its own firmware. Flash one, play it,
+and flash the Samplooler back the same way. Anyone can add an instrument.
 
 <!-- list -->
 | | What | Status |
@@ -25,7 +23,7 @@ the same way. Anyone can add an instrument.
 
 ## Flashing
 
-- **From the page:** Chrome or Edge on a computer. Hold BOOT on the board while you plug it in, then press
+- **From the [page](https://willbearfruits.github.io/samplooler/):** Chrome or Edge on a computer. Hold BOOT on the board while you plug it in, then press
   Flash under the instrument.
 - **From a folder:** with ESP-IDF 5.5.1, `cd instruments/<name>/firmware && idf.py build`, then
   `tools/flash.sh` from the instrument's folder. It finds a board that runs the Samplooler or one of these
@@ -36,7 +34,7 @@ settings, and the sounds saved in each instrument, stay on the board.
 
 ## Adding one
 
-[CONTRIBUTING.md](CONTRIBUTING.md). In short: a folder in `instruments/` with an `entry.json`, as a pull
+[CONTRIBUTING.md](../CONTRIBUTING.md). In short: a folder in `instruments/` with an `entry.json`, as a pull
 request or through an issue. GitHub checks it, builds it and runs its simulator; once it is merged it is on
 the page.
 
@@ -45,9 +43,8 @@ the page.
 | | |
 | - | - |
 | `instruments/<name>/` | one instrument: a complete ESP-IDF project that builds on its own, with its README, manual, pictures and simulator |
-| `core/` | the shared core as it is now: the menu, sounds, looper, MIDI, drivers and the simulator's frame ([core/docs/CORE.md](core/docs/CORE.md)) |
-| `tools/library.py` | checks the entries, compares them with the core, builds the page |
-| `site/` | the page; GitHub adds the list, the pictures and the firmware when it publishes |
+| [`core/`](../core/) | the shared core as it is now: the menu, sounds, looper, MIDI, drivers and the simulator's frame ([core/docs/CORE.md](../core/docs/CORE.md)) |
+| [`tools/library.py`](../tools/library.py) | checks the entries and compares them with the core |
 
 ## The core
 

@@ -19,7 +19,7 @@ import json, os, re, shutil, sys, hashlib, datetime
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INST = os.path.join(ROOT, "instruments")
 CORE = os.path.join(ROOT, "core")
-REPO = "https://github.com/willbearfruits/samplooler-library"
+REPO = "https://github.com/willbearfruits/samplooler"
 
 USES = {"mic", "tilt", "joystick", "speaker", "wifi", "bluetooth"}
 STATUS = {"played": "Played on a board", "board": "Runs on a board", "simulator": "Simulator only"}

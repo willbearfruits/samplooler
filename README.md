@@ -6,99 +6,76 @@ A small looper you play by tilting it. Hold the button and make a sound; let go 
 the box forward and the loop runs faster, tip it back and it runs backwards, roll it sideways for a
 tape delay or a stutter.
 
-![The Samplooler screen: a tape between two reels with a stick-figure operator running on it, forwards, backwards, with delay echoes, stuttering, juggling grains and flung off its feet at 8x](site/img/tour.gif)
+![The Samplooler screen: a tape between two reels with a stick-figure operator running on it, forwards, backwards, with delay echoes, stuttering, juggling grains and flung off its feet at 8x](media/tour.gif)
 
-The loop is a tape between two reels, and a small operator runs on it: forwards, backwards, as fast as you tip
-the box. It leaves echoes when the delay is on, stutters with the stutter, juggles in GRAIN mode, gets flung at
-8x, and falls asleep if you leave it alone. That's the firmware's own drawing code, rendered on a computer
-([tools/uisim/tour.sh](tools/uisim/tour.sh)).
+> PHOTO: the Stack in a hand, tipped forward, screen lit (media/photos/stack-hand.jpg)
 
-**Project page and browser flasher:** https://willbearfruits.github.io/samplooler/  
-**Other instruments for the same board:** the [Samplooler Library](https://github.com/willbearfruits/samplooler-library),
-flashed from [its page](https://willbearfruits.github.io/samplooler-library/)  
-**A 90-second tour with sound:** [on the project page](https://willbearfruits.github.io/samplooler/#video)
-(the file is [hardware/images/samplooler-showcase-full.mp4](hardware/images/samplooler-showcase-full.mp4)).
-It is rendered, not filmed: the sound is the firmware's own playback engine running on a computer, and the screen
-is the firmware's own drawing code.
+**[Flash it from the browser](https://willbearfruits.github.io/samplooler/)** ·
+[Manual](docs/MANUAL.md) · [Build one](docs/BUILD.md) ·
+[Video](https://github.com/willbearfruits/samplooler/releases/download/media/samplooler-showcase-full.mp4) ·
+[Get one](#get-one)
 
-![A frame from the showcase: the stack tipped nose-up, the loop running backwards on its screen](site/img/showcase.jpg)
+The loop is a tape between two reels, and a small operator runs on it, as fast as you tip the box. The
+video is rendered, not filmed: the sound is the firmware's own playback engine running on a computer, and
+the screen is the firmware's own drawing code.
 
-## Status
+> VIDEO: someone playing a Stack, filmed, with its sound, about 60 s
 
-Early. The firmware builds for both chips on every push. The first stack board (rev C) has been
-made and runs it: screen, microphone, tilt, line out and USB MIDI/audio work on the committed pin
-map. The Mini board and the C3 build have not been assembled, and no case has been printed yet, so
-expect a round of fixes there. Reports of builds, good or bad, are welcome in the issues.
+## What it does
 
-The manual, for playing and for building the stack: [RTFM](https://willbearfruits.github.io/samplooler/manual.html)
-(also as a [PDF](https://willbearfruits.github.io/samplooler/samplooler-rtfm.pdf)).
+| | |
+| - | - |
+| Record | Hold the button and make a sound, up to 20 s at 32 kHz. Let go and it loops. |
+| Tilt | Forward plays faster, back plays backwards. Snap rounds the speed to octaves and fifths. |
+| Roll | Left adds a tape delay, right a stutter. |
+| Modes | TAPE (speed and pitch move together) and GRAIN (they move apart). |
+| Slots | 8 loops saved on the board, kept when you update it. |
+| With a computer | USB MIDI and a USB sound card on one cable, and a VST3 plugin that shows and sets everything. |
+| Other instruments | Ten more firmwares for the same box, from a singing voice processor to a drum machine you knock on. |
 
-## Two versions
+## Ten more instruments
 
-| | S3 | C3 mini |
-| - | - | - |
-| Board | ESP32-S3 SuperMini | ESP32-C3 SuperMini with a 0.42" OLED, or the plain one |
-| Take | 20 s at 32 kHz | about 5 to 7 s at 16 kHz |
-| Modes | tape (speed and pitch together) and grain (apart) | tape |
-| Roll effects | tape delay, stutter | none |
-| Screen | 0.96" 128 × 64 OLED | the board's 0.42" 72 × 40 OLED |
-| Controls | record button, encoder | record button, optional encoder |
-| With a computer | USB MIDI and sound card, VST3 plugin | none |
-| Parts, roughly | $15 to $25 | $10 to $17 |
-
-Both need an INMP441 microphone, a PCM5102A line-out module and an MPU-6050 tilt sensor.
+The same Stack can be flashed with SING, BAND, WRECK, ETHER, JAM, KNOCK, HUFF, HOWL, SNIFF or CHIRP, and
+flashed back. The list, what each one does and how far it is tested: [instruments/](instruments/).
+Anyone can add one ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Get one
 
-- **Buy one**: built by hand in Haifa. Write and ask about price and shipping:
+- **Buy one**: built by hand in Haifa, and comes loaded with [SING](instruments/sing). Write and ask about
+  price and shipping:
   [Dogme84@gmail.com](mailto:Dogme84@gmail.com?subject=Samplooler) ·
   [WhatsApp](https://wa.me/972539263808).
 - **Build it in the workshop**: the [ESP32 workshop](https://willbearfruits.github.io/serious-shit/workshop-esp32.html),
-  7 meetings at MEZO, Haifa, 2,200 ₪, kit included. You leave with an S3 board that runs Samplooler and
-  [TWOFOLD](https://github.com/willbearfruits/twofold).
-- **Build it yourself**: everything is below.
+  7 meetings at MEZO, Haifa, 2,200 ₪, kit included.
+- **Build it yourself**: order the boards, solder the modules on, flash it: [docs/BUILD.md](docs/BUILD.md).
 
-**One board, two instruments.** The S3 version uses the same board and wiring as
-[TWOFOLD](https://github.com/willbearfruits/twofold), a small USB sound card with an EQ, effects and a screen.
-Flash one, flash the other.
+## Status
 
-## Build one
+Early. The current Stack is rev C: it has been made and runs the firmware (screen, microphone, tilt,
+line out and USB MIDI/audio work). The board files here are rev D, which is being tested now (October
+2026); rev C's files are at the git tag `checkpoint/boards-rev-c`. Of the ten other instruments, four
+have run on a board and six only in their simulators. Reports of builds, good or bad, are welcome in the
+issues.
 
-- **Flash** it from the [project page](https://willbearfruits.github.io/samplooler/) in Chrome or
-  Edge. [docs/BUILD.md](docs/BUILD.md) also covers esptool and building from source.
-- **Wire** it: [docs/BUILD.md](docs/BUILD.md) has the parts, the pin tables, the DAC straps and a
-  first power-on check. The S3 version uses the pins of the
-  [ESP32-S3 SuperMini kit](https://github.com/willbearfruits/esp32-s3-supermini-kit).
-- **Circuit boards** for the S3, a two-board stack or a one-board Mini: [hardware/](hardware/).
-- **Case** for the C3: [enclosure/](enclosure/), one OpenSCAD file.
-
-## From source
-
-The firmware is one ESP-IDF 5.5 project for both chips:
-
-```sh
-cd firmware
-idf.py set-target esp32s3 && idf.py build flash monitor                  # S3
-idf.py -B build-c3 -DSDKCONFIG=sdkconfig.c3 set-target esp32c3          # C3, once
-idf.py -B build-c3 -DSDKCONFIG=sdkconfig.c3 build flash monitor
-```
+## What is where
 
 | Path | What |
 | - | - |
-| `firmware/` | the ESP-IDF project; `main/pins.h` holds the pins for both chips |
-| `plugin/` | JUCE plugin, VST3 and standalone: mirrors the S3's settings over MIDI and shows its log |
-| `site/` | the project page: browser flasher and an in-browser demo of the playback engine |
-| `hardware/` | the circuit boards, generated from Python in `hardware/gen/` |
-| `enclosure/` | the C3 case |
-| `tools/` | `sl_midi.py` (log and MIDI from a shell), `flash.sh`, `release.sh`, `uisim/` (the screens rendered on a computer), `showcase/` (the video) |
-| `docs/` | the build guide, the design note, enclosure notes, the pin map |
+| [docs/](docs/) | the manual and the build guide |
+| [firmware/](firmware/) | the Samplooler's ESP-IDF 5.5 project |
+| [instruments/](instruments/) | the other instruments, each a complete ESP-IDF project |
+| [core/](core/) | the code the instruments share |
+| [hardware/](hardware/) | the Stack's schematics, boards and JLCPCB order files |
+| [plugin/](plugin/) | the VST3 and standalone plugin (JUCE) |
+| [media/](media/) | pictures and screen grabs |
+| [site/](site/) | the project page and the browser flasher |
+| [tools/](tools/) | `flash.sh`, `sl_midi.py` (log and MIDI from a shell), `release.sh`, `library.py` |
 
 ## Licence
 
-- Firmware, tools and the board generator: GPL-3.0 ([LICENSE](LICENSE)).
+- Firmware, instruments and tools: GPL-3.0 ([LICENSE](LICENSE)).
 - Plugin: AGPL-3.0, as JUCE requires ([plugin/LICENSE](plugin/LICENSE)).
-- Case, circuit boards, docs and images: CC BY-SA 4.0 ([enclosure/LICENSE](enclosure/LICENSE),
-  [hardware/LICENSE](hardware/LICENSE)).
+- Circuit boards, docs and pictures: CC BY-SA 4.0 ([hardware/LICENSE](hardware/LICENSE)).
 
 ---
 

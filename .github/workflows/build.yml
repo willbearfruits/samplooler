@@ -1,4 +1,4 @@
-# Builds the firmware for both chips on every push. On main it also publishes site/ with
+# Builds the firmware on every push. On main it also publishes site/ with
 # the images to GitHub Pages (the browser flasher needs them on the same origin). A v* tag
 # attaches the images to a GitHub release.
 name: build
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [esp32s3, esp32c3]
+        target: [esp32s3]
     steps:
       - uses: actions/checkout@v7
       - uses: espressif/esp-idf-ci-action@v1
@@ -34,6 +34,7 @@ jobs:
     needs: firmware
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -46,8 +47,13 @@ jobs:
           pattern: samplooler-*
           merge-multiple: true
           path: site/firmware
-      - name: The showcase video, served next to the page
-        run: mkdir -p site/media && cp hardware/images/samplooler-showcase-full.mp4 site/media/showcase.mp4
+      - name: The showcase video, served next to the page (a file of the release named "media", not in git)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p site/media
+          gh release download media -R "${{ github.repository }}" -p samplooler-showcase-full.mp4 -O site/media/showcase.mp4 \
+            || echo "no media release yet: the page goes up without the video"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site

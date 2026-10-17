@@ -1,13 +1,13 @@
 # Adding an instrument
 
-Anything that runs on the Samplooler's ESP32-S3 boards (the Stack, the Mini, the breadboard kit) and builds
-with ESP-IDF 5.5.1 can go in: an instrument, a game, a tool.
+Anything that runs on the Samplooler Stack (an ESP32-S3 SuperMini with a mic, a DAC, a tilt sensor, a screen,
+an encoder and a joystick) and builds with ESP-IDF 5.5.1 can go in: an instrument, a game, a tool.
 
 ## Two ways to send it
 
 1. **A pull request** with one new folder, `instruments/<name>/`. GitHub checks it, builds it and runs its
    simulator. Once it is merged, it is on the page with a Flash button.
-2. **An issue**, if you don't use git: [Add an instrument](https://github.com/willbearfruits/samplooler-library/issues/new?template=add-instrument.yml),
+2. **An issue**, if you don't use git: [Add an instrument](https://github.com/willbearfruits/samplooler/issues/new?template=add-instrument.yml),
    with a link to your code or a zip. It gets added for you.
 
 ## Start from the one closest to your idea
@@ -23,6 +23,7 @@ with ESP-IDF 5.5.1 can go in: an instrument, a game, a tool.
 | [JAM](instruments/jam) | has several instruments as layers sharing a tempo and key |
 | [BAND](instruments/band) | plays with other boards (the link), or needs an editor of its own on the knob (the drum grid) |
 | [SING](instruments/sing) | processes the voice (pitch, harmonies, vocoder) or loops on the song's bars |
+| [WRECK](instruments/wreck) | samples from the mic or the USB input, chops breaks, or moves between two styles on one knob |
 
 They share a core that already does the menu, the link between boards (tempo, beat, loop length and chords over
 ESP-NOW, for instruments that call it), the sounds (presets, user sounds, MY EDIT), the looper on REC,
@@ -109,3 +110,4 @@ USB product IDs so far (all with Espressif's vendor ID 0x303A, picked here, not 
 | 0x4027 | JAM |
 | 0x4028 | BAND |
 | 0x4029 | SING |
+| 0x402A | WRECK |
