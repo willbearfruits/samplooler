@@ -3,7 +3,7 @@
 
     python3 hardware/gen/panel.py            # every panel in PANELS
     python3 hardware/gen/panel.py stack
-    python3 hardware/gen/panel.py mini       # the Mini and the Samplooler Filter (~/Projects/samplooler-filter)
+    python3 hardware/gen/panel.py mini       # the Mini and the Samplooler Filter (~/Projects/samplooler/lab/boards/filter)
 
 Run it after build.py: it reads the routed, filled, DRC-clean boards and changes none of them.
 The panel copies everything (footprints, tracks, zones with their saved fill, text, openings),
@@ -27,7 +27,7 @@ TAB_W = 5.0          # tab width along the edge
 BITE_D = 0.5         # mouse-bite drill
 BITE_PITCH = 0.8
 LIMIT = 95.0         # what the panel has to fit in, both ways
-FILTER = os.path.expanduser('~/Projects/samplooler-filter')
+FILTER = os.path.expanduser('~/Projects/samplooler/lab/boards/filter')
 
 
 def _here(d, project):

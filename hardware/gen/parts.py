@@ -28,6 +28,8 @@ TAIL = 4.4         # untrimmed long header pin under the carrier
 def mech_module(m, height, extra=()):
     """A breakout module on its headers: body from the header plastic up, pins through the carrier."""
     from geometry import outline_box
+    if 'mech_features' in m:                  # modules that don't sit on 2.5 mm of plastic
+        return {'features': list(m['mech_features']) + list(extra), 'tail': TAIL, 'trim': True}
     o = m['outline']
     body = ('circle', o[1], o[2], o[3]) if o[0] == 'circle' else outline_box(m)
     flags = 'edge' if m.get('overhang') else ''

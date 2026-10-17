@@ -53,3 +53,32 @@ two are the ones to check first.
 
 The model renders and the parts do not intersect in the preview. It has not
 been printed. Expect one iteration on the jack and button positions.
+
+## Stack bottom cover (`enclosure/stack-cover.scad`)
+
+A tray that clicks onto the underside of the stack's bottom board (rev D, 94 x 46 mm) so the
+solder joints are covered. `enclosure/render-stack-cover.sh` writes the STL, runs the collision
+check and renders the previews. Nothing printed yet.
+
+- **Drawn for a 1.2 mm nozzle at 0.6 mm layers**: the wall is one line (1.2 mm), the floor three
+  layers (1.8 mm), each clip tooth one line deep. Print floor down, no supports. The tooth's 45°
+  lead-in is two layers, the upper one a 1.8 mm wall: slicers with variable-width perimeters
+  (Arachne: PrusaSlicer 2.6+, OrcaSlicer, Cura 5+) print it; a classic slicer drops that layer
+  and the lead-in becomes a step, which still clicks but takes a harder push.
+- **How it holds**: the board drops in with 0.3 mm a side; the long walls bow out over four
+  teeth and spring back over the board's top face. Teeth sit only where the top face is empty
+  within 1.5 mm of the edge: under the DAC and the IMU modules at the nose (both 2.5 mm up on
+  their headers) and between the joystick and the encoder at the tail. The short walls locate.
+- **Depth**: 2.5 mm under the board, for pin tails and the joystick's legs trimmed to 2 mm. The
+  four standoff screws sit in 7 mm holes in the floor, so they stay reachable and do not set the
+  depth; the board can be 1.6 to 1.8 mm thick.
+- **Notches** drop the wall to 0.3 mm below the board's top face where a plug comes in: the
+  USB-C (x 67–83), the 3.5 mm jack (x 9–21) and the Qwiic socket on the right edge (y 11–21).
+  The USB-C overmold clears the notched wall by about 0.8 mm: the first thing to check on a print.
+- **Checked**: OpenSCAD intersects the cover with the board's keep-outs (standoffs, screw heads,
+  pin tails, header plastic, the module boards, encoder, Qwiic socket, both plugs and a Qwiic
+  cable) and the result is empty. Blender finds the STL closed, on the bed, with four 1.2 mm
+  bridges (the tooth undersides). Its thin-wall check flags the teeth at 0.4–0.6 mm: that is the
+  wedge of the lead-in measured across, on a 1.2 mm wall, reviewed and accepted.
+- Every board number is copied from `hardware/gen/stack.py` and `modules.py`; move the teeth
+  (`teeth_nose`, `teeth_tail`) if the board's edge layout changes.

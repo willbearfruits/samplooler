@@ -88,6 +88,21 @@ static void write_now(const settings_t *s)
 }
 
 void settings_changed(void) { dirty = true; t_change = esp_timer_get_time(); }
+
+void settings_erase(void)
+{
+    dirty = false;
+    if (!ready) return;
+    nvs_handle_t h;
+    if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return;
+    diag_crumb("settings erase");
+    audio_flash_hint();
+    esp_err_t e = nvs_erase_all(h);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    diag_crumb(NULL);
+    ESP_LOGW(TAG, "erased (%s)", esp_err_to_name(e));
+}
 bool settings_pending(void) { return dirty; }
 
 void settings_poll(const settings_t *s)

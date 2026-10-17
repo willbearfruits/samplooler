@@ -340,6 +340,7 @@ static void bottom_strip(const ui_t *u)
     int x = oled_ftext(F_MED, 19, y + 3, b);
     x = oled_ftext(F_SMALL, x + 1, y + 7, S_RIGHT S_RIGHT) ;
     if (!u->tilt_on) x = oled_ftext(F_SMALL, x + 3, y + 5, u->has_joy ? "JOY" : "1X");
+    if (u->frozen) x += oled_pill(F_SMALL, x + 3, y + 3, "HOLD", true) + 1;         // the tilt is latched
     if (u->mode == REC_MODE_GRAIN) {
         snprintf(b, sizeof b, "GRN %+.0f", (double)(12.0f * log2f(u->pitch_ratio)));
         oled_pill(F_SMALL, x + 4, y + 3, b, true);
@@ -633,7 +634,7 @@ void ui_draw(const ui_t *u)
 
     // bottom: speed and the tilt line
     if (u->state == REC_PLAYING) snprintf(line, sizeof line, "%s%.2f", u->speed_now < 0 ? "-" : "", (double)fabsf(u->speed_now));
-    else snprintf(line, sizeof line, "%s", u->mode == REC_MODE_GRAIN ? "GRAIN" : "TAPE");
+    else snprintf(line, sizeof line, "%s%s", u->mode == REC_MODE_GRAIN ? "GRAIN" : "TAPE", u->frozen ? " HOLD" : "");
     oled_ftext(F_SMALL, 0, 34, line);
     int y_tilt = OLED_H - 3, x0 = 30;
     oled_hline_pat(x0, y_tilt, OLED_W - x0, 0x55, true);

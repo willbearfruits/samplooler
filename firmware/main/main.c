@@ -20,6 +20,7 @@
 #include "driver/i2c_master.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
+#include "esp_task_wdt.h"
 #include "pins.h"
 #include "audio.h"
 #include "recorder.h"
@@ -38,7 +39,7 @@
 static const char *TAG = "main";
 
 #define TILT_USE_ROLL  0
-#define TILT_SIGN      1.0f
+#define TILT_SIGN     -1.0f   // -1: nose down plays backward on the stack boards (the IMU sits the other way round from the kit)
 #define TILT_DEAD_DEG  5.0f
 #define TILT_FULL_DEG  45.0f
 #define ROLL_DEAD_DEG  15.0f    // roll: left = delay, right = stutter (swap with ROLL_SIGN -1)
@@ -47,9 +48,11 @@ static const char *TAG = "main";
 
 // ---- settings, editable from the encoder (settings_t is in settings.h; NVS keeps a copy) ----
 static void apply_settings(void);
-static settings_t S = { .mic_db = 12, .mode = REC_MODE_TAPE, .pitch_st = 0, .tilt = true,
-                        .spd_max = 2.0f, .spd_min = 0.05f, .snap = false, .grain_ms = 50, .vol_pct = 100,
-                        .input = AUDIO_IN_MIC, .slot = 0 };
+#define SETTINGS_DEFAULTS { .mic_db = 12, .mode = REC_MODE_TAPE, .pitch_st = 0, .tilt = true, \
+                            .spd_max = 2.0f, .spd_min = 0.05f, .snap = false, .grain_ms = 50, .vol_pct = 100, \
+                            .input = AUDIO_IN_MIC, .slot = 0 }
+static settings_t S = SETTINGS_DEFAULTS;
+static const settings_t S_DEFAULTS = SETTINGS_DEFAULTS;
 
 enum { P_MIC, P_MODE, P_PITCH, P_TILT, P_SPDMAX, P_SPDMIN, P_SNAP, P_GRAIN, P_VOL, P_INPUT, P_SLOT, P_SAVE, P_LOAD, P_N };
 static const char *param_name[P_N] = { "Mic gain", "Mode", "Pitch", "Tilt", "Speed max", "Speed min", "Snap", "Grain", "Volume", "Input", "Slot", "Save", "Load" };
@@ -192,11 +195,13 @@ static void midi_send_setting(int p) { if (p < P_SAVE) usb_midi_send_cc(20 + p, 
 static inline void midi_send_setting_unused_guard(void) { (void)midi_send_setting; }
 #endif
 static volatile bool midi_rec_hold;
+static volatile bool midi_freeze_req;              // note 64: toggle the tilt latch, picked up by the loop
 static void midi_in(uint8_t st, uint8_t d1, uint8_t d2)
 {
     if (st == 0xB0 && d1 >= 20 && d1 < 20 + P_SAVE) { setting_from_127(d1 - 20, d2); apply_settings(); setting_changed(); }
     else if (st == 0x90 && d2 > 0) {
         if (d1 == 60) midi_rec_hold = true;
+        else if (d1 == 64) midi_freeze_req = true;
         else if (d1 == 61) slot_load();
         else if (d1 == 63) slot_save();
     } else if (st == 0x80 || (st == 0x90 && d2 == 0)) {
@@ -204,6 +209,20 @@ static void midi_in(uint8_t st, uint8_t d1, uint8_t d2)
     }
 }
 
+static int   clampi(int v, int lo, int hi)       { return v < lo ? lo : v > hi ? hi : v; }
+static float clampf(float v, float lo, float hi) { return !(v >= lo) ? lo : v > hi ? hi : v; }   // NaN lands on lo
+static void clamp_settings(void)
+{
+    S.mic_db   = clampi(S.mic_db, 0, 36);
+    S.mode     = S.mode == REC_MODE_GRAIN ? REC_MODE_GRAIN : REC_MODE_TAPE;
+    S.pitch_st = clampi(S.pitch_st, -24, 24);
+    S.spd_max  = clampf(S.spd_max, 0.25f, REC_SPEED_LIMIT);
+    S.spd_min  = clampf(S.spd_min, 0.0f, 1.0f);
+    S.grain_ms = clampi(S.grain_ms, 20, 200);
+    S.vol_pct  = clampi(S.vol_pct, 0, 150);
+    S.input    = S.input == AUDIO_IN_USB ? AUDIO_IN_USB : AUDIO_IN_MIC;
+    S.slot     = clampi(S.slot, 0, SLOT_N - 1);
+}
 static void apply_settings(void)
 {
     audio_set_mic_gain_db(S.mic_db);
@@ -316,6 +335,33 @@ void app_main(void)
         while (1) vTaskDelay(1000);
     }
     settings_init(&S);
+    clamp_settings();
+    if (diag_safe_mode()) {                 // three crashes in a row: start from the defaults and keep them
+        ESP_LOGW(TAG, "safe mode: %d crashes in a row, settings reset to defaults", diag_crash_streak());
+        S = S_DEFAULTS; setting_changed();
+    }
+#if HAS_CONTROLS && PIN_REC >= 0
+    // Factory reset: the record button held from power-on and kept down for 3 s. Letting go earlier
+    // does nothing. The slots stay.
+    if (gpio_get_level(PIN_REC) == 0) {
+        int held_ms = 0;
+        for (; held_ms < 3000 && gpio_get_level(PIN_REC) == 0; held_ms += 100) {
+            char l2[24]; snprintf(l2, sizeof l2, "hold REC  %d", 3 - held_ms / 1000);
+#if OLED_ENABLE
+            if (oled_present()) ui_fault("RESET?", l2);
+#endif
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (held_ms >= 3000) {
+            ESP_LOGW(TAG, "factory reset: record button held 3 s at boot");
+            settings_erase(); S = S_DEFAULTS;
+#if OLED_ENABLE
+            if (oled_present()) ui_fault("RESET", "defaults restored");
+#endif
+            vTaskDelay(pdMS_TO_TICKS(1500));
+        }
+    }
+#endif
     slots_init();
     apply_settings();
     audio_run();
@@ -331,14 +377,21 @@ void app_main(void)
     int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0, idle_ms = 0;
     audio_stats_t last_stats = { 0 };
     bool held = false, menu = false, menu_edit = false;
+    bool frozen = false;                                  // tilt latched: the angles stop following the sensor
     float roll = 0, pitch = 0, speed_cmd = 1.0f, pitch_ratio = 1.0f, joy_pitch_st = 0;
 #if HAS_CONTROLS
     input_ev_t in = { 0 };
 #endif
 
+    // The task watchdog (5 s, CONFIG_ESP_TASK_WDT_TIMEOUT_S) now watches this loop too: a hang in the UI,
+    // a slot job or a driver call resets the device instead of leaving it playing with dead controls.
+    ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(10));
         tick++;
+        esp_task_wdt_reset();
+        if (tick == 1000) diag_mark_alive();                      // 10 s up: this boot counts as a good one
 
         usb_midi_poll(midi_in);
         job_poll();
@@ -368,6 +421,7 @@ void app_main(void)
             else menu_edit = true;
         }
         if (in.hold && menu) { menu = false; menu_edit = false; ESP_LOGI(TAG, "play"); }
+        else if (in.hold) midi_freeze_req = true;             // held while playing: freeze or release the tilt
         if (in.enc) {
             if (menu && !menu_edit) param = ((param + in.enc) % P_N + P_N) % P_N;
             else { param_adjust(param, in.enc); apply_settings(); if (!menu) toast = 1500; }
@@ -378,8 +432,12 @@ void app_main(void)
 #endif
 #endif
 
+        if (midi_freeze_req) {
+            midi_freeze_req = false; frozen = !frozen; toast = 0;
+            ESP_LOGI(TAG, "tilt %s at pitch %+.1f roll %+.1f", frozen ? "frozen" : "released", (double)pitch, (double)roll);
+        }
         if (tick % 2 == 0) {                                 // 50 Hz control rate
-            if (has_imu) imu_poll(&roll, &pitch);
+            if (has_imu && !frozen) imu_poll(&roll, &pitch);   // frozen: speed, direction and effects stay where they were
             float u;
             if (S.tilt && has_imu) u = (TILT_USE_ROLL ? roll : pitch) * TILT_SIGN / TILT_FULL_DEG;
 #if HAS_JOY
@@ -450,7 +508,7 @@ void app_main(void)
             ui_t u = {
                 .state = s, .mode = S.mode, .speed_now = recorder_speed_now(), .speed_cmd = speed_cmd, .spd_max = S.spd_max,
                 .pitch_ratio = pitch_ratio, .tilt_pitch = TILT_USE_ROLL ? roll : pitch, .tilt_roll = TILT_USE_ROLL ? pitch : roll,
-                .has_imu = has_imu, .tilt_on = S.tilt, .pos = recorder_position(), .rec_fill = recorder_record_fill(),
+                .has_imu = has_imu, .tilt_on = S.tilt, .frozen = frozen, .pos = recorder_position(), .rec_fill = recorder_record_fill(),
                 .loop_s = recorder_loop_seconds(), .max_s = recorder_max_seconds(), .meter_in = meter_in, .meter_out = meter_out,
                 .clip = clip_hold > 0, .cpu = audio_cpu_percent(), .menu = menu, .menu_edit = menu_edit, .param = param, .param_n = P_N,
                 .param_name = param_name[param], .param_val = pv, .param_frac = param_frac(param), .toast_ms = toast,

@@ -11,6 +11,7 @@
 #include "freertos/task.h"
 #include "driver/i2s_std.h"
 #include "esp_log.h"
+#include "esp_task_wdt.h"
 #include "esp_cpu.h"
 #include "esp_attr.h"
 #include "esp_timer.h"
@@ -133,8 +134,11 @@ static void IRAM_ATTR audio_task(void *arg)
 #endif
     const uint32_t budget = (uint32_t)FRAMES * (CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ * 1000000u / REC_SAMPLE_RATE);
 
+    esp_task_wdt_add(NULL);          // a stuck audio task (5 s without a block) resets the device
+
     while (1) {
         size_t got = 0;
+        esp_task_wdt_reset();
         // Bounded wait: a dead clock must not hang the task forever, and the count tells the status report.
         if (i2s_channel_read(rx, raw, SAMPLES * sizeof(int32_t), &got, pdMS_TO_TICKS(100)) != ESP_OK || got == 0) {
             read_err++; good_blocks = 0;

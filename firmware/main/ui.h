@@ -11,6 +11,7 @@ typedef struct {
     float pitch_ratio;
     float tilt_pitch, tilt_roll;     // degrees
     bool  has_imu, tilt_on, has_joy;
+    bool  frozen;                    // the tilt reading is latched (encoder held while playing)
     float pos, rec_fill, loop_s;     // loop position 0..1, record fill 0..1, loop length in seconds
     int   max_s;
     float meter_in, meter_out;       // 0..1+

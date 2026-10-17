@@ -1,8 +1,9 @@
 # Production readiness
 
 A review of the firmware, tooling and release process on 2026-10-08, with what was changed as a
-result and what is still open. Nothing here has run on hardware yet: the changes build for both
-chips and the screens render in the simulator, but the first board to run them will be the test.
+result and what is still open, and a second pass on 2026-10-12 once the first stack board ran.
+The first pass was written before any hardware existed; the second after the first assembled
+rev C stack board came up on the firmware, recorded, played and took the tilt.
 
 The measures were weighed against TWOFOLD, a sibling USB audio interface on the same ESP32-S3
 SuperMini wiring that went through a hardening pass before testers got it. What applied to a looper
@@ -79,13 +80,39 @@ download flag and restarts.
 **Config.** `CONFIG_I2S_ISR_IRAM_SAFE=y`, `CONFIG_ESP_TASK_WDT_PANIC=y`, main task stack 6144 (S3)
 and 5120 (C3). The app compiles with `-Werror`. The version is `git describe --match 'v*'`.
 
+## Second pass, 2026-10-12: the first board runs
+
+The first stack board (rev C) assembled and powered: the firmware came up, the screen, the
+microphone, the IMU, the DAC and USB MIDI/audio all worked with the committed pin map, after two
+assembly faults on the user's side (an open solder joint on SCL, and the DAC straps). Found and
+changed in the same session, with sale in mind (no bricking, easy handling):
+
+| Area | Finding | Status |
+| - | - | - |
+| Settings | Values loaded from NVS were applied unchecked: a blob from another version or a bad flash could set a volume of 10000 %, a grain of 0 ms, a slot of 200. | Fixed: `clamp_settings()` after the load, the same limits the menu keeps; NaN lands on the minimum |
+| Crash loop | A crash at boot (bad settings, a driver) rebooted forever with nothing to break the loop. | Fixed: `diag.c` counts crash and watchdog resets in a row in RTC memory; at three the app starts from default settings and says `SAFE MODE` on the screen; ten seconds of running clears the count |
+| Watchdog | The task watchdog only watched the idle tasks: a hung control loop or audio task left the device playing with dead controls, or silent, forever. | Fixed: both tasks subscribe and feed it every cycle; a hang resets within 5 s |
+| Main task | 1.2 KB of the 8 KB stack free on the running board. | Fixed: 12 KB on the S3 (RAM is plentiful: 230 KB internal free) |
+| Build config | The images flashed so far were built from a generated `sdkconfig` that predated the production pass: 3.5 KB main stack, watchdog set to log only (never reset), I2S interrupts not IRAM-safe. The defaults in git were right; a generated sdkconfig is not updated when they change. | Fixed 2026-10-14: both sdkconfigs regenerated from the defaults and rebuilt; CLAUDE.md says to delete them after a defaults change. The regenerated S3 image is not yet on the board |
+| Handling | No way for a buyer to get back to the defaults without a computer. | Fixed: record button held 3 s from power-on, with a countdown on the screen; the slots stay |
+| Tilt | Nose down played backwards on the stack boards: the IMU sits the other way round from the kit. | Fixed: `TILT_SIGN -1` |
+
+Checked and left alone: the panic handler reboots at once (`CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT`),
+brown-out detection is on at level 7, the bootloader watchdog is on, NVS re-formats itself on a
+version change or when full, the slot FAT re-formats itself if it will not mount (the loops are
+lost, the device is not), a save goes through a temp file, and the ROM download mode is
+reachable with BOOT whatever the firmware does, so the device cannot be bricked by it.
+
 ## What is still open
 
-- **No hardware test of any of it.** The first power-on should go through the checklist in
-  `docs/BUILD.md` section 7, then: save and load a slot while a loop plays (listen for the fade,
-  watch the bar), change a setting and power-cycle after five seconds, send
-  `tools/sl_midi.py status` and check that every audio counter is 0 after a minute of playing, then
-  `tools/sl_midi.py reboot` and `tools/flash.sh` from the running USB firmware.
+- **Hardware test, partly done.** On the first stack board: boot, screen, mic, IMU, DAC, USB
+  MIDI and audio, the status line with every audio counter at 0, and reflashing from the running
+  USB firmware with `tools/sl_midi.py reboot` plus esptool, all on 2026-10-12. Not yet exercised on
+  hardware: a slot save and load while a loop plays, a setting surviving a power cycle, the
+  factory-reset gesture, safe mode, the watchdog reset, and the top board's mic once the stack
+  is screwed together. The Mini and the C3 have not been built.
+- **No version tag yet.** The app reports a bare commit hash until a `v*` tag exists; tag the
+  first sold firmware `v0.1.0` so a crash report names it.
 - **Updating keeps the slots only if the user says so.** The browser flasher asks whether to erase
   the chip; the partition table has not changed, so declining keeps the slots and settings. The
   app-only image in `dist/` can be written at `0x10000` with esptool for the same effect. There is

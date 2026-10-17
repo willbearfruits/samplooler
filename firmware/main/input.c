@@ -161,7 +161,7 @@ void input_poll(input_ev_t *ev)
 #else
     cnt = enc_take();
 #endif
-    enc_acc += cnt;
+    enc_acc += cnt * ENC_DIR;
     ev->enc = enc_acc / ENC_STEPS;
     enc_acc -= ev->enc * ENC_STEPS;
 

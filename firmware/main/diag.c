@@ -29,6 +29,10 @@ static const char *TAG = "diag";
 #define BT_DEPTH    8
 
 RTC_NOINIT_ATTR static uint32_t s_magic;
+RTC_NOINIT_ATTR static uint32_t s_streak_magic;      // crashes in a row without 10 s of normal running
+RTC_NOINIT_ATTR static uint32_t s_streak;
+#define STREAK_MAGIC 0x3c9e11a7u
+#define SAFE_AFTER   3
 RTC_NOINIT_ATTR static char     s_crumb[16];
 RTC_NOINIT_ATTR static uint32_t s_crumb_heap[2];     // internal free / largest block when the crumb was set
 RTC_NOINIT_ATTR static struct {
@@ -96,13 +100,20 @@ void diag_init(void)
     }
     bool const have = s_magic == CRUMB_MAGIC && s_crumb[0] && memchr(s_crumb, 0, sizeof s_crumb);
     s_reason = (int)esp_reset_reason();
+    // A crash or watchdog reset adds to the streak; any other reset (power-on, a requested reboot,
+    // a brown-out) starts it over. diag_mark_alive() clears it once the app has run for a while.
+    if (s_streak_magic != STREAK_MAGIC) s_streak = 0;
+    s_streak = (s_reason == ESP_RST_PANIC || s_reason == ESP_RST_INT_WDT || s_reason == ESP_RST_TASK_WDT ||
+                s_reason == ESP_RST_WDT) ? s_streak + 1 : 0;
+    s_streak_magic = STREAK_MAGIC;
     snprintf(s_prev_crumb, sizeof s_prev_crumb, "%s", have ? s_crumb : "-");
     s_have_panic = why && s_pan.magic == PANIC_MAGIC && memchr(s_pan.reason, 0, sizeof s_pan.reason) &&
                    s_pan.n <= BT_DEPTH;
     if (why) {
         snprintf(s_why, sizeof s_why, "%s", why);
         snprintf(s_last_crumb, sizeof s_last_crumb, "%s", have ? s_crumb : "");
-        if (have) snprintf(s_note, sizeof s_note, "%s: %s", why, s_crumb);
+        if (diag_safe_mode()) snprintf(s_note, sizeof s_note, "SAFE MODE: %lu crashes", (unsigned long)s_streak);
+        else if (have) snprintf(s_note, sizeof s_note, "%s: %s", why, s_crumb);
         else snprintf(s_note, sizeof s_note, "%s", why);
         s_note_p = s_note;
     }
@@ -125,6 +136,9 @@ void diag_crumb(const char *step)
 }
 
 const char *diag_note(void) { return s_note_p; }
+int  diag_crash_streak(void) { return (int)s_streak; }
+bool diag_safe_mode(void)    { return s_streak >= SAFE_AFTER; }
+void diag_mark_alive(void)   { s_streak = 0; }
 
 size_t diag_crash_report(char *buf, size_t n)
 {

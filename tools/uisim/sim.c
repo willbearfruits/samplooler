@@ -32,6 +32,7 @@ int main(void) {
     u.speed_now = 2.3f; u.speed_cmd = 2.4f; u.tilt_pitch = 18; u.tilt_roll = -30; u.fx_delay = true; frames(&u, 10); dump("11_delay_ghosts");
     u.fx_delay = false; u.tilt_roll = 35; u.fx_stutter = true; frames(&u, 5); dump("12_stutter");
     u.fx_stutter = false; u.tilt_roll = 2;
+    u.frozen = true; u.speed_now = -1.6f; u.speed_cmd = -1.6f; u.tilt_pitch = -25; frames(&u, 6); dump("12b_frozen"); u.frozen = false;
 #if !CONFIG_IDF_TARGET_ESP32C3
     u.mode = REC_MODE_GRAIN; u.pitch_ratio = 1.5f; u.speed_now = 0.9f; u.speed_cmd = 0.9f; frames(&u, 8); dump("13_grain_juggle");
     u.mode = REC_MODE_TAPE; u.pitch_ratio = 1;

@@ -138,6 +138,17 @@ class Board:
         self._arc((x0 + r, y0 + r), (x0, y0 + r), 90)
         self.bounds = (x0, y0, x1, y1)
 
+    def rrect_cut(self, x0, y0, x1, y1, r=1.0):
+        """A rounded-rectangle opening inside the outline (a screen window)."""
+        self._seg((x0 + r, y0), (x1 - r, y0))
+        self._seg((x1, y0 + r), (x1, y1 - r))
+        self._seg((x1 - r, y1), (x0 + r, y1))
+        self._seg((x0, y1 - r), (x0, y0 + r))
+        self._arc((x1 - r, y0 + r), (x1 - r, y0), 90)
+        self._arc((x1 - r, y1 - r), (x1, y1 - r), 90)
+        self._arc((x0 + r, y1 - r), (x0 + r, y1), 90)
+        self._arc((x0 + r, y0 + r), (x0, y0 + r), 90)
+
     def circle_cut(self, c, d):
         s = pcbnew.PCB_SHAPE(self.b)
         s.SetShape(pcbnew.SHAPE_T_CIRCLE)

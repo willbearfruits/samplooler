@@ -30,3 +30,12 @@ hardware/fab/*-gerbers/
 hardware/*/*.net
 hardware/*/~*.lck
 hardware/*/_autosave-*
+
+# instruments: each entry's own build output (also in the entries' .gitignore)
+instruments/*/firmware/build/
+instruments/*/firmware/sdkconfig
+instruments/*/firmware/sdkconfig.old
+instruments/*/firmware/managed_components/
+instruments/*/tools/sim/obj/
+instruments/*/tools/sim/sim
+instruments/*/tools/sim/out/

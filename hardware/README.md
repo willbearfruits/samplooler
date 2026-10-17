@@ -5,9 +5,12 @@ Two PCB designs for the ESP32-S3 build. Both are generated from the Python in `g
 | | **Stack** | **Mini** |
 | - | - | - |
 | Boards | two, 94 × 46 mm, 11 mm apart on M3 standoffs, made as one 94 × 94 mm panel | one, 82 × 56 mm, parts on both faces |
-| Controls | joystick and encoder (hold the encoder to record) | encoder and a 12 mm record button |
-| Layout | bottom board: every module, the joystick, the encoder, DAC straps underneath<br>top board: OLED, microphone | front: OLED, mic, encoder, REC, breakouts<br>back: SuperMini, DAC, IMU, amp header |
+| Controls | joystick (hold it down to record) and encoder | encoder and a 12 mm record button |
+| Layout | bottom board: every module, the bare joystick, the encoder<br>top board: OLED and microphone hung underneath, seen and heard through a window and a port | front: OLED, mic, encoder, REC, breakouts<br>back: SuperMini, DAC, IMU, amp header |
 | KiCad projects | `stack-bottom/`, `stack-top/` | `mini/` |
+
+These are the stack's rev D files. Rev D has not been made. Rev C, the previous stack (the KY-023
+on its own board, DAC straps, OLED and mic on top), is at the git tag `checkpoint/boards-rev-c`.
 
 Both use the kit wiring from `firmware/main/pins.h`, plus these extras:
 
@@ -15,7 +18,9 @@ Both use the kit wiring from `firmware/main/pins.h`, plus these extras:
 - **Breakouts for every spare GPIO**: labelled 2.54 mm pads, ready for a header or wires later. Each board has an EXP A and an EXP B.
 - **Qwiic / STEMMA QT** (JST-SH, 3.3 V I2C) for sensors and add-ons.
 - **Header for the optional MAX98357A amp**, which hangs off the left edge.
-- **DAC strap jumpers and OLED pin-order jumpers**, so module variants need no rework.
+- **OLED pin-order jumpers**, so module variants need no rework.
+- **The DAC's control pins tied on the board** (stack): FLT, DEMP and FMT low, XSMT high. The Mini
+  still has strap jumpers for them.
 
 ![The stack](images/stack-3d.png)
 
@@ -61,7 +66,7 @@ with everything here, neither board has been made yet.
 | Order number | "Specify a location": each board carries a `JLCJLCJLCJLC` text on its back (the panel has two; JLC uses one) |
 
 The encoder's mounting lugs are plated slots, which the standard process covers. The stack's
-openings for the stick, the shaft, BOOT and RST are routed from the outline.
+openings for the stick, the shaft, BOOT and RST, and the screen's window, are routed from the outline.
 
 The SMD parts are 0805 capacitors, two unfitted 0805 resistors and the pogo pins. The
 capacitors are easy by hand. If you'd rather have JLC fit them, `fab/*-bom.csv` and
@@ -75,17 +80,18 @@ for assembly, which the panel doesn't have. The Mini has parts on both faces.
 | -: | - | - | - |
 | 1 | ESP32-S3 SuperMini (ESP32-S3FH4R2) | bottom U1 | back U1 |
 | 1 | GY-PCM5102 purple I2S DAC with 3.5 mm jack | bottom U2 | back U2 |
-| 1 | INMP441 round I2S microphone | top U2 | front U3 |
+| 1 | INMP441 round I2S microphone | top U2, underneath | front U3 |
 | 1 | GY-521 (MPU-6050) | bottom U4 | back U4 |
-| 1 | SSD1306 0.96" 128×64 I2C OLED, 4 pins | top U1 | front U5 |
-| 1 | KY-023 joystick | bottom U5 | – |
+| 1 | SSD1306 0.96" 128×64 I2C OLED, 4 pins | top U1, underneath | front U5 |
+| 1 | PS2-style thumb joystick, bare: the part on a KY-023, without its board | bottom U5 | – |
+| 1 | 1 mm double-sided foam tape, about 5 × 20 mm | under the OLED's glass | – |
 | 1 | EC11 encoder with push switch, vertical, plus a knob | bottom SW1, **25 mm shaft** | front SW1, 20 mm shaft |
 | 1 | 12 × 12 mm tactile switch with a round cap | – | front SW2 |
 | up to 20 | SMD pogo pins (see [below](#pogo-pins)) | bottom, under U1 | back, under U1 |
 | 1 + 1 | 2×4 female socket, 8.5 mm tall, and a 2×4 male header | bottom J1, top J1 (underneath) | – |
 | 1 | JST-SH 4-pin horizontal (SM04B-SRSS-TB) | bottom J3 | front J3 |
 | 4 | M3 standoffs and 8 M3 screws | 11 mm, between the boards | 12 mm, as feet |
-| strip | straight 2.54 mm header pins | the modules (about 60), plus any breakouts you fit | the same |
+| strip | straight 2.54 mm header pins | the modules (about 55), plus any breakouts you fit | the same |
 | 3 / 2 | 10 µF 0805 (LCSC C15850) | bottom C1 C2, top C1 | C1, C4 |
 | 3 / 3 | 100 nF 0805 (LCSC C49678) | bottom C3, top C2 C3 | C2, C3, C5 |
 | 0 | 4.7 k 0805 (LCSC C17673), not fitted | bottom R1 R2 | R1 R2 |
@@ -165,10 +171,11 @@ and the drills are opened up. A minute with calipers confirms these:
 | Check | Designed for | Tolerance built in |
 | - | - | - |
 | SuperMini: distance between its two pin rows | 15.33 mm (sources say 15.24 to 15.46) | 1.1 mm drills fit either |
-| DAC: the 9-pin row (FLT…LROUT) against the 6-pin header | 6.475 mm in, 0.65 mm up from SCK | 1.2 mm drills; that row is optional anyway |
+| DAC: the 9-pin row (FLT…LROUT) against the 6-pin header | 6.475 mm in, 0.65 mm up from SCK | 1.2 mm drills |
 | OLED: pin order | GND VCC SCL SDA | jumpers swap GND and VCC, see below |
-| OLED (stack): corner holes | 23.3 × 23.8 mm grid | 2.5 mm holes for M2; the header alone also holds it |
-| KY-023 (stack): stick centre against its header | 17 mm from the header edge, 1 mm toward GND | 27 mm opening, the gimbal needs 23 |
+| OLED (stack): active area against the header | 21.7 × 10.9 mm, its top edge 4.5 mm below the pins | window 1.5 mm larger all round (24.7 × 13.9 mm) |
+| Joystick (stack): switch legs | rows 7.81 and 12.6 mm from the stick, 6.35 mm apart across | 1.2 mm drills (Adafruit's footprint says 8.0 / 12.5, SparkFun's 7.62 / 12.7) |
+| **Joystick (stack): from the bottom of its frame to the underside of the cap** | 20 mm, an estimate: no maker drawing found | at full tilt (25°) the cap's rim stays over the top board from about 18.5 mm (20 mm if it tilts 30°); lower, and it can touch the board |
 
 ## Assembly
 
@@ -176,20 +183,28 @@ and the drills are opened up. A minute with calipers confirms these:
 
 1. **Snap the panel apart** and file the tab nubs flush.
 2. **SMD first**: the capacitors, then any pogo pins under where the SuperMini goes.
-3. **DAC straps, JP1 to JP4**, on the underside of the bottom board, so you can change them
-   later. The DAC board's own H1L to H4L bridges are on its back, out of reach once it's
-   mounted. If your DAC came with them set, leave JP1–JP4 open. If they're
-   open, bridge FLT = L, DEMP = L, XSMT = H, FMT = L here (1–2 = H, 2–3 = L). An open XSMT
-   means a silent DAC. On the stack, XSMT's strap only has the H side: L would mute the DAC.
-4. **Joystick**: swap its right-angle header for a straight one.
-5. **Modules onto the bottom board**, each on straight headers with the plastic between module
+3. **Joystick**: the bare stick (a KY-023's, off its board, or bought on its own) straight onto
+   the bottom board, switch toward the player's edge. Solder the four frame tabs too, then trim
+   the legs underneath to 2 mm.
+4. **Modules onto the bottom board**, each on straight headers with the plastic between module
    and carrier. Then the encoder (25 mm shaft) and the 2×4 socket J1. Trim the tails
-   underneath.
-6. **Top board**: the OLED and the mic (sound hole up) from the top, the 2×4 header J1 from
-   underneath (plastic below the board, soldered on top). If your OLED's first two pins read
-   VCC GND instead of GND VCC, cut the thin 1–2 bridges on JP1 and JP2 and solder 2–3 on both.
-7. **Stack**: four 11 mm standoffs on the bottom board, press the header into the socket,
+   underneath. Fit the DAC's 9-pin row as well: the board ties FLT, DEMP and FMT to GND and
+   XSMT to the DAC's own 3.3 V (A3V3) through it, so no straps to set. That matches the
+   bridges on the DAC's back if they are set as usual (L, L, H, L). A floating FMT flips the
+   DAC between data formats when you touch it: loud distortion. A floating XSMT keeps it silent.
+5. **Top board**: the OLED and the mic hang underneath it, facing up.
+   - OLED: fit its 4-pin header from the glass side, plastic between the glass side and the
+     board, the long pins up through the board (most come with the header the other way
+     round). A strip of 1 mm foam tape on the glass's lower end, hidden behind the board, keeps
+     it level. If its first two pins read VCC GND instead of GND VCC, cut the thin 1–2 bridges
+     on JP1 and JP2 and solder 2–3 on both.
+   - Mic: sound hole up over the 1.5 mm port, flush against the board (no plastic in between).
+     Trim the pin stubs below it.
+   - The 2×4 header J1 from underneath (plastic below the board, soldered on top).
+6. **Stack**: four 11 mm standoffs on the bottom board, press the header into the socket,
    screw down.
+7. **Bottom cover** (optional): `enclosure/stack-cover.scad` is a printed tray that clicks onto
+   the bottom board's underside and covers the solder joints; see `docs/ENCLOSURE.md`. Unprinted.
 
 To flash from the browser, hold BOOT while plugging in. Reach it through the hole in the top
 board with a toothpick.
@@ -204,17 +219,19 @@ out:
 After that come the encoder, the record button, the breakouts and the four feet. The encoder's
 mounting lugs are soldered for strength only: on the Mini they aren't connected to GND. Trim the
 SuperMini's and the DAC's pin tails flush on the front before the mic and the OLED go over
-them. The DAC straps and the OLED jumpers work as on the stack (JP1–JP4 on the back, JP5/JP6
-on the front).
+them. The DAC straps JP1–JP4 are on the back: bridge FLT, DEMP and FMT to L (2–3) and XSMT to H
+(1–2), unless the DAC's own bridges are already set; a floating FMT distorts at a touch, a floating
+XSMT keeps the DAC silent. The OLED jumpers JP5/JP6 on the front work as on the stack.
 
 On both designs, the **nose** is the edge with USB-C and the jack. Tilting the nose down plays
 forward, faster with angle.
 
 ## Firmware notes
 
-- **Stack:** runs the current firmware unchanged. The joystick is mounted as in the kit case.
-  Published KY-023 wiring suggests left/right may come out mirrored, in the kit as well as
-  here. If so, change `x = ay` to `x = -ay` in `firmware/main/input.c`.
+- **Stack:** runs the current firmware unchanged. Pressing the stick down is the record button
+  (GPIO3). Its axes are wired (X on GPIO2, Y on GPIO1, pots between 3V3 and GND as on Adafruit's
+  breakout) but unused while `HAS_JOY` is 0. If you turn it on, check which way each axis
+  reads and flip its sign in `firmware/main/input.c` if needed.
 - **Mini:** needs three small firmware changes, not made yet:
   - Record on GPIO3, the record button (the joystick's old click pin). The SuperMini has a
     100k/100k divider from USB 5V on GPIO3; a button to GND still reads fine.
@@ -236,7 +253,8 @@ forward, faster with angle.
 The mechanical model covers:
 
 - every part's height, from its header plastic up
-- tall features: USB-C, the jack, the joystick gimbal, stick and cap swing, the encoder bushing, shaft and knob, the OLED screws
+- tall features: USB-C, the jack, the joystick frame, and the volume its stick and cap sweep at full tilt, the encoder bushing, shaft and knob
+- the OLED and the mic hung under the top board, over the modules on the bottom one
 - pin tails through the board
 - the openings in the top board, the standoffs and the board edges
 - on the Mini, which module hides which solder joint
@@ -270,7 +288,8 @@ off there. The mechanical model checks heights and solder order instead.
   plotted: it ties any GND pad or pour pocket the routing walled in back to a plane, then DRC
   confirms. On the stack's bottom board, two GND tracks are laid before routing: a spine along
   the bottom edge (the escape bundle would otherwise cut the pour in two) and a tie from EXP
-  B's GND pins to the link socket.
+  B's GND pins to the link socket. XSMT's tie to the DAC's 3.3 V is laid too, hooked under FMT
+  on the back.
 - **Antenna:** no copper under the SuperMini's chip antenna.
 - **Stack link:** the 2×4 connector carries I2C (OLED) and I2S (mic) to the top board, with
   GND on its bottom row.

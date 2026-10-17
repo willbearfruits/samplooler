@@ -126,7 +126,7 @@ Leave GPIO 8 (LED, strapping), 2 (strapping) and 18/19 (USB) alone.
 | PCM5102A | VIN | 5V |
 | PCM5102A | SCK | GND (most boards already do this) |
 | PCM5102A | XSMT bridge | H, or the DAC stays muted |
-| PCM5102A | FLT, DEMP, FMT bridges | L |
+| PCM5102A | FLT, DEMP, FMT bridges | L. A floating FMT flips the data format when touched: loud distortion |
 | MPU6050 | VCC | 3V3 (most breakouts also accept 5V) |
 | MPU6050 | AD0 | GND (address 0x68) |
 | Encoder | + | 3V3, if the module has the pin. The GPIOs use internal pull-ups. |
@@ -254,12 +254,28 @@ keeps the plain serial console and skips USB MIDI and audio. The C3 always has i
 If the device ever restarts on its own, the screen says why for a few seconds (`CRASH: …`,
 `BROWNOUT`, `WATCHDOG`) and `sl_midi.py status` prints the crash report with a backtrace.
 
+**Safe mode.** Three crashes in a row, none of them followed by ten seconds of normal running,
+and the next boot starts from the default settings and keeps them; the screen says
+`SAFE MODE: 3 crashes`. A power cycle or a requested reboot starts the count over. The task
+watchdog covers the control loop and the audio task, so a hang resets the device within five
+seconds instead of leaving it playing with dead controls.
+
+**Factory reset.** Hold the record button while plugging in and keep it down: the screen counts
+`RESET? hold REC 3 … 2 … 1`, then `RESET defaults restored`. Let go earlier and nothing happens.
+The saved loops in the slots stay. (On the C3 the record button is BOOT, which at power-on means
+download mode instead, so the C3 has no reset gesture: reflash with "erase" ticked.)
+
+**Recovery.** Whatever the firmware does, the chip's own download mode is always reachable:
+hold BOOT, tap RESET (or plug in with BOOT held), release BOOT, and the flasher sees the board.
+The firmware cannot lock itself out.
+
 ### When something is wrong
 
 | Symptom | Fix |
 | - | - |
 | No sound at all | PCM5102A XSMT bridge not set to H, or SCK not on GND. Check VIN is on 5V. |
-| Nose down plays backwards | Set `TILT_SIGN` to `-1.0f` in `firmware/main/main.c` |
+| The sound distorts while you touch the DAC's pins | FMT (or FLT, DEMP) is floating: set its bridge on the DAC's back to L, or wire the pin to GND |
+| Nose down plays backwards | Flip the sign of `TILT_SIGN` in `firmware/main/main.c` (it is `-1` for the stack boards, `+1` for the kit wiring) |
 | Tilt reacts to the wrong axis | The sensor sits sideways: set `TILT_USE_ROLL` to 1 in `firmware/main/main.c` |
 | No MIDI port after flashing, `lsusb` shows `303a:0009` | The S3 stayed in download mode. Unplug and plug in again. |
 | No MIDI port, serial console instead | The encoder push was held at power-on. Plug in again without holding it. |
@@ -279,7 +295,7 @@ The same on both; the S3 has a record button, the C3 records with BOOT.
 | Record button (or BOOT), hold | record | record | record |
 | Encoder tap | open the menu | edit the setting, or run Save / Load | back to the list |
 | Encoder turn | adjust the last setting (a toast shows it) | choose a setting | adjust it |
-| Encoder hold (0.5 s) | | leave the menu | leave the menu |
+| Encoder hold (0.5 s) | freeze or release the tilt: speed, direction and the roll effects stay where they are (`HOLD` on the screen) | leave the menu | leave the menu |
 
 On a kit that still has the joystick, build with `HAS_JOY 1` in `pins.h`: its Y axis sets the
 speed when Tilt is off and its X axis the pitch in GRAIN mode.

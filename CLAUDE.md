@@ -4,11 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Samplooler (formerly "Gesture Recorder"; the local directory keeps the old name): a tilt-controlled
+Samplooler (formerly "Gesture Recorder"): a tilt-controlled
 looper. Hold a button to record the mic, release and it loops; the IMU's pitch angle sets playback
 speed and direction. One ESP-IDF firmware builds for two chips, plus a JUCE plugin, a browser
 flasher site, an OpenSCAD enclosure, circuit boards and host-side tools. Public at
 https://github.com/willbearfruits/samplooler (branch `main`).
+
+Since 2026-10-17 everything Samplooler lives in `~/Projects/samplooler/`: this repo (`samplooler/`, the only part
+that is pushed) and `lab/` next to it (private: old copies, the retired 7-app launcher, the Filter board, the library's
+old page). The instrument library was merged in: `instruments/<id>/` (ten firmwares, each a complete ESP-IDF project
+with its own copy of the core), `core/` (the current shared core, files listed in `tools/core_files.txt`) and
+`tools/library.py` (`check`, `core`, `core-copy <id>`, `readme` rewrites the list in `instruments/README.md`).
+`CONTRIBUTING.md` is how others add an instrument; `.github/workflows/library.yml` is the library's CI.
 
 `docs/BUILD.md` is the user-facing build guide; `README.md` is the short GitHub landing page that
 points to it and to the project page (https://willbearfruits.github.io/samplooler/, deployed from
@@ -33,7 +40,9 @@ idf.py -B build-c3 -DSDKCONFIG=sdkconfig.c3 build flash monitor
 
 `sdkconfig` and `sdkconfig.c3` are generated and gitignored (`set-target` regenerates them), so config
 changes belong in `sdkconfig.defaults`, `.esp32s3` or `.esp32c3`: CI and the published images are built
-from those alone. The app builds with `-Werror`. The two build dirs share `managed_components/`: the C3
+from those alone. An existing `sdkconfig` is *not* updated when the defaults change (on 2026-10-14 the local
+S3 image was found running with a 3.5 KB main stack and a log-only watchdog that the defaults had fixed
+days before): after editing a defaults file, delete the generated `sdkconfig` / `sdkconfig.c3` and build again. The app builds with `-Werror`. The two build dirs share `managed_components/`: the C3
 build (which needs no USB components) empties it, so the next S3 build fetches them again (network).
 On the S3 the USB firmware replaces the serial console (see USB mode below): for `idf.py flash monitor`,
 power it up with the encoder held; otherwise reflash with `tools/flash.sh` and read logs with
@@ -53,7 +62,11 @@ power it up with the encoder held; otherwise reflash with `tools/flash.sh` and r
   changes without hardware; there is no unit test suite.
 - `python3 tools/fontconv.py` — regenerates `firmware/main/font_data.c` from the ASCII-art faces in
   `firmware/main/fonts/*.txt` (TWOFOLD's tiny/small/med/big). Run it after editing a glyph.
+- `tools/manual_pdf.sh` — prints `site/manual.html` (the RTFM: playing, building the stack, flashing, recovery) to
+  `site/samplooler-rtfm.pdf` with headless Chromium. Keep the manual in step with BUILD.md and the settings table.
 - `enclosure/render.sh` — OpenSCAD → `out/{shell,lid,plunger}.stl` + preview PNGs.
+- `enclosure/render-stack-cover.sh` — the stack's click-on bottom cover (`stack-cover.scad`, 1.2 mm nozzle):
+  STL, a collision check against the board's keep-outs (must come out empty) and preview PNGs.
 - `tools/showcase/make_showcase.sh` — the product video with sound (~25 min): `twin.c` compiles the
   firmware's `recorder_f32.c`, `fx.c`, `ui.c`, `oled.c` on the host and plays a scripted performance
   (`score.py`) into a soundtrack plus OLED frames; Blender tilts the stack in sync. `make_hardware_video.sh`
@@ -76,7 +89,8 @@ releases `vX.Y.Z`.
 pins and capability flags (`HAS_USB`, `HAS_JOY`, `HAS_CONTROLS`, `PIN_REC`, `OLED_ENABLE`, `OLED_W/H`);
 code is gated on those flags rather than on the target directly. Controls are one scheme on both chips:
 a record button (`PIN_REC`, GPIO 3 on the S3; the C3 uses BOOT) and the encoder (tap = menu / dive /
-back, hold = leave, turn = choose or adjust; `menu` and `menu_edit` in `main.c`). `HAS_JOY` is 0; set
+back, hold = leave the menu or, while playing, freeze the tilt, turn = choose or adjust; `menu` and `menu_edit`
+in `main.c`; `ENC_DIR` in `pins.h` sets which way a turn counts). `HAS_JOY` is 0; set
 it to 1 for a kit with the joystick (Y = speed when tilt is off, X = pitch in GRAIN). `recorder.h` picks the sample type:
 
 | | S3 | C3 |
@@ -100,7 +114,9 @@ Input, Slot, Save, Load — indexed `P_*`; the struct is `settings_t` in `settin
 (`TILT_SIGN`, `TILT_USE_ROLL`, dead zones), the slot jobs, and the MIDI map:
 - CC 20+`p` carries setting `p` both ways, for the settings before Save/Load (`p < P_SAVE`).
 - CC 1–7 go out on change: pitch, roll, speed, play position, joystick x, joystick y, input level.
-- Notes in: 60 records while held, 61 loads, 63 saves. Notes out: 60 while recording, 62 while playing.
+- Notes in: 60 records while held, 61 loads, 63 saves, 64 toggles the tilt freeze (`frozen` in `main.c`: the IMU
+  is not polled, so the angles and everything they drive stay; the encoder held outside the menu does the same).
+  Notes out: 60 while recording, 62 while playing.
 
 Adding a setting means updating the table, `param_adjust`, `param_text`, `setting_to_127` /
 `setting_from_127`, the NVS field list in `settings.c` (a new 4-character tag; old blobs still load),
@@ -137,7 +153,11 @@ keeps the panic text and backtrace in RTC memory, so the next boot shows `CRASH:
 `WATCHDOG` on the screen and in the log. The audio task counts DMA overruns, underruns and read errors
 (`audio_get_stats`); call `audio_flash_hint()` before any flash write so stalls it causes are filed
 separately. The speaker amp is enabled by the audio task after 50 ms of good clock. A screen or IMU
-that stops answering is backed off and retried, not waited for. The task watchdog resets the device.
+that stops answering is backed off and retried, not waited for. The main loop and the audio task
+feed the task watchdog (5 s). `diag.c` counts crash/watchdog resets in a row in RTC memory: at three,
+`diag_safe_mode()` makes `app_main` start from default settings (`SAFE MODE` on the screen);
+`diag_mark_alive()` after 10 s clears it. Settings loaded from NVS go through `clamp_settings()`.
+The record button held 3 s from power-on is the factory reset (`settings_erase()`, slots kept).
 
 ## Other parts
 
@@ -149,12 +169,16 @@ that stops answering is backed off and retried, not waited for. The task watchdo
 - `enclosure/samplooler.scad` — C3 case; unverified dimensions are single parameters at the top of the
   file, documented with sources in `docs/ENCLOSURE.md`. `docs/pinmap.html` mirrors `pins.h`.
 - `hardware/` — PCBs for the S3 build, two designs: `stack-bottom/` + `stack-top/` (two 94 x 46 mm
-  boards, 11 mm apart, joystick and encoder on the bottom one) and `mini/` (one board, no joystick,
+  boards, 11 mm apart, joystick and encoder on the bottom one; rev D hangs the OLED and the mic under the
+  top board and solders the joystick bare; rev C, the boards ordered, is tag `checkpoint/boards-rev-c`) and `mini/` (one board, no joystick,
   parts on both faces). Every KiCad file is generated by `hardware/gen/*.py`: change the Python and
   rerun `python3 hardware/gen/build.py [stack|mini]` (then `panel.py` for the one-piece JLC
   panels: the stack at 94 x 94 mm, and the Mini with the Samplooler Filter from
-  `~/Projects/samplooler-filter` at 82 x 94 mm; then `render.py`); never hand-edit `stack-*/`,
-  `panel-*/`, `mini/`, `lib/` or `fab/`. Designs live in `gen/stack.py` and `gen/mini.py`; shared parts in
+  `../lab/boards/filter` at 82 x 94 mm; then `render.py`); never hand-edit `stack-*/`,
+  `panel-*/`, `mini/`, `lib/` or `fab/`. The exception is `hand-stack-bottom/` + `hand-stack-top/`: a separate
+  version (labelled "hand") that the user places, designs and routes in KiCad themselves. It started on
+  2026-10-15 from rev D's placement with all copper removed, but is independent of rev D, which stays as built.
+  No script writes it, never overwrite it, and its edits don't flow back into `gen/`. Designs live in `gen/stack.py` and `gen/mini.py`; shared parts in
   `gen/parts.py`, module geometry in `gen/modules.py` (its pin map must agree with
   `firmware/main/pins.h`), build steps in `gen/kit.py`. A build runs ERC, the mechanical model
   (`gen/mech.py`), Freerouting and DRC with schematic parity; all must end at 0 findings. The

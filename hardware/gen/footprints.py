@@ -117,8 +117,9 @@ def module_footprint(m):
     xs = [p[1] for p in pads]
     xmid = (min(xs) + max(xs)) / 2
     big = set(m.get('big_drill', ()))
+    drills = m.get('drills', {})
     for num, x, y, pname in pads:
-        drill, size = (1.2, 1.9) if num in big else (HDR_DRILL, HDR_PAD)
+        drill, size = drills.get(num, (1.2, 1.9) if num in big else (HDR_DRILL, HDR_PAD))
         shape = 'rect' if num == 1 else 'circle'
         fp.append([S('pad'), str(num), S('thru_hole'), S(shape), [S('at'), x, y], [S('size'), size, size],
                    [S('drill'), drill], [S('layers'), '*.Cu', '*.Mask'], [S('remove_unused_layers'), S('no')],

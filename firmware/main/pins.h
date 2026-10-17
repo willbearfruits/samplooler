@@ -24,6 +24,7 @@
 #define PIN_ENC_B     1    // encoder DT
 #define PIN_ENC_SW    20   // encoder push, active low (internal pull-up)
 #define ENC_STEPS     4    // counts per detent
+#define ENC_DIR       1    // 1 or -1: which way a clockwise turn counts
 // Left alone: 8 (blue LED, strapping high), 2 (strapping), 18/19 USB. Free: 21.
 #else
 #define PIN_BOOT      0    // BOOT button, active low
@@ -48,4 +49,5 @@
 #define PIN_ENC_B     5
 #define PIN_ENC_SW    6    // active low: menu
 #define ENC_STEPS     4    // counts per detent
+#define ENC_DIR      -1    // the stack board's encoder counts the other way round from the kit's
 #endif

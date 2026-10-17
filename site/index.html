@@ -98,6 +98,13 @@ esp-web-install-button button,.flashbox .btn{width:100%}
 .gallery img.oled{border:5px solid #111;border-radius:3px}
 video.tour{width:100%;max-width:816px;height:auto;display:block;margin:0 0 16px;border:6px solid #111;border-radius:3px;background:#0c0c0e}
 .gallery figcaption{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px}
+/* the library */
+.libgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:0 0 18px}
+.libgrid a{text-decoration:none;display:block}
+.libgrid img{width:100%;aspect-ratio:2/1;image-rendering:pixelated;border:5px solid #111;border-radius:3px;background:var(--oled)}
+.libgrid b{display:block;font-family:var(--mono);font-size:14px;margin-top:6px;letter-spacing:.04em}
+.libgrid span{display:block;font-size:13px;color:var(--muted);line-height:1.35}
+.libgrid a:hover b{color:var(--red)}
 code,kbd{font-family:var(--mono);font-size:.9em}
 pre{font-family:var(--mono);font-size:13px;background:var(--paper);border:1px solid var(--soft);padding:12px;overflow-x:auto}
 footer{border-top:1px solid var(--rule);margin-top:64px;font-family:var(--mono);font-size:13px;color:var(--muted)}
@@ -111,6 +118,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   .steps > div:last-child,.cards > div:last-child{border-bottom:0}
   .demo{grid-template-columns:1fr;padding:14px}
   .gallery{grid-template-columns:1fr 1fr}
+  .libgrid{grid-template-columns:1fr 1fr}
 }
 </style>
 </head>
@@ -125,6 +133,8 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     <a href="#get">Get one</a>
     <a href="#flash">Flash</a>
     <a href="#build">Build</a>
+    <a href="manual.html">Manual</a>
+    <a href="../samplooler-library/">Library</a>
     <a href="https://github.com/willbearfruits/samplooler">GitHub</a>
   </nav>
 </div></header>
@@ -307,6 +317,16 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   <p>Plugged into a computer, the S3 shows up as a MIDI port and a sound card. The loop goes straight into a DAW track, and anything the DAW plays can be recorded into the box. Every setting can be changed over MIDI. The plugin (VST3 and standalone) shows the tilt, the speed and the log, and has buttons for record, save and load.</p>
 </section>
 
+<section id="library">
+  <h2>Other instruments</h2>
+  <p>The same board can be other instruments: drums you play by knocking on the box, a flute you blow, feedback tuned to a chord, the Wi-Fi and Bluetooth around you as sound. Each one is its own firmware in the Samplooler library and flashes from its page the same way as this one. Your loops stay on the board. Anyone can add an instrument.</p>
+  <div class="libgrid" id="libgrid"></div>
+  <div class="actions">
+    <a class="btn solid" href="../samplooler-library/">Open the library</a>
+    <a class="btn" href="https://github.com/willbearfruits/samplooler-library/blob/main/CONTRIBUTING.md">Add yours</a>
+  </div>
+</section>
+
 <section id="source">
   <h2>Open source</h2>
   <div class="table"><table>
@@ -326,5 +346,24 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
 </div></footer>
 
 <script src="demo.js"></script>
+<script>
+// The library's list, from its own page on the same site; without it the section keeps its text and buttons.
+(function () {
+  const base = new URL("../samplooler-library/", location.href);
+  fetch(new URL("library.json", base)).then(r => r.json()).then(lib => {
+    const grid = document.getElementById("libgrid");
+    for (const x of lib.entries) {
+      const a = document.createElement("a");
+      a.href = new URL("#" + x.id, base);
+      const img = document.createElement("img");
+      img.src = new URL(x.image, base); img.alt = x.name + " on the screen"; img.loading = "lazy"; img.width = 384; img.height = 192;
+      const b = document.createElement("b"); b.textContent = x.name;
+      const s = document.createElement("span"); s.textContent = x.summary.split(". ")[0].replace(/\.$/, "") + ".";
+      a.append(img, b, s);
+      grid.append(a);
+    }
+  }).catch(() => {});
+})();
+</script>
 </body>
 </html>

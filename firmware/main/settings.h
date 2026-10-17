@@ -30,3 +30,4 @@ void settings_changed(void);                       // call after any change; sch
 void settings_poll(const settings_t *s);           // from the 10 ms loop
 bool settings_pending(void);                       // a write is waiting
 void settings_flush(const settings_t *s);          // write now if pending (before a reboot)
+void settings_erase(void);                         // factory reset: forget the saved settings (the slots stay)

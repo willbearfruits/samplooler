@@ -8,6 +8,8 @@ A board is described by a spec dict (see stack.py and mini.py):
     place {ref: (x, y, rot, side)}             footprint origins in the board frame
     ref_at {ref: (dx, dy) | None}              reference label offsets for the small parts
     cutouts [(x, y, d)], keepouts [dict]       openings through the board, rule areas
+    windows [(x0, y0, x1, y1, r)]              rounded-rectangle openings (a screen window)
+    rev, date                                  title block (default: REV, DATE below)
     silk(bd, S)                                board-specific silkscreen
     power(bd) | None                           hand-routed, locked copper before autorouting
     stitch_avoid [((x0, y0), (x1, y1))], models {ref: wrl}
@@ -136,7 +138,7 @@ def write_project(dirpath, name, severities=None):
 
 
 def schematic(spec, syms):
-    sh = Sheet(spec['project'], spec['title'], REV, DATE, spec['comments'])
+    sh = Sheet(spec['project'], spec['title'], spec.get('rev', REV), spec.get('date', DATE), spec['comments'])
     for box in spec['sch'].get('boxes', []):
         sh.box(*box)
     for ref, (x, y, *rest) in spec['sch']['parts'].items():
@@ -276,6 +278,9 @@ def make_board(spec, nets):
     for (x, y, dia) in spec.get('cutouts', []):
         bd.circle_cut(A((x, y)), dia)
         ring_keepout(bd, (x, y), dia / 2 + 0.7)
+    for (wx0, wy0, wx1, wy1, wr) in spec.get('windows', []):
+        bd.rrect_cut(*A((wx0, wy0)), *A((wx1, wy1)), wr)
+        keepout(bd, (wx0 - 0.7, wy0 - 0.7), (wx1 + 0.7, wy1 + 0.7), pour=False, name='window')
     for k in spec.get('keepouts', []):
         keepout(bd, **k)
     return bd
@@ -931,6 +936,8 @@ def fanout_gnd(bd, spec, net='GND', dist=1.25):
                 if not (0.9 < bx < bounds[0] - 0.9 and 0.9 < by < bounds[1] - 0.9):
                     continue
                 if any(math.hypot(bx - cx, by - cy) < d / 2 + 1.0 for cx, cy, d in cutouts):
+                    continue
+                if any(w[0] - 1.0 < bx < w[2] + 1.0 and w[1] - 1.0 < by < w[3] + 1.0 for w in spec.get('windows', [])):
                     continue
                 ok = all(key == me or math.hypot(vx - ox, vy - oy) > r + 0.3 + 0.25
                          for ox, oy, r, n, key in others)

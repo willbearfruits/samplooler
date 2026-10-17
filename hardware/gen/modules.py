@@ -117,22 +117,73 @@ GY521 = dict(
     height=5.3,
 )
 
-# ---------------------------------------------------------------- KY-023 joystick
-KY023 = dict(
-    name='KY-023_Joystick',
-    desc='KY-023 joystick module, straight 5-pin header (replace the right-angle one), '
-         'M3 holes for 2.5 mm spacers. Power it from 3V3: the ESP32 ADC is 3.3 V.',
-    pads=col(0, 0, ['GND', '+5V', 'VRx', 'VRy', 'SW']),
-    outline=('rect', -1.5, -8.0, 32.5, 18.0),
-    holes=[(3.0, -5.25, 3.3), (29.5, -5.25, 3.3), (3.0, 15.25, 3.3), (29.5, 15.25, 3.3)],
-    fab=[('circle', (15.5, 4.1), 8.0), ('text', 'STICK', (15.5, 4.1), 1.0)],
-    silk=[('text', 'KY-023', (15.5, 12.5), 1.0), ('text', '+5V pin = 3V3', (15.5, 14.4), 0.8)],
-    stick=(15.5, 4.1),
-    height=5.1,
-    mech_extra=[('gimbal', (15.5 - 8, 4.1 - 8, 15.5 + 8, 4.1 + 8), 4.1, 14.6),
-                ('stick', ('circle', 15.5, 4.1, 2.5), 14.6, 18.6),
-                ('cap', ('circle', 15.5, 4.1, 9.75), 18.6, 23.6)],
+# ---------------------------------------------------------------- the KY-023's joystick, bare (rev D)
+# The PS2-style thumb joystick that sits on the KY-023, soldered straight to the carrier. Origin at
+# the stick. Pads from two footprints for the same part, which agree except on the switch rows:
+#   Adafruit 2-axis joystick breakout (joystick.brd, package JOYSTICK)
+#   SparkFun-Electromechanical.lbr (package JOYSTICK, for COM-09032)
+# Pots at 2.54 mm, 10.16 from the stick, mounting tabs at (+-7.62, +-6.6675): both agree.
+# Switch legs at x +-3.175 in both; rows at 8.001 / 12.501 (Adafruit) and 7.62 / 12.7 (SparkFun):
+# midpoints, 1.2 mm drills. A row is one switch terminal (the legs 6.35 apart are joined inside, as on
+# a 6 x 6 tact switch); Adafruit wires B1A and B2A, which proves those two are the two terminals, so
+# only those are wired here and B1B/B2B are soldered for strength.
+# Heights are estimates (no maker drawing found); MEASURE: see JOY_* below and the README.
+JOY_ROW1, JOY_ROW2 = round((12.501 + 12.7) / 2, 3), round((8.001 + 7.62) / 2, 3)
+JOY_FRAME_H = 10.5          # MEASURE: seat to the top of the metal frame
+JOY_PIVOT = 6.0             # MEASURE: seat to the gimbal's pivot (the pots' shaft height)
+JOY_CAP = (20.0, 28.0)      # MEASURE: seat to the underside and the top of the thumb cap
+JOY_CAP_R = 9.75            # MEASURE: the cap's radius
+JOY_THROW = 25.0            # degrees from upright, any direction
+JOYSTICK = dict(
+    name='PS2_Joystick',
+    desc='Bare PS2-style thumb joystick (the part on the KY-023), soldered to the carrier. Origin at the stick. '
+         'H = the pot along the switch-free side, V = the pot beside it; ends to 3V3 and GND, wipers out.',
+    pads=[(1, -2.54, 10.16, 'H1'), (2, 0.0, 10.16, 'H2'), (3, 2.54, 10.16, 'H3'),
+          (4, -10.16, -2.54, 'V1'), (5, -10.16, 0.0, 'V2'), (6, -10.16, 2.54, 'V3'),
+          (7, -3.175, -JOY_ROW1, 'SW1'), (8, 3.175, -JOY_ROW1, 'SW1b'),
+          (9, -3.175, -JOY_ROW2, 'SW2'), (10, 3.175, -JOY_ROW2, 'SW2b'),
+          (11, -7.62, -6.6675, 'MP'), (12, 7.62, -6.6675, 'MP'), (13, 7.62, 6.6675, 'MP'), (14, -7.62, 6.6675, 'MP')],
+    drills={**{n: (1.0, 1.7) for n in range(1, 7)}, **{n: (1.2, 1.9) for n in range(7, 11)},
+            **{n: (1.5, 2.4) for n in range(11, 15)}},
+    label_side={n: None for n in range(1, 15)},
+    outline=('rect', -11.2, -14.25, 9.55, 11.45),
+    fab=[('circle', (0, 0), JOY_CAP_R), ('text', 'STICK', (0, 0), 1.0)],
+    silk=[],
+    ref_at=(0, 3.5),
+    stick=(0.0, 0.0),
+    height=JOY_FRAME_H,
 )
+
+
+def joystick_mech():
+    """The joystick's solids for mech.py: frame, pot and switch housings, and the volume the
+    stick and cap sweep through, as a stack of rings (the cap tilted JOY_THROW every way)."""
+    import math
+    feats = [('frame', (-8.2, -7.3, 8.2, 7.3), 0, JOY_FRAME_H),
+             ('pot H', (-4.85, 7.3, 4.85, 11.45), 0, 9.0),
+             ('pot V', (-11.2, -4.85, -7.3, 4.85), 0, 9.0),
+             ('switch', (-5.6, -14.25, 5.6, -6.95), 0, 4.0)]
+    # sample the stick (r 2.5 up to the cap) and the cap at every tilt up to the throw
+    env = {}
+    for k in range(0, int(JOY_THROW) + 1):
+        t = math.radians(k)
+        for h10 in range(0, int((JOY_CAP[1] - JOY_PIVOT) * 10) + 1):
+            h = h10 / 10
+            r = JOY_CAP_R if h >= JOY_CAP[0] - JOY_PIVOT else 2.5
+            for rho in (-r, r):
+                z = JOY_PIVOT + h * math.cos(t) - rho * math.sin(t)
+                x = abs(rho * math.cos(t) + h * math.sin(t))
+                if z < JOY_FRAME_H:
+                    continue
+                band = math.floor(z * 2) / 2                     # 0.5 mm bands
+                env[band] = max(env.get(band, 0.0), x)
+    for band in sorted(env):
+        feats.append(('stick sweep', ('circle', 0.0, 0.0, round(env[band], 2)), band, band + 0.5, 'edge'))
+    return feats
+
+
+JOYSTICK['mech_features'] = joystick_mech()
+
 
 # ---------------------------------------------------------------- MAX98357A (Adafruit 3006 layout)
 MAX98357 = dict(
@@ -206,4 +257,65 @@ def breakout(name, value, labels, desc='Breakout pads, 2.54 mm, for headers or w
 OLED_NOHOLES = dict(OLED, name='SSD1306_0.96in_I2C_NoHoles', holes=[], silk_outline=False,
                     desc=OLED['desc'] + ' No mounting holes: held by its header (Mini).')
 
-MODULES = [SUPERMINI, PCM5102, INMP441, GY521, KY023, MAX98357, OLED]
+
+# ---------------------------------------------------------------- modules hung under a board (rev D top)
+# The module hangs under the board with its front (glass, sound hole) facing the board: header
+# plastic between the two, pins up through the board. Seen from above, its pads land exactly where
+# they would for the same module on top. KiCad mirrors a back footprint's Y before rotating, so these
+# variants are drawn with Y negated: placed on the back at rot 0 they come out as the front-side ones.
+def _flip_y(items):
+    out = []
+    for e in items:
+        if e[0] == 'rect':
+            (x0, y0), (x1, y1) = e[1], e[2]
+            out.append(('rect', (x0, -y1), (x1, -y0)) + tuple(e[3:]))
+        elif e[0] in ('circle', 'line'):
+            out.append((e[0], (e[1][0], -e[1][1])) + ((e[2][0], -e[2][1]) if e[0] == 'line' else e[2],) + tuple(e[3:]))
+        elif e[0] in ('text', 'text_back'):
+            out.append((e[0], e[1], (e[2][0], -e[2][1])) + tuple(e[3:]))
+        else:
+            out.append(e)
+    return out
+
+
+def under(m, name, desc, **kw):
+    o = m['outline']
+    outline = ('rect', o[1], -o[4], o[3], -o[2]) if o[0] == 'rect' else ('circle', o[1], -o[2], o[3])
+    u = dict(m, name=name, desc=desc, outline=outline,
+             pads=[(n, x, -y, nm) for n, x, y, nm in m['pads']],
+             holes=[(x, -y, d) for x, y, d in m.get('holes', ())],
+             fab=_flip_y(m.get('fab', ())), silk=_flip_y(m.get('silk', ())),
+             label_side={n: None for n, *_ in m['pads']},      # hidden under the module anyway
+             under=True)
+    if 'ref_at' in m:
+        u['ref_at'] = (m['ref_at'][0], -m['ref_at'][1])
+    u.update(kw)
+    return u
+
+
+# OLED under the top board, glass up through a window. The header goes in from the glass side
+# (plastic between glass side and board), so the glass sits 2.5 - 1.5 = 1.0 mm under the board.
+OLED_GLASS_T = 1.5
+OLED_UNDER = under(OLED, 'SSD1306_0.96in_I2C_Under',
+                   'SSD1306 0.96in OLED hung under the board, glass up through a window: header soldered '
+                   'with its plastic on the glass side. Pin order as seen from above: P1 P2 SCL SDA.',
+                   silk=[], holes=[], height=5.0,           # plastic 2.5, module PCB 1.2, parts and pin stubs 1.3
+                   mech_extra=[('glass', (3.81 - 13.35, -21.9, 3.81 + 13.35, -2.6), 2.5 - OLED_GLASS_T, 2.5)])
+# the window over the active area, module frame (pin 1 at 0,0, Y down as mounted), with margin for
+# the spread between makers (the active area's offset from the header varies ~0.7 mm)
+OLED_AA = (-7.06, 4.5, 14.68, 15.4)
+OLED_WIN_MARGIN = 1.5
+
+# INMP441 under the top board, sound hole up against a port drilled through the board. Fit it flush
+# (the header plastic below the module, on the can side) so no gap leaks round the port.
+MIC_PORT_D = 1.5
+INMP441_UNDER = under(INMP441, 'INMP441_Round_Under',
+                      'INMP441 round mic hung under the board, sound hole up over a 1.5 mm port through the '
+                      'board. Fit it flush: header plastic on the can side.',
+                      holes=[(0.0, 0.0, MIC_PORT_D)], silk=[('circle', (0, 0), 1.2)],
+                      # flush: module PCB against the board, the can and the trimmed pin stubs below it
+                      mech_features=[('body', ('circle', 0.0, 0.0, 7.0), 0.0, 1.0),
+                                     ('can', (-2.36, -1.88, 2.36, 1.88), 1.0, 2.0),
+                                     ('pin stubs', (-3.5, -4.8, 3.5, 4.8), 1.0, 2.5)])
+
+MODULES = [SUPERMINI, PCM5102, INMP441, GY521, JOYSTICK, MAX98357, OLED, OLED_UNDER, INMP441_UNDER]

@@ -152,9 +152,11 @@ def check(boards, gap=None, standoff_r=3.3, allowed=()):
 
     # 4. standoffs: keep solids between the boards (or under the feet) away from them
     for bd in boards:
+        above = [o['z_front'] - PCB_T for o in boards if o['z_front'] > bd['z_front']]
+        ceiling = min(above) if above else math.inf     # a standoff ends at the next board up
         for hx, hy in bd['holes']:
             for s in solids:
-                if s.board is not bd:
+                if s.board is not bd or s.z0 >= ceiling - 1e-6:
                     continue
                 if dist_box_point(s.box, (hx, hy)) < standoff_r and not s.owner.endswith(('/H1', '/H2', '/H3', '/H4')):
                     errors.append(f'{s} touches the standoff at {hx:.1f},{hy:.1f}')

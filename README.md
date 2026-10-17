@@ -14,6 +14,8 @@ the box. It leaves echoes when the delay is on, stutters with the stutter, juggl
 ([tools/uisim/tour.sh](tools/uisim/tour.sh)).
 
 **Project page and browser flasher:** https://willbearfruits.github.io/samplooler/  
+**Other instruments for the same board:** the [Samplooler Library](https://github.com/willbearfruits/samplooler-library),
+flashed from [its page](https://willbearfruits.github.io/samplooler-library/)  
 **A 90-second tour with sound:** [on the project page](https://willbearfruits.github.io/samplooler/#video)
 (the file is [hardware/images/samplooler-showcase-full.mp4](hardware/images/samplooler-showcase-full.mp4)).
 It is rendered, not filmed: the sound is the firmware's own playback engine running on a computer, and the screen
@@ -23,9 +25,13 @@ is the firmware's own drawing code.
 
 ## Status
 
-Early. The firmware builds for both chips on every push. The circuit boards pass their electrical
-and design-rule checks but have not been made yet, and the C3 case has not been printed, so expect
-a round of fixes once real parts arrive. Reports of builds, good or bad, are welcome in the issues.
+Early. The firmware builds for both chips on every push. The first stack board (rev C) has been
+made and runs it: screen, microphone, tilt, line out and USB MIDI/audio work on the committed pin
+map. The Mini board and the C3 build have not been assembled, and no case has been printed yet, so
+expect a round of fixes there. Reports of builds, good or bad, are welcome in the issues.
+
+The manual, for playing and for building the stack: [RTFM](https://willbearfruits.github.io/samplooler/manual.html)
+(also as a [PDF](https://willbearfruits.github.io/samplooler/samplooler-rtfm.pdf)).
 
 ## Two versions
 

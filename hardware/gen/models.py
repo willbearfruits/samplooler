@@ -119,17 +119,39 @@ def gy521(M):
     return m
 
 
-def ky023(M):
+def joystick(M):
+    """The bare PS2-style joystick on the carrier, origin at the stick (heights: modules.JOY_*)."""
     m = Model()
-    top = HDR + 1.6
-    m.header([(0, 2.54 * i) for i in range(5)], top)
-    m.box(-1.5, -8.0, 32.5, 18.0, HDR, top, 'pcb_black')
-    sx, sy = M.KY023['stick']
-    m.box(sx - 8, sy - 8, sx + 8, sy + 8, top, top + 10.5, 'silver', 0.7)              # gimbal
-    m.cyl(sx, sy, 5.5, top + 10.5, top + 12.0, 'silver', shine=0.8)                    # dome
-    m.cyl(sx, sy, 2.0, top + 12.0, top + 15.5, 'black')                                # stick
-    m.cyl(sx, sy, 9.75, top + 15.5, top + 20.5, 'cap', shine=0.1)                      # thumb cap
-    m.box(sx + 9.5, sy + 5.0, sx + 13.5, sy + 9.0, top, top + 1.5, 'black')             # button
+    m.box(-8.2, -7.3, 8.2, 7.3, 0, M.JOY_FRAME_H - 1.5, 'silver', 0.7)                  # frame
+    m.box(-4.85, 7.3, 4.85, 11.45, 0, 9.0, 'black')                                    # pot H
+    m.box(-11.2, -4.85, -7.3, 4.85, 0, 9.0, 'black')                                   # pot V
+    m.box(-5.6, -14.25, 5.6, -6.95, 0, 3.5, 'black')                                   # switch
+    m.cyl(0, 0, 6.5, M.JOY_FRAME_H - 1.5, M.JOY_FRAME_H, 'black', shine=0.5)           # dome
+    m.cyl(0, 0, 2.5, M.JOY_FRAME_H, M.JOY_CAP[0], 'black')                             # stick
+    m.cyl(0, 0, M.JOY_CAP_R, M.JOY_CAP[0], M.JOY_CAP[1], 'cap', shine=0.1)             # thumb cap
+    for _, x, y, _ in M.JOYSTICK['pads']:
+        m.box(x - 0.3, y - 0.3, x + 0.3, y + 0.3, -2.5, 0.0, 'silver', 0.6)
+    return m
+
+
+def oled_under(M):
+    """The OLED hung under the board, glass toward it (drawn Y-negated, as its footprint)."""
+    m = Model()
+    g = M.OLED_GLASS_T
+    m.header([(2.54 * i, 0) for i in range(4)], HDR + 1.2)
+    m.box(-9.84, -26.3, 17.46, 1.5, HDR, HDR + 1.2, 'pcb_blue')
+    m.box(3.81 - 13.35, -21.9, 3.81 + 13.35, -2.6, HDR - g, HDR, 'glass', 0.9)
+    m.box(-7.06, -15.4, 14.68, -4.5, HDR - g - 0.02, HDR - g, 'screen', 0.6)
+    return m
+
+
+def inmp441_under(M):
+    """The mic hung flush under the board, sound hole up (drawn Y-negated, as its footprint)."""
+    m = Model()
+    m.cyl(0, 0, 7.0, 0, 1.0, 'pcb_blue')
+    m.box(-2.36, -1.88, 2.36, 1.88, 1.0, 2.0, 'silver', 0.9)                           # MEMS can
+    for x, y in [(-2.54, 3.81), (0, 3.81), (2.54, 3.81), (-2.54, -3.81), (0, -3.81), (2.54, -3.81)]:
+        m.box(x - 0.32, y - 0.32, x + 0.32, y + 0.32, 1.0, 2.5, 'gold', 0.8)           # trimmed pins
     return m
 
 
@@ -172,6 +194,7 @@ def ec11_knob(shaft=25.0):
 
 BUILDERS = {
     'ESP32-S3_SuperMini': supermini, 'GY-PCM5102': pcm5102, 'INMP441_Round': inmp441,
-    'GY-521_MPU6050': gy521, 'KY-023_Joystick': ky023, 'MAX98357A_Breakout': max98357_header,
+    'GY-521_MPU6050': gy521, 'PS2_Joystick': joystick, 'MAX98357A_Breakout': max98357_header,
     'SSD1306_0.96in_I2C': oled, 'SSD1306_0.96in_I2C_NoHoles': oled,
+    'SSD1306_0.96in_I2C_Under': oled_under, 'INMP441_Round_Under': inmp441_under,
 }
