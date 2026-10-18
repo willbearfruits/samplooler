@@ -1089,6 +1089,7 @@ static void rec_pump(void)
     uint32_t w = ring_now(), oldest = w - RING + RING_SAFE;
     float g = gate_lin();
     if (rs_st == RS_ARMED) {
+        if ((int32_t)(w - r_scan) <= 0) return;                   // (the ring has not reached the scan yet)
         if ((int32_t)(r_scan - oldest) < 0) r_scan = oldest;
         for (uint32_t f = r_scan; f != w; f++) {
             float x = ring_at(f);
@@ -1103,6 +1104,8 @@ static void rec_pump(void)
         if (rs_st == RS_ARMED) { r_scan = w; return; }
     }
     if (rs_st != RS_REC || !buf_free(r_buf)) return;
+    if ((int32_t)(w - r_copied) <= 0) return;                     // the take starts on a step still to come (a resample at
+                                                                  // DRONE: up to a beat): nothing to copy yet
     if (r_n >= MAXLEN) { r_copied = w; return; }                  // full: 8 s
     if ((int32_t)(r_copied - oldest) < 0) {                       // fell behind the ring (the buffer was busy too long)
         int32_t miss = (int32_t)(oldest - r_copied);
@@ -1212,7 +1215,12 @@ void kit_rec_release(bool confirmed)
 
 bool  kit_recording(void) { return rs_st == RS_ARMED || rs_st == RS_REC; }
 bool  kit_armed(void) { return rs_st == RS_ARMED; }
-float kit_rec_seconds(void) { return rs_st == RS_REC ? (float)(audio_frames() - r_S) / SRF : 0.0f; }
+float kit_rec_seconds(void)                                       // (a resample's start may still be ahead: 0 until then)
+{
+    if (rs_st != RS_REC) return 0.0f;
+    int32_t n = (int32_t)(audio_frames() - r_S);
+    return n > 0 ? (float)n / SRF : 0.0f;
+}
 
 // ================================================================ the module
 int kit_rendering(void)
@@ -1248,6 +1256,22 @@ static void render_logic(void)
     if (k != last_want) { last_want = k; debounce = 6; J.st = J_IDLE; }   // settings still moving: wait a moment
     if (debounce > 0) { debounce--; return; }
     render_start(b, k);
+}
+
+// the first break, printed whole at boot before the sound starts (about a second on the board), so WRECK plays it
+// from the first beat: AMEN unless the settings say another (SAMPLED, with no take after a restart, is AMEN too)
+static void render_now(void)
+{
+    int b = (int)P(KP_BREAK);
+    uint32_t k = want_key();
+    render_start(b, k);
+    if (!buf_free(J.buf)) { J.st = J_IDLE; return; }
+    render_prepare();
+    while (J.pos < J.len) render_some(RENDER_TICK);
+    finish_begin();
+    while (J.fpos < J.len) finish_some(FINISH_TICK);
+    finish_end();
+    last_want = k;
 }
 
 static void tick(const ctl_t *c)
@@ -1286,6 +1310,7 @@ static void init(void)
     }
     brk[1].pcm = pcm[1]; brk[1].len = 2 * AUDIO_SR; brk[1].nslices = 16;
     for (int j = 0; j < 16; j++) { brk[1].slice[j] = j * (2 * AUDIO_SR / 16); brk[1].step[j] = (uint8_t)j; brk[1].kind[j] = KS_OTHER; }
+    render_now();
 }
 
 static void changed(int p) { if (p == KP_BREAK || p < 0) no_take_said = false; }

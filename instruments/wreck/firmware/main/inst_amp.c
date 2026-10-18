@@ -190,7 +190,7 @@ static hb_t up_f, dn_f;
 
 // coefficients (init)
 static float k_open, k_mute, k_prehp, k1hp, k2lp, k_dchp, k_tlp, k_thp, k_bass, k_hlp;
-static float k_pluck, k_dive, k_vib, k_pm, k_dipup, k_accp, k_g, k_cab;
+static float k_pluck, k_dive, k_vib, k_dipup, k_accp, k_cab;
 #define VIB_INC (5.2f / SR)
 
 // filter states
@@ -226,7 +226,7 @@ static uint32_t fb_since;                  // the frame the partial began (the s
 #define NH 4
 typedef struct { float ph, inc, env, amp, att, ldk, w; int stage; bool organ; } hv_t;   // ldk: log2 of the decay per sample
 static hv_t HV[NH];
-static int  h_next;
+static unsigned h_next;
 static float harp_lp, harp_k, harp_kd, harp_kend, org_lp;   // the harpsichord's brightness (opens at a pluck), the organ's tone
 
 // what it plays
@@ -309,11 +309,23 @@ static void release(float tau)
     if (V.stage == 1 || V.stage == 2) { V.stage = 3; V.rel = onepole_s(tau); }
 }
 
+// The strings at rest: the same phases at every strike from silence, so a chord struck (the drone entered from a
+// silent zone) sounds the same every time. The doubled strings are a few cents apart and beat over seconds: left
+// wherever the last note ended, a drone's first seconds (and its feedback's rise) would depend on the whole history.
+// Only from silence (the last note's gate under -30 dB; its release takes seconds more to reach stage 0): a note
+// over a ringing one keeps its phases.
+static void strings_rest(gvoice_t *v)
+{
+    for (int k = 0; k < 6; k++) v->ph[k] = 0.137f * (float)k + 0.05f;
+    v->phb = 0.0f; v->phf = 0.0f;
+}
+
 static void play(int note, int kind, float acc, int32_t len, int fl, uint32_t frame)
 {
     gvoice_t *v = &V;
     bool ringing = v->stage != 0 && v->env > 0.03f;
     bool legato = (fl & RF_SL) && ringing && v->stage != 3;
+    if (v->stage == 0 || v->env < 1e-2f) { strings_rest(v); fb_wob = 0.0f; }   // (and the feedback's wobble starts over)
     v->pitch += v->bend; v->bend = 0; v->bend_to = 0; v->bend_wait = -1;   // a bend goes into the pitch: nothing jumps
     v->target = (float)note;
     float glide = legato ? 0.10f : (kind == NT_DRONE && ringing) ? 0.45f : 0.0f;
@@ -1044,16 +1056,14 @@ static void init(void)
     k_pluck = 1.0f - onepole_s(0.025f);
     k_dive = onepole_s(0.02f);
     k_vib = onepole_s(0.35f);
-    k_pm = onepole_s(0.003f);
     k_dipup = onepole_s(0.004f);
     k_accp = onepole_s(0.6f);
-    k_g = onepole_s(0.01f);
     k_cab = onepole_hz(7000.0f);
     biquad_set(&cab[0], BQ_HP, 70.0f, 1.2f, 0.0f);                // the cab: a high pass with the low resonance on it,
     biquad_set(&cab[1], BQ_PEAK, 1000.0f, 1.1f, -4.0f);           // the honk cut (MIDS moves it),
     biquad_set(&cab[2], BQ_LP, 4300.0f, 1.2f, 0.0f);              // the top rolled off, a little presence before it
     svf_set(&wah, 800.0f, 4.5f);
-    for (int k = 0; k < 6; k++) V.ph[k] = 0.137f * (float)k + 0.05f;
+    strings_rest(&V);
     V.pitch = V.target = 45.0f; V.glide = 1.0f; V.bend_wait = -1; V.swell = 1.0f; V.swell_to = 1.0f; V.swell_k = onepole_s(0.004f);
     V.dipg = 1.0f; V.accp = 1.0f;
     r_lvl.v = 0.7f; r_gtr.v = 1.0f; r_bass.v = 1.0f; r_sub.v = 0.5f; r_mk.v = 1.0f; r_tone.v = 0.45f; r_send.v = 0.2f;

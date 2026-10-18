@@ -22,11 +22,13 @@ static const param_t core_params[CP_N] = {
     [CP_LOOP_KEEP]  = { "LOOP KEEP", "lpkp", GROUP_LOOP, PK_NUM, PF_INT | PF_SYS, 0, 100, 5, 100, "%", NULL, "LESS: IT FADES EACH PASS" },
     [CP_LOOP_CLEAR] = { "CLEAR LOOP", "lpcl", GROUP_LOOP, PK_ACT, SYS, 0, 0, 0, 0, "", NULL, "PRESS TO ERASE IT" },
     [CP_VOLUME]     = { "VOLUME", "vol ", GROUP_SYSTEM, PK_NUM, PF_INT | PF_SYS, 0, 150, 5, 100, "%", NULL, "OVER 100%: LIMITER WORKS" },
+    [CP_SPEAKER]    = { "SPEAKER", "spkr", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 1, "", on_off, "OFF: THE LINE OUT ONLY" },
     [CP_MIC]        = { "MIC GAIN", "mic ", GROUP_SYSTEM, PK_NUM, PF_INT | SYS, 0, 36, 3, 12, "dB", NULL, "HOW HARD THE MIC LISTENS" },
     [CP_TILT_SETUP] = { "TILT SETUP", "tlst", GROUP_SYSTEM, PK_ACT, SYS, 0, 0, 0, 0, "", NULL, "WHICH WAY IS DOWN" },
     [CP_MOTION]     = { "MOTION", "mot ", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 1, "", on_off, "OFF: TILT IS IGNORED" },
     [CP_JOY]        = { "JOYSTICK", "joy ", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 1, "", joy_l, "AUTO: USED IF FITTED" },
     [CP_JOY_TURN]   = { "JOY TURN", "joyt", GROUP_SYSTEM, PK_ENUM, SYS, 0, 3, 1, 0, "", turn_l, "IF THE STICK IS TURNED" },
+    [CP_REC_BTN]    = { "REC BUTTON", "recb", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 1, "", on_off, "OFF: BOOT RECORDS INSTEAD" },
     [CP_MIDI_CH]    = { "MIDI CH", "mch ", GROUP_SYSTEM, PK_NUM, PF_INT | SYS, 1, 16, 1, 1, "", NULL, "CHANNEL FOR NOTES AND CC" },
     [CP_MIDI_OUT]   = { "MIDI CC OUT", "mcc ", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 1, "", on_off, "SEND TILT AND STICK AS CC" },
     [CP_LED]        = { "LED", "led ", GROUP_SYSTEM, PK_ENUM, SYS, 0, 2, 1, 1, "", led_l, "THE BOARD'S COLOUR LIGHT" },
@@ -52,7 +54,13 @@ void params_init(void)
 
 void params_defaults(bool sound_only)
 {
-    for (int p = 0; p < NP; p++) if (!sound_only || param_in_sound(p)) pv[p] = param(p)->def;
+    for (int p = 0; p < NP; p++) if (!sound_only || param_in_sound(p)) pv[p] = param_def(p);
+}
+
+float param_def(int p)
+{
+    if (p == CP(CP_REC_BTN) && INST.rec_button_off) return 0.0f;
+    return param(p)->def;
 }
 
 bool param_in_sound(int p) { return p < NI && param(p)->kind != PK_ACT && !(param(p)->flags & PF_SYS); }

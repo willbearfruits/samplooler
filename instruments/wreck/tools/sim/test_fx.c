@@ -1,6 +1,10 @@
 // FX's checks (test_inst.c calls test_mod_fx() with the axis at 10 and the controls quiet). Most drive a second FX
 // engine directly (fx_engine_new: its own tape and reverb), so the measurements are exact and the instrument's own
 // engine is left alone; then the same things through the whole instrument, and WAVs to listen to.
+// Last, when asked (WRECK_SOAK=<minutes a zone> ./run.sh inst): the soak, a long run of the whole machine at every
+// zone with the hands, the sounds, takes, taps and tempo changes thrown at it, watched for NaN, peaks, silence, a
+// tape adrift, a take or a render that never ends, and the cost. It drops the recording of what was played as it
+// goes (an hour is a gigabyte), so the run ends with it: the checks after it read that recording.
 #include "sim.h"
 #include "wreck.h"
 #include <math.h>
@@ -719,6 +723,110 @@ static void t_renders(void)
     }
 }
 
+// ---------------------------------------------------------------- the soak
+extern int (*wr_sim_usb_in)(int16_t *mono, int n);
+void front_midi(uint8_t st, uint8_t d1, uint8_t d2);
+void wr_prof(float *us, int n);
+void sim_finish(void);
+static void quiet(void) { SI.mic = NULL; SI.mic_u = NULL; SI.jx = SI.jy = 0; SI.joy = true; SI.imu = true; sim_tilt(0, 0); }
+static uint32_t soak_rng = 0x5eed5eedu;
+static int soak_pick(int n) { return (int)(rng_next(&soak_rng) % (uint32_t)n); }
+static float soak_mic(float t, void *u) { (void)u; return 0.25f * sinf(6.2831853f * 160.0f * t) * (fmodf(t, 0.3f) < 0.04f ? 1.0f : 0.03f) + 0.01f * sim_noise(); }
+static int soak_usb(int16_t *mono, int n)
+{
+    uint32_t f0 = audio_frames();
+    for (int i = 0; i < n; i++) { uint32_t f = f0 + (uint32_t)i, d = f % 5000u; mono[i] = (int16_t)(d < 320u ? 12000.0f * sim_noise() * (1.0f - (float)d / 320.0f) : 0.0f); }
+    return n;
+}
+static void soak(int minutes)
+{
+    section("soak");
+    note("%d minutes a zone", minutes);
+    quiet(); front_midi(0xC0, 0, 0); set("xchg", 1); set("stmp", 100); set("xaxs", 10); sim_run(1.0f);
+    static const float ax[4] = { 10, 37, 62, 90 };
+    int nan = 0, over = 0, silent = 0, windows = 0, stuck_render = 0, adrift = 0, took = 0, taps = 0, sounds = 0, sweeps = 0, tempos = 0;
+    float worst_peak = 0, worst_lag = 0, worst_us[8] = { 0 }, worst_total = 0; int worst_z = 0;
+    (void)worst_us;
+    float render_since = -1, longest_render = 0;
+    for (int z = 0; z < 4; z++) {
+        set("xaxs", ax[z]);
+        float t_end = sim_t + 60.0f * (float)minutes;
+        { float junk[8]; wr_prof(junk, 8); }
+        static float win_us[8][4096]; int nwin = 0;                // each window's cost per part: the medians (the
+        while (sim_t < t_end) {                                    // host's cycle counter wraps now and then)
+            sim_n = 0;                                             // (the memory stays flat: a window at a time)
+            float t0 = sim_t;
+            for (int k = 0; k < 4; k++) {
+                switch (soak_pick(14)) {
+                case 0: case 1: {                                  // the knob swept about the zone, and back
+                    int n = 2 + soak_pick(5);
+                    for (int i = 0; i < n; i++) { set("xaxs", clampf(ax[z] + (float)(soak_pick(25) - 12), 0.0f, 100.0f)); sim_run(0.25f); }
+                    set("xaxs", ax[z]); sweeps++;
+                    break; }
+                case 2: front_midi(0xC0, (uint8_t)soak_pick(WR_NSOUNDS), 0); sounds++; break;
+                case 3: sim_tilt((float)(soak_pick(71) - 35), (float)(soak_pick(71) - 35)); sim_run(1.5f); sim_tilt(0, 0); break;
+                case 4: SI.jx = (float)(soak_pick(21) - 10) * 0.1f; SI.jy = (float)(soak_pick(21) - 10) * 0.1f; sim_run(1.5f); SI.jx = SI.jy = 0; break;
+                case 5: for (int i = 0; i < 10; i++) SI.burst[i] = (vec3_t){ 0, 0, 1.0f + (i == 3 ? 3.0f : i == 4 ? -1.8f : 0.0f) }; SI.nburst = 10; sim_tick(); break;
+                case 6: sim_rec(0.1f); sim_run(1.5f); sim_rec(0.1f); taps++; break;   // a stop, a start
+                case 7: case 8: {                                  // a take, from the mic, USB or the machine itself
+                    int src = soak_pick(3);
+                    set("xsrc", (float)src); SI.mic = soak_mic; wr_sim_usb_in = soak_usb;
+                    SI.rec = true; sim_run(1.0f + 0.5f * (float)soak_pick(7)); SI.rec = false; sim_tick();
+                    SI.mic = NULL; wr_sim_usb_in = NULL; took++;
+                    break; }
+                case 9: set("stmp", (float)(60 + soak_pick(121))); tempos++; break;
+                case 10: {                                         // one of the modules' params to an end and back
+                    int p = soak_pick(M_N * MOD_PARAMS_MAX);
+                    const param_t *d = param(p);
+                    if (d->kind != PK_ACT && !(d->flags & PF_HIDE)) { float keep = pv[p]; param_set(p, soak_pick(2) ? d->max : d->min); sim_run(1.0f); param_set(p, keep); }
+                    break; }
+                case 11: SI.jy = 1.0f; sim_run(1.0f); SI.jy = 0; break;   // a roll
+                default: break;
+                }
+                sim_run(1.0f);
+            }
+            if (!perf.running) { sim_rec(0.1f); sim_run(0.5f); }
+            // what this window did
+            windows++;
+            float pk = 0; double e = 0; int bad = 0;
+            for (int i = 0; i < sim_n; i++) { float v = sim_out[i]; uint32_t u; memcpy(&u, &v, 4); if ((u & 0x7f800000u) == 0x7f800000u) { bad++; continue; } float a = fabsf(v); if (a > pk) pk = a; e += (double)v * v; }
+            float r = sim_n ? (float)sqrt(e / sim_n) : 0;
+            nan += bad;
+            if (pk >= 1.0f) over++;
+            if (pk > worst_peak) worst_peak = pk;
+            if (r < 0.003f) silent++;
+            sim_tilt(0, 0); sim_run(1.0f);
+            float lag = fabsf(fx_tape_lag());
+            if (lag > worst_lag) worst_lag = lag;
+            if (lag > AUDIO_SR) adrift++;                          // flat for a second and still a second behind
+            if (kit_rendering()) { if (render_since < 0) render_since = t0; else if (sim_t - render_since > longest_render) longest_render = sim_t - render_since; }
+            else render_since = -1;
+            if (render_since >= 0 && sim_t - render_since > 30.0f) stuck_render++;
+            float us[8]; wr_prof(us, 8);
+            if (nwin < 4096) { for (int m = 0; m < 8; m++) win_us[m][nwin] = us[m] * 0.96f; nwin++; }
+        }
+        float med[8] = { 0 }, total = 0;
+        for (int m = 0; m < 5; m++) {                              // the median of the windows
+            float *v = win_us[m];
+            for (int i = 1; i < nwin; i++) { float x = v[i]; int j = i - 1; while (j >= 0 && v[j] > x) { v[j + 1] = v[j]; j--; } v[j + 1] = x; }
+            med[m] = nwin ? v[nwin / 2] : 0;
+            if (med[m] > worst_us[m]) worst_us[m] = med[m];
+            total += med[m];
+        }
+        if (total > worst_total) { worst_total = total; worst_z = z; }
+        note("%s: %d windows; the cost's median beat %.1f amp %.1f fx %.1f kit %.1f mix %.1f us/block", host_zone_name(z), nwin,
+             (double)med[M_BEAT], (double)med[M_AMP], (double)med[M_FX], (double)med[M_KIT], (double)med[M_N]);
+    }
+    note("%d windows of about 10 s: %d sweeps, %d sounds, %d takes, %d taps, %d tempo changes", windows, sweeps, sounds, took, taps, tempos);
+    check(nan == 0, "soak: no NaN or inf in %d windows (%d)", windows, nan);
+    check(over == 0 && worst_peak < 1.0f, "soak: nothing over full scale (the peak %.3f)", (double)worst_peak);
+    check(silent <= windows / 20, "soak: it kept playing (%d of %d windows under -50 dB rms)", silent, windows);
+    check(adrift == 0 && worst_lag < 2.0f * AUDIO_SR, "soak: the tape never drifts off (%.2f s behind at worst)", (double)worst_lag / AUDIO_SR);
+    check(stuck_render == 0, "soak: no render or take hangs (the longest render %.1f s)", (double)longest_render);
+    check(worst_total < 17.0f, "soak: the cost at the busiest zone (%s): %.1f us per block, the median of its windows", host_zone_name(worst_z), (double)worst_total);
+    quiet(); front_midi(0xC0, 0, 0); set("stmp", 100); set("xaxs", 10); set("xsrc", 0); sim_run(1.0f);
+}
+
 void test_mod_fx(void)
 {
     perf_t keep = *(perf_t *)&perf;
@@ -735,4 +843,11 @@ void test_mod_fx(void)
     t_live();
     SI.jx = SI.jy = 0; sim_tilt(0, 0);
     set("xaxs", 10); set("xchg", 0); sim_run(1.0f);
+    const char *sk = getenv("WRECK_SOAK");
+    if (sk && atoi(sk) > 0) {
+        soak(atoi(sk));
+        sim_finish();
+        printf("\n%d checks, %d failed (a soak run ends here: the checks after it read the recording it dropped)\n", checks_run, checks_failed);
+        exit(checks_failed ? 1 : 0);
+    }
 }

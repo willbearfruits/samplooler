@@ -115,6 +115,7 @@ const brk_t *beat_test_break;              // tools/sim: a break of the test's o
 typedef struct { uint32_t frame; int16_t slice; int8_t lane, rev; uint8_t n; float rate, lvl; } beat_trig_t;
 beat_trig_t beat_tlog[16384]; int beat_tlog_n;   // every hit started, for the tests
 double beat_life_sum; int beat_life_n;     // how long the slices played (frames), for the tests
+int beat_steal_n; float beat_steal_env;    // voices stolen while still sounding, and the loudest one's level (int16 x env)
 #endif
 static inline IRAM_ATTR const brk_t *the_break(void)
 {
@@ -229,6 +230,10 @@ static IRAM_ATTR voice_t *v_alloc(void)
         float e = V[k].phase == 3 ? V[k].env : V[k].env + 1.0f;   // a voice fading out goes first, the quietest
         if (e < be) { be = e; best = k; }
     }
+#ifndef ESP_PLATFORM
+    beat_steal_n++;
+    if (V[best].env > beat_steal_env) beat_steal_env = V[best].env;
+#endif
     v_off(&V[best]);
     return &V[best];
 }
@@ -718,7 +723,11 @@ static IRAM_ATTR void play_hit(int i)
     }
     if (p->flags & F_DIVE) glide = expm(-0.6931f / (float)st_len);
     if (p->flags & F_RISE) glide = expm(0.6931f / (float)st_len);
-    if (p->flags & F_STOP) { glide = expm(-3.5f / ((float)st_len * (float)(p->span ? p->span : 1))); ring_s = 0.0f; }
+    if (p->flags & F_STOP) {                                      // the tape stops over `span` steps: the rate falls to 3 %
+        float stop = (float)st_len * (float)(p->span ? p->span : 1);
+        glide = expm(-3.5f / stop);
+        ring_s = 0.5f * stop * (1.0f / (float)AUDIO_SR);          // and the level dies with it (a hold at rate 0 would sit
+    }                                                             // on one sample: a DC step until the next hit)
     voice_t *v = slice_play(0, p->slice, rate, rev, lvl, gate, att, rel, ring_s, glide, span);
     tlog(v, n);
     if (i == 0 && p->layer >= 0) tlog(slice_play(1, p->layer, rate, false, lvl * 0.8f, 0, 32.0f, 64.0f, ring_s, 1.0f, 0.0f), 1);

@@ -35,8 +35,16 @@ STEPS picks which steps the two ends use (x2-x1/4, x1-x1/4, x2-x1/2, or STAY x1)
 | stick down | dive: the break and the amp drop, down to an octave |
 | stick left / right | crush / drive |
 | knock on the box | a fill (longer when harder); towards DRONE a chord hit |
-| hold REC | sample a new break (below) |
-| tap REC | stop (the tape brakes to a halt); tap again to start (it spins up) |
+| hold REC (0.3 s or more) | sample a new break (below) |
+| tap REC | stop (the tape brakes to a halt, STOP in the header); tap again to start (it spins up) |
+
+REC is the BOOT button on the board when WRECK is new: SYSTEM > REC BUTTON starts OFF, so the REC pin (on the kit,
+the joystick's click) does nothing until you turn it on. BOOT is a REC button on every board either way, and so are
+a sustain pedal (MIDI CC 64) and MIDI note 60. A REC that is already down when WRECK starts counts for nothing until
+it has been let go.
+
+SYSTEM has the core's settings: volume, speaker, mic gain, tilt setup, motion, the joystick, the REC button, MIDI
+channel and CC out, the LED, hints, the screen saver, ABOUT and RESET ALL.
 
 ## The breaks
 
@@ -52,12 +60,17 @@ To use a real one, sample it:
 
 1. SAMPLE > SAMPLE FROM: MIC (anything the board hears), USB (what the computer plays: the board is a USB sound card;
    USB THRU lets you hear it), or RESAMPLE (WRECK's own output: chop it, resample it, chop it again).
-2. Hold REC while it plays and let go. The screen says WAITING FOR A SOUND until something is heard. The take starts
-   at its first sound (REC's own click is left out; RESAMPLE starts on WRECK's step instead), is trimmed to whole
-   beats at WRECK's tempo (KIT 2 > LENGTH: AUTO) or to 1, 2 or 4 bars (the tempo then comes from the take), and cut
-   into slices at its hits (SLICES: AUTO, or 8, 16, 32 even slices). Up to 16 beats. A tap on REC records nothing.
+2. Hold REC while it plays and let go. REC counts as held after 0.3 s (the header shows REC); a shorter press is a
+   tap, which stops or starts the machine and records nothing. The screen says WAITING FOR A SOUND until something
+   is heard: let go before that and nothing changes (NOTHING HEARD: NO BREAK). The take starts at its first sound
+   (REC's own click is left out; RESAMPLE starts on WRECK's step instead), is trimmed to whole beats at WRECK's
+   tempo (KIT 2 > LENGTH: AUTO) or to 1, 2 or 4 bars (the tempo then comes from the take), and cut into slices at
+   its hits (SLICES: AUTO, or 8, 16, 32 even slices). A take is 8 seconds at most (up to 16 beats): at 8 s it ends
+   by itself, and REC does nothing more until it has been let go.
 3. It plays at once; KIT > BREAK shows SAMPLED. Pick a built-in break to go back. KIT 2 > GATE sets how loud the
-   first sound must be.
+   first sound must be. The take is not kept when WRECK is switched off: it starts with a built-in break again.
+
+While the step grid is open, REC belongs to the grid (below) and does not sample.
 
 ## The step grid
 
@@ -82,8 +95,9 @@ The AMP is a downtuned guitar and bass in one fuzzed voice: power chords on the 
 standard down to drop G), in the song's scale or a darker one (AMP > SCALE: MINOR, PHRYGIAN, HARM MINOR). At the
 BREAKCORE end it is silent, stabs or chugs (AMP > BREAKCORE); at HARDCORE it chugs on the kicks or tremolo picks
 (CHUGS, TREM PICK); at SLUDGE it plays one of its riffs (RIFF); at DRONE it holds one chord, swelling in (SWELL), with
-feedback singing over it (FEEDBACK) and the amp's hum (HUM). ORGAN and HARPSI turn it into an organ or a
-harpsichord-like line; MOD is a wah or a tremolo on the grid.
+feedback singing over it (FEEDBACK: at 50 it only matches the chord's own 12th; from 85 up it sings over it) and the
+amp's hum (HUM). ORGAN and HARPSI turn it into an organ or a harpsichord-like line; MOD is a wah or a tremolo on the
+grid.
 
 The FX: on the drums, CRUSH (bits and rate), DRIVE (WARM, TORN, FOLD) and a FILTER; DARK closes a low pass towards
 DRONE, DOOM CRUSH and DOOM DRIVE are what the doom end keeps of them. On everything: the tape (WOW and FLUTTER grow
@@ -285,11 +299,32 @@ it (MINOR, PHRYGIAN) without changing the flock's.
 | WHO IS THERE |  | The boards linked now |
 <!-- /tables -->
 
+## The screen and the LED
+
+The header: the zone (REC while sampling, ... while a break prints, STOP when stopped), the axis as a gauge with the
+four zones, the song's beat (four dots, the bar's first bigger), the link (two bars that fill on the beat once a
+board is linked and in time; a blinking dot while it looks for one) and the level. Along its bottom edge, the pattern's steps
+and the one playing. The scene is the break's waveform with its slices at the breakcore end (the slice playing lit
+and jolted by the edits), the amp stack in smoke at the doom end; the break's name and the machine's tempo top left.
+
+The LED runs from hot pink at BREAKCORE to a dim red at DRONE, brighter on the beat; red while sampling; nearly off
+when stopped. SYSTEM > LED sets how bright it is.
+
 ## MIDI
 
-Settings on the CCs in the tables above; program change picks a sound.
+On the channel set in SYSTEM > MIDI CH, both ways. In: the settings on the CCs in the tables above (those without a
+number have no CC: the WRECK, SAMPLE, MIX, SONG and LINK pages, so the axis is the knob's only); a program change
+picks a sound in the list's order (the ten, then any saved with SAVE AS); CC 64 (a sustain pedal) and note 60 are
+REC; note 64 holds and frees the motion. Out: a CC when a setting is changed on the device, a program change on a sound change,
+and with SYSTEM > MIDI CC OUT on the lean (CC 12, 13) and the stick (CC 14, 15).
 
 ## When something is wrong
 
+- REC does nothing: SYSTEM > REC BUTTON is OFF (as it is when WRECK is new). Use BOOT, or turn it on. REC held while
+  WRECK starts is ignored until it has been let go.
+- The take ends before you let go: a take is 8 seconds at most. Let go of REC before it counts again.
+- NOTHING HEARD: NO BREAK: the sound was under KIT 2 > GATE, or the source is not the one playing (SAMPLE FROM).
 - Knocks are missed, or it fills by itself when you carry it: WRECK > KNOCK SENSE, or KNOCKS: OFF.
 - Sampling from USB is silent: the computer must play to the board's sound card (WRECK in the sound settings).
+- The tempo will not change: a loop on a linked board keeps it (A LOOP KEEPS THE TEMPO). SONG > TEMPO follows the flock.
+- Back to new: SYSTEM > RESET ALL (the REC-at-power-on reset of the core needs REC BUTTON on).

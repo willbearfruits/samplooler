@@ -51,6 +51,7 @@ static volatile int   mute_req;
 static float          mute_g = 1.0f;
 #define MUTE_STEP 0.1f
 #define AMP_GOOD_BLOCKS 25                              // 50 ms of clean reads before the speaker amp wakes
+static volatile bool speaker_on = true, clock_good;     // SYSTEM > SPEAKER; the clock has been good once
 static int good_blocks;
 static int8_t scope[AUDIO_SCOPE_N];
 static int    scope_w, scope_dec;
@@ -130,7 +131,7 @@ static void IRAM_ATTR audio_task(void *arg)
         if (i2s_channel_read(rx, raw, SAMPLES * sizeof(int32_t), &got, pdMS_TO_TICKS(100)) != ESP_OK || got == 0) {
             read_err++; good_blocks = 0;
             memset(raw, 0, SAMPLES * sizeof(int32_t)); got = SAMPLES * sizeof(int32_t);
-        } else if (good_blocks < AMP_GOOD_BLOCKS && ++good_blocks == AMP_GOOD_BLOCKS) audio_amp_enable(true);
+        } else if (good_blocks < AMP_GOOD_BLOCKS && ++good_blocks == AMP_GOOD_BLOCKS) { clock_good = true; audio_amp_enable(speaker_on); }
         int frames = (int)(got / (2 * sizeof(int32_t)));
         {
             int64_t e = esp_timer_get_time() - (int64_t)(frames64 * 125u / 4u);
@@ -231,6 +232,7 @@ void  audio_get_stats(audio_stats_t *s)
 void  audio_flash_hint(void) { flash_t = esp_timer_get_time(); }
 void  audio_set_mute(bool on) { mute_req = on; }
 bool  audio_silent(void)      { return mute_req && mute_g <= 0.0f; }
+void  audio_speaker(bool on) { speaker_on = on; audio_amp_enable(on && clock_good); }
 void  audio_amp_enable(bool on)
 {
 #if PIN_AMP_SD >= 0

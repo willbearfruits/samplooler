@@ -1,8 +1,9 @@
 // KIT's checks (inst_kit.c): every built-in break renders as it should (its length, its slices on their sixteenths,
 // each kind of drum where it belongs in the spectrum), WAVs of each one to listen to (out/wreck-kit-<break>.wav),
 // sampling from the mic, the USB sound card and WRECK itself (the take starts at the first sound or on the machine's
-// step, REC's click never in it, whole beats, sliced at the hits within 5 ms), a tap records nothing, the old break
-// plays on until the swap, and what it all costs (a render tick, kit_feed, PSRAM).
+// step, REC's click never in it, whole beats, sliced at the hits within 5 ms; a resample at DRONE waits for a step
+// still to come), a tap records nothing, the old break plays on until the swap, and what it all costs (a render tick,
+// kit_feed, PSRAM).
 #include "sim.h"
 #include "wreck.h"
 #include <math.h>
@@ -449,6 +450,36 @@ static void sampling(void)
     check(b->len % mbeat == 0 && b->len > 0 && trms > 0.02f && b->nslices >= 4, "RESAMPLE: whole beats (%d), the machine in it (rms %.3f), %d slices",
           b->len / mbeat, (double)trms, b->nslices);
     snprintf(fn, sizeof fn, "out/%s-kit-take-resample.wav", sim_name); wav16(fn, b->pcm, b->len, 2);
+
+    // ---- RESAMPLE at DRONE: the step it starts on may be up to a beat after the press (the ring has not got there
+    // yet): the take waits for it and holds what WRECK played from that step, not what the ring held before
+    {
+        set("xaxs", 90); sim_run(2.0f);
+        wr_grid_get(&g);
+        int dbeat = (int)(4 * g.fpb / (uint32_t)wr_steps_per_beat(g.feel_q));
+        uint32_t ser4 = kit_break()->serial;
+        {   // press well into a step (past the 35 ms a resample looks back), with the next step over 0.4 s away: the
+            // take's start is still ahead when REC's 0.3 s hold confirms it
+            int32_t stp = (int32_t)wr_step_frames(&g);
+            for (;;) { int32_t to = wr_to_next_step(&g, audio_frames() + TICK_FRAMES); if (to > stp * 2 / 3 && to < stp - AUDIO_SR / 20) break; sim_tick(); }
+        }
+        h = hold_rec(4.5f, false);
+        sim_run(0.6f);
+        b = kit_break(); kit_test_take(&S, &rn, &lost);
+        pos = wr_pos(&g, S); sst = wr_step_start(&g, wr_step_of(&g, pos));
+        // the take against what was played from its start (sim_out is after the master: volume, DC, limiter)
+        double xy = 0, xx = 0, yy = 0; int n = AUDIO_SR / 2;
+        for (int i = 0; i < n && (int)(S + (uint32_t)i) < sim_n; i++) {
+            double x = b->pcm[i] / 32768.0, y = sim_out[S + (uint32_t)i];
+            xy += x * y; xx += x * x; yy += y * y;
+        }
+        double corr = xy / sqrt(xx * yy + 1e-18);
+        check(b->serial != ser4 && pos == sst && (int32_t)(S - h.press) >= -AUDIO_SR / 10 && (int32_t)(S - h.press) <= dbeat / 4 + 2 * TICK_FRAMES && b->len % dbeat == 0 && corr > 0.9,
+              "RESAMPLE at DRONE: the take starts on the step %.0f ms after the press (a step is %.0f ms), whole beats (%d), and it is what was played from there (correlation %.3f)",
+              (double)(int32_t)(S - h.press) * 1000.0 / SRF, (double)(dbeat / 4) * 1000.0 / SRF, b->len / dbeat, corr);
+        set("xaxs", 10); sim_run(1.5f);
+        wr_grid_get(&g);
+    }
 
     // ---- SLICES 16: equal parts
     set("ksli", 2);

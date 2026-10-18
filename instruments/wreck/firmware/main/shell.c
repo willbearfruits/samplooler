@@ -65,6 +65,7 @@ void app_log(const char *fmt, ...)
 void plat_midi3(uint8_t st, uint8_t d1, uint8_t d2) { usb_midi_send3(st, d1, d2); }
 void plat_led(uint8_t r, uint8_t g, uint8_t b) { led_set(r, g, b); }
 void plat_mic_gain(int db) { audio_set_mic_gain_db(db); }
+void plat_speaker(bool on) { audio_speaker(on); }
 bool plat_save_user(int k, const uint8_t *b, int n) { return settings_user_save(k, b, n); }
 int  plat_load_user(int k, uint8_t *b, int cap) { return settings_user_load(k, b, cap); }
 void plat_factory_reset(void) { settings_erase(); }
@@ -131,9 +132,14 @@ static void boot_screen(const char *l1, const char *l2)
     oled_flush();
 }
 
-// Factory reset: REC held from power-on and kept down for 3 s. Letting go earlier does nothing.
+// Factory reset: REC held from power-on, kept down for 3 s, then let go. Letting go earlier does nothing; a REC
+// that never lets go (a stuck button, a short on its pin) cancels it, so it cannot wipe the settings at every start.
+static bool rec_stuck_at_boot;                    // REC was down at power-on and has not been let go since
+static volatile bool rec_button = true;           // SYSTEM > REC BUTTON: the REC pin counts
+void plat_rec_button(bool on) { rec_button = on; }
 static void factory_reset_gesture(void)
 {
+    if (pv[CP(CP_REC_BTN)] < 1.0f) return;       // the button is off: it resets nothing either (RESET ALL in the menu does)
     if (gpio_get_level(PIN_REC) != 0) return;
     int held = 0;
     for (; held < 3000 && gpio_get_level(PIN_REC) == 0; held += 100) {
@@ -142,6 +148,18 @@ static void factory_reset_gesture(void)
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     if (held < 3000) return;
+    int wait = 0;
+    for (; wait < 3000 && gpio_get_level(PIN_REC) == 0; wait += 100) {
+        boot_screen("RESET?", "LET GO OF REC TO RESET");
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    if (wait >= 3000) {                          // 6 s down: not a hand. A stuck REC: no reset, and REC is ignored
+        ESP_LOGW(TAG, "REC (GPIO %d) stays down from power-on: no reset; REC is ignored until it lets go, BOOT records", PIN_REC);
+        boot_screen("REC IS STUCK", "BOOT RECORDS FOR NOW");
+        vTaskDelay(pdMS_TO_TICKS(1500));
+        rec_stuck_at_boot = true;
+        return;
+    }
     ESP_LOGW(TAG, "factory reset: REC held 3 s at power-on");
     int8_t ax[3]; memcpy(ax, meta.axis, 3); uint8_t cal = meta.calibrated;
     settings_erase();
@@ -208,7 +226,14 @@ void app_main(void)
         usb_midi_poll(front_midi);
         input_poll(&in);
         has_joy = in.has_joy;
-        bool down = gpio_get_level(PIN_BOOT) == 0 || in.rec;
+        // REC down since power-on counts for nothing until it has been up 0.1 s (a stuck button or a short on its pin);
+        // BOOT is REC meanwhile
+        static int rec_up_ms;
+        if (rec_stuck_at_boot) {
+            rec_up_ms = in.rec ? 0 : rec_up_ms + 10;
+            if (rec_up_ms >= 100) { rec_stuck_at_boot = false; ESP_LOGI(TAG, "REC let go: it records again"); }
+        }
+        bool down = gpio_get_level(PIN_BOOT) == 0 || (in.rec && rec_button && !rec_stuck_at_boot);
         rec_n = down ? (rec_n < 2 ? rec_n + 1 : 2) : (rec_n > 0 ? rec_n - 1 : 0);     // 20 ms debounce
         rec = rec_n == 2 ? true : rec_n == 0 ? false : rec;
 

@@ -19,6 +19,7 @@ extern beat_trig_t beat_tlog[16384];
 extern int beat_tlog_n;
 extern double beat_life_sum;
 extern int beat_life_n;
+extern int beat_steal_n; extern float beat_steal_env;
 int  beat_test_cursor(void);
 uint32_t beat_test_cell(int k);
 void beat_test_cell_put(int k, uint32_t c);
@@ -487,6 +488,7 @@ static void clicks(void)
     static const int tr[16] = { 0, 1, 2, 4, 13, 7, 14, 11, 0, 15, 6, 12, 3, 5, 8, 9 };
     for (int k = 0; k < 16; k++) beat_test_cell_put(k, k == 8 ? 1u : (uint32_t)((2 + (k * 5) % 16) | (tr[k] << 6)));
     float worst = 0; int nh = 0;
+    beat_steal_n = 0; beat_steal_env = 0;
     for (int pass = 0; pass < 4; pass++) {
         set("bspd", (float)(pass & 1)); set("bpat", pass < 2 ? 1.0f : 0.0f); set("bedt", 100); set("brol", 100); set("brev", 100); set("bdri", 100);
         grid_q(pass < 2 ? 1 : -1); fresh();
@@ -502,6 +504,7 @@ static void clicks(void)
     float lvl = 0.5f;                                              // the DC's level at LEVEL 100
     check(worst < lvl * 2.0f / 32.0f, "%d hits (rolls, cuts, reversed, stops, rests, stutters, fills, a stop): the biggest step "
           "between two samples is %.4f, 1/%.0f of a hit (a cut with no fade: 1/1)", nh, worst, lvl / worst);
+    note("voices stolen while still sounding: %d (the loudest at %.4f of full scale)", beat_steal_n, (double)(beat_steal_env * 32768.0f));
     for (int k = 0; k < 16; k++) beat_test_cell_put(k, 0);
     set_plain(); set("bedt", 50); set("brol", 50); set("brev", 30); set("bdri", 20); set("bodd", 4); set("bgab", 2); set("bbla", 30);
     offline_end();

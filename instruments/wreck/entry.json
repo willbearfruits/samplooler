@@ -11,7 +11,7 @@
     "joystick",
     "wifi"
   ],
-  "hardware_note": "Sample a real break from the mic or over USB (the board is a USB sound card).",
+  "hardware_note": "Sample a real break from the mic or over USB (the board is a USB sound card). BOOT is the REC button until SYSTEM > REC BUTTON is turned on.",
   "status": "simulator",
   "status_note": "Built 2026-10-16 in the simulator; not run on a board yet.",
   "image": "images/wreck-sweep.gif",

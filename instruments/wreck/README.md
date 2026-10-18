@@ -15,7 +15,9 @@ Firmware for the Samplooler's ESP32-S3 boards (the Stack, the Mini, the breadboa
 3. Tip it forward for more chaos, back to drag the tape. Roll left to reverse, right to stutter.
 4. The stick: up a roll, down a dive, left crush, right drive. Knock on the box for a fill.
 5. Hold the knob to chop the break yourself on a 16-step grid.
-6. Hold REC to sample a break (the mic, the computer over USB, or WRECK itself). Tap REC to stop and start.
+6. Hold BOOT to sample a break (the mic, the computer over USB, or WRECK itself); a take is 8 seconds at most.
+   Tap BOOT to stop and start. BOOT stands in for REC because SYSTEM > REC BUTTON starts OFF on WRECK; turn it on
+   and the REC button works too.
 
 ## The breaks
 
@@ -34,8 +36,8 @@ over USB (the board is a USB sound card), and hold REC.
 | roll left / right | reverse / stutter |
 | stick | up roll, down dive, left crush, right drive |
 | knock | a fill |
-| hold REC | sample a break |
-| tap REC | stop / start |
+| hold REC (BOOT) | sample a break |
+| tap REC (BOOT) | stop / start |
 
 ## Sounds
 
@@ -56,6 +58,7 @@ cd firmware && idf.py build
 
 ## Status
 
-Built 2026-10-16. Not run on a board yet and not heard on one: everything so far is the simulator (153 checks) and
+Built 2026-10-16, checked again 2026-10-18. Not run on a board yet and not heard on one: everything so far is the
+simulator (160 checks, among them a long run in each zone with sounds, takes and the tempo changing) and
 WAVs from it. In the simulator it needs less than half of what SING and BAND need at their busiest, so it should fit.
 A new built-in break takes a few seconds to print on the board.

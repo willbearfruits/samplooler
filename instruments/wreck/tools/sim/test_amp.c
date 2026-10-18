@@ -2,7 +2,8 @@
 // alone (inst_amp.c copies its own output here while amp_tap is set) and to the whole mix for the WAVs.
 //   in key: the root's pitch is the key at each tuning; the power chord's partials (root, fifth, octave)
 //   chugs start on beat_kicks()' steps (within 5 ms); tremolo picking at its rate
-//   the drone swells in over 2 s or more and its feedback partial grows; a chord change waits for the bar line
+//   the drone: struck from silence it is the same every time, it swells in over SWELL, FEEDBACK lifts its 12th to
+//   the root's level; a chord change waits for the bar line
 //   the dive: an octave down at full; LEVEL 100, full gain and the stick: under 0.9; no clicks at note changes or
 //   when a param jumps end to end; a knock is a chord hit; stopped, it fades; the cost; WAVs of each zone and sound
 #include "sim.h"
@@ -56,12 +57,13 @@ static float a_goertzel(float t0, float t1, float f)
     double p = s1 * s1 + s2 * s2 - c * s1 * s2;
     return (float)(p / ((double)(b - a) * (b - a) + 1));
 }
-// the strongest power within half a percent of f (the feedback wobbles a little, as real feedback does)
+// the power within +-0.6 % of f (the feedback wobbles +-0.3 % in pitch, as real feedback does, so its line is spread:
+// Goertzel bins 0.1 % apart, summed; a window of seconds puts the bins near its own width)
 static float a_band(float t0, float t1, float f)
 {
-    float best = 0;
-    for (int k = -6; k <= 6; k++) { float p = a_goertzel(t0, t1, f * (1.0f + 0.001f * (float)k)); if (p > best) best = p; }
-    return best;
+    float sum = 0;
+    for (int k = -6; k <= 6; k++) sum += a_goertzel(t0, t1, f * (1.0f + 0.001f * (float)k));
+    return sum;
 }
 // the lowest strong partial (a power chord's autocorrelation finds the octave under its root: root and fifth imply it)
 static float a_lowest(float t0, float t1, float fmin, float fmax)
@@ -200,12 +202,15 @@ static void chugs(void)
     int dec = 32, ne = amp_tap_n / dec;                            // the envelope at 1 kHz
     float *env = calloc((size_t)ne, sizeof(float)); float z = 0;
     for (int i = 0; i < ne * dec; i++) { z += 0.01f * (fabsf(tap[i]) - z); if (i % dec == 0) env[i / dec] = z; }
-    double mean = 0; for (int i = 0; i < ne; i++) mean += env[i]; mean /= ne;
+    // less its drift (a moving average over 300 ms: the strings beat over seconds, and the picks are the fast part)
+    float *hp = calloc((size_t)ne, sizeof(float));
+    for (int i = 0; i < ne; i++) { double m = 0; int a = i - 150 < 0 ? 0 : i - 150, b = i + 150 > ne ? ne : i + 150; for (int j = a; j < b; j++) m += env[j]; hp[i] = env[i] - (float)(m / (b - a)); }
     double ac[200]; double best = -1; int best_l = 0;
     for (int l = 20; l < 200; l++) {
-        double c = 0; for (int i = 200; i + l < ne; i++) c += (env[i] - mean) * (env[i + l] - mean);
+        double c = 0; for (int i = 200; i + l < ne; i++) c += (double)hp[i] * hp[i + l];
         ac[l] = c; if (c > best) best = c;
     }
+    free(hp);
     // the envelope repeats at the pick: the strongest lag near one pick, well over the lag of half a pick
     int lw = (int)(want / 32.0f + 0.5f), lo = lw * 85 / 100, hi = lw * 115 / 100; double near = -1e30;
     for (int l = lo; l <= hi && l < 200; l++) if (ac[l] > near) { near = ac[l]; best_l = l; }
@@ -220,45 +225,96 @@ static void chugs(void)
 }
 
 // ---------------------------------------------------------------- the drone
+// One run, the amp alone tapped for 12 s from the turn. Two ways in: the knob (silent at BREAKCORE, the axis to
+// DRONE: on the way the riff may start a note, and the chord slides in from it, as it does in play) or from silence
+// (DRONE ON strikes the chord at BREAKCORE, then the axis goes to DRONE): the strings start at rest then, so the run
+// is the same whatever came before.
+typedef struct {
+    float t0;                  // the strike, seconds into the tap
+    float w[8];                // rms per half second from it
+    float plateau;             // rms over 4 .. 9.5 s
+    float sec[6];              // rms per second from 4 s
+    float hz;                  // the feedback partial at 10 s
+    float fbv1, fbv2;          // the screen's feedback at 2.5 s and 9 s
+    float part[8];             // the partials' shares late: 110, 165, 220, 330, 440, 550, 660, 880 Hz
+} drone_t;
+static void drone_run(bool knob, int voice, float swell, float fbk, float hum, float settle, drone_t *m)
+{
+    quiet(); plain(); set("avoc", (float)voice); set("asub", 50);
+    set("adrn", 2); set("agan", 90); set("afbk", fbk); set("ahum", hum); set("aswl", swell); set("abrk", 0);
+    set("xaxs", ZB); sim_run(settle);                              // silent at BREAKCORE
+    tap_on(13.0f);
+    if (!knob) { set("adrn", 1); sim_run(0.1f); }                  // struck from silence, here
+    set("xaxs", ZD);
+    float fbv[48]; m->hz = 0;
+    for (int k = 0; k < 48; k++) { sim_run(0.25f); amp_view_t v; amp_view(&v); fbv[k] = v.feedback; if (k == 39) m->hz = amp_fb_hz; }
+    tap_off();
+    m->t0 = -1;
+    for (int e = 0; e < amp_evn && e < 1024; e++) if (amp_evlog[e].kind == EV_DRONE) { m->t0 = t_of(amp_evlog[e].frame); break; }
+    float t0 = m->t0 < 0 ? 0.0f : m->t0;
+    for (int k = 0; k < 8; k++) m->w[k] = a_rms(t0 + 0.5f * (float)k, t0 + 0.5f * (float)(k + 1));
+    m->plateau = a_rms(t0 + 4.0f, t0 + 9.5f);
+    for (int k = 0; k < 6; k++) m->sec[k] = a_rms(t0 + 4.0f + (float)k, t0 + 5.0f + (float)k);
+    float r = a_rms(t0 + 6.5f, t0 + 9.5f);
+    { static const float pf[8] = { 110, 165, 220, 330, 440, 550, 660, 880 }; for (int q = 0; q < 8; q++) m->part[q] = a_band(t0 + 6.5f, t0 + 9.5f, pf[q]) / (r * r + 1e-12f); }
+    int k1 = (int)((t0 + 2.5f) / 0.25f), k2 = (int)((t0 + 9.0f) / 0.25f);
+    if (k2 > 47) k2 = 47;
+    m->fbv1 = fbv[k1]; m->fbv2 = fbv[k2];
+}
 static void drone(void)
 {
     section("amp: the drone");
-    quiet(); plain(); set("avoc", 2); set("asub", 50);
-    set("adrn", 2); set("agan", 90); set("afbk", 80); set("ahum", 40); set("aswl", 3.0f); set("abrk", 0);
-    set("xaxs", ZB); sim_run(2.5f);                                // silent at BREAKCORE
-    tap_on(13.0f);
-    set("xaxs", ZD);
-    float fb_hz[64]; int nfb = 0; float fbv[64];
-    for (int k = 0; k < 48; k++) { sim_run(0.25f); amp_view_t v; amp_view(&v); fb_hz[nfb] = amp_fb_hz; fbv[nfb++] = v.feedback; }
-    tap_off();
-    // the drone's start
-    float t0 = -1;
-    for (int e = 0; e < amp_evn && e < 1024; e++) if (amp_evlog[e].kind == EV_DRONE) { t0 = t_of(amp_evlog[e].frame); break; }
-    check(t0 >= 0.0f && t0 < 1.5f, "into DRONE: the chord is struck (%.2f s after the turn)", (double)t0);
-    if (t0 < 0) t0 = 0;
-    float r[40]; int nr = 0;
-    for (float t = t0; t < t0 + 9.0f && nr < 40; t += 0.25f) r[nr++] = a_rms(t, t + 0.25f);
-    float top = 0; for (int k = 0; k < nr; k++) if (r[k] > top) top = r[k];
-    bool rising = r[1] < r[2] && r[2] < r[4] && r[4] < r[6] && r[6] < r[8] && r[1] < 0.6f * r[8];
-    bool holds = r[nr - 1] > 0.6f * top;
-    check(rising && holds, "it swells in, rising for 2 s (rms %.3f at 0.25 s, %.3f at 0.5 s, %.3f at 1 s, %.3f at 1.5 s, %.3f at 2 s), and holds (%.3f at 9 s)",
-          (double)r[1], (double)r[2], (double)r[4], (double)r[6], (double)r[8], (double)r[nr - 1]);
-    // the feedback: its partial against the root, early and late (the partial may climb: measure where it is)
-    int k1 = (int)((t0 + 2.5f) / 0.25f), k2 = (int)((t0 + 9.0f) / 0.25f);
-    if (k2 >= nfb) k2 = nfb - 1;
-    // the partial's share of the sound, at the same frequency: early (before the feedback starts) and late
-    float r1 = a_rms(t0 + 0.4f, t0 + 1.0f), r2 = a_rms(t0 + 8.5f, t0 + 9.5f);
-    float e1 = a_band(t0 + 0.4f, t0 + 1.0f, fb_hz[k2]) / (r1 * r1 + 1e-12f);
-    float e2 = a_band(t0 + 8.5f, t0 + 9.5f, fb_hz[k2]) / (r2 * r2 + 1e-12f);
-    check(e2 > 4.0f * e1 && fbv[k2] > 0.4f && fbv[k1] < fbv[k2],
-          "the feedback grows: its partial (%.0f Hz) %.1f dB more of the sound after 9 s; the screen's feedback %.2f -> %.2f",
-          (double)fb_hz[k2], (double)(10.0f * log10f(e2 / (e1 + 1e-12f))), (double)fbv[k1], (double)fbv[k2]);
-    wav_solo("drone");
-    sim_shot("amp_drone");
+    set("skey", 9); set("atun", 3);                                // A2, 110 Hz: the feedback's 12th is 330 Hz
+    drone_t k, a, b, b2, c, d;
+    drone_run(true, 2, 3.0f, 80, 40, 2.5f, &k);                    // the knob, as WRECK's sounds have it
+    wav_solo("drone"); sim_shot("amp_drone");
+    drone_run(false, 2, 3.0f, 100, 40, 2.5f, &a);                  // from silence: the feedback, full
+    drone_run(false, 2, 3.0f, 0, 40, 2.5f, &b);                    // the same without it: the feedback's control
+    drone_run(false, 2, 3.0f, 0, 40, 2.63f, &b2);                  // ... again, from another moment
+    drone_run(false, 1, 3.0f, 0, 0, 2.5f, &c);                     // the bass alone (one saw and a sine: no doubled
+    drone_run(false, 1, 12.0f, 0, 0, 2.5f, &d);                    // strings beating): the swell, and the slowest one
+    {   const drone_t *runs[6] = { &k, &a, &b, &b2, &c, &d };
+        static const char *const nm[6] = { "the knob", "FEEDBACK 100", "FEEDBACK 0", "FEEDBACK 0 again", "bass, SWELL 3", "bass, SWELL 12" };
+        for (int r = 0; r < 6; r++) {
+            char line[200]; int w = snprintf(line, sizeof line, "%-15s struck %.2f s, rms per half second:", nm[r], (double)runs[r]->t0);
+            for (int j = 0; j < 8; j++) w += snprintf(line + w, sizeof line - (size_t)w, " %.3f", (double)runs[r]->w[j]);
+            note("%s; settled %.3f", line, (double)runs[r]->plateau);
+            if (r != 1 && r != 2) continue;
+            w = snprintf(line, sizeof line, "%-15s partials late, dB of the sound: 110 %.1f 165 %.1f 220 %.1f 330 %.1f 440 %.1f 550 %.1f 660 %.1f 880 %.1f", nm[r],
+                         (double)(10.0f * log10f(runs[r]->part[0] + 1e-12f)), (double)(10.0f * log10f(runs[r]->part[1] + 1e-12f)), (double)(10.0f * log10f(runs[r]->part[2] + 1e-12f)), (double)(10.0f * log10f(runs[r]->part[3] + 1e-12f)),
+                         (double)(10.0f * log10f(runs[r]->part[4] + 1e-12f)), (double)(10.0f * log10f(runs[r]->part[5] + 1e-12f)), (double)(10.0f * log10f(runs[r]->part[6] + 1e-12f)), (double)(10.0f * log10f(runs[r]->part[7] + 1e-12f)));
+            note("%s", line);
+        }
+    }
+    check(k.t0 >= 0.0f && k.t0 < 1.5f, "the knob into DRONE: the chord is struck (%.2f s after the turn)", (double)k.t0);
+    // and holds: every second from 4 s on within a quarter of the whole stretch
+    float lo = 1e9f, hi = 0;
+    for (int j = 0; j < 6; j++) { if (k.sec[j] < lo) lo = k.sec[j]; if (k.sec[j] > hi) hi = k.sec[j]; }
+    check(lo > 0.75f * k.plateau && hi < 1.25f * k.plateau, "it holds: 4 to 10 s in, each second's rms is %.3f .. %.3f (%.3f over the stretch)", (double)lo, (double)hi, (double)k.plateau);
+    // the same drone every time: the strings start at rest when the chord is struck from silence
+    float same = 0;
+    for (int j = 0; j < 8; j++) { float dd = fabsf(b2.w[j] / (b.w[j] + 1e-9f) - 1.0f); if (dd > same) same = dd; }
+    check(b.t0 >= 0.0f && b2.t0 >= 0.0f && same < 0.03f, "struck from silence at another moment it is the same drone (rms within %.1f %% in every half second)", (double)(same * 100.0f));
+    // the swell (on the bass: its level is the swell's): a one-pole over a third of SWELL. At 3 s: half a second in
+    // under 0.4 of where it settles, at 1 s about half, at 2 s about 0.8, by 4 s there
+    float p = c.plateau;
+    bool rising = c.w[0] < 0.4f * p && c.w[1] > 0.35f * p && c.w[1] < 0.7f * p && c.w[2] > c.w[1] && c.w[3] > 0.7f * p && c.w[3] < 0.95f * p && c.w[7] > 0.9f * p;
+    check(rising, "SWELL 3 s: it swells in (rms %.3f at 0.5 s, %.3f at 1 s, %.3f at 1.5 s, %.3f at 2 s, %.3f at 4 s; settled %.3f)",
+          (double)c.w[0], (double)c.w[1], (double)c.w[2], (double)c.w[3], (double)c.w[7], (double)p);
+    float g3 = c.w[7] / (c.w[3] + 1e-9f), g12 = d.w[7] / (d.w[3] + 1e-9f);
+    check(g3 < 1.3f && g12 > 1.4f && d.w[3] < 0.55f * d.plateau, "SWELL 12 s is slower: at 2 s it is %.2f of where it gets by 10 s, and from 2 s to 4 s it still grows %.2fx (SWELL 3 s: %.2fx)",
+          (double)(d.w[3] / d.plateau), (double)g12, (double)g3);
+    // the feedback: a partial of the root (the 12th) that grows until it sings over the chord. The fuzz gives the
+    // chord that partial of its own (the root's third harmonic, strong in a clipped wave: 8 dB under the root here), so
+    // the measure is the 12th against the root, with FEEDBACK 100 and with 0, in two runs the same in every other way
+    float twelfth_on = 10.0f * log10f(a.part[3] / (a.part[0] + 1e-12f)), twelfth_off = 10.0f * log10f(b.part[3] / (b.part[0] + 1e-12f));
+    check(fabsf(a.hz / 330.0f - 1.0f) < 0.01f && a.fbv2 > 0.4f && a.fbv1 < a.fbv2 && twelfth_on > -4.0f && twelfth_on - twelfth_off > 4.0f,
+          "the feedback grows and sings: FEEDBACK 100 lifts the 12th (%.0f Hz) to %.1f dB of the root 6.5 to 9.5 s in (without: %.1f dB); the screen's feedback %.2f -> %.2f",
+          (double)a.hz, (double)twelfth_on, (double)twelfth_off, (double)a.fbv1, (double)a.fbv2);
+    set("adrn", 2);
 }
 
 // ---------------------------------------------------------------- chords move on the bar line
-static float tick_note[2000];
 static void chord_change(void)
 {
     section("amp: a chord change waits for the bar line");

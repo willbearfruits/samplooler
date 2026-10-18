@@ -3,7 +3,8 @@
 //   the knob      turn: the AXIS, from BREAKCORE to DRONE (it is always the knob's: editing a setting in the menu
 //                 does not take it); press: the menu; hold: BEAT's step grid
 //   REC           hold: sample a break (SAMPLE FROM: the mic, the USB sound card, or WRECK itself); tap: stop the
-//                 machine (the tape brakes to a halt) or start it again (it spins up)
+//                 machine (the tape brakes to a halt) or start it again (it spins up). SYSTEM > REC BUTTON starts
+//                 OFF here (a board has its REC pin stuck low): BOOT is REC until it is turned on
 //   the tilt      forward: chaos (more edits); back: the tape drags slower, flat again it catches up
 //   the roll      left: reverse and smear; right: the stutter
 //   the stick     up: a rising roll; down: the dive (an octave down); left: crush; right: drive
@@ -22,13 +23,21 @@
 #include <string.h>
 #ifdef ESP_PLATFORM
 #include "esp_cpu.h"
+#include "driver/gpio.h"
+#include "pins.h"
 #define CYCLES() esp_cpu_get_cycle_count()
 #else
 #include <time.h>
-static inline uint32_t CYCLES(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint32_t)(t.tv_nsec / 4); }
+static inline uint32_t CYCLES(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint32_t)((uint64_t)t.tv_sec * 250000000ULL + (uint64_t)t.tv_nsec / 4); }   // wraps consistently
+#endif
+#ifndef PIN_REC
+#define PIN_REC 3
+#endif
+#ifndef PIN_BOOT
+#define PIN_BOOT 0
 #endif
 // What each part of the audio costs, CPU cycles summed over blocks (the log shows it): KIT, BEAT, AMP, FX, the mix.
-// A block is 2 ms: 480000 cycles at 240 MHz (on the host the unit is 4 ns: the same arithmetic gives us x 0.96).
+// A block is 2 ms: 480000 cycles at 240 MHz (on the host the unit is 4 ns: the same arithmetic gives us x 1.04).
 #define PROF_N (M_N + 1)
 static volatile uint32_t prof_cyc[PROF_N], prof_blocks;
 void wr_prof(float *us, int n)
@@ -169,6 +178,8 @@ static uint32_t tempo_fpb(float bpm) { return (uint32_t)(60.0f * (float)AUDIO_SR
 static uint16_t pc_mask_of(const int *notes, int n) { uint16_t m = 0; for (int i = 0; i < n; i++) m |= (uint16_t)(1u << (((notes[i] % 12) + 12) % 12)); return m; }
 static uint16_t rot(uint16_t m, int k) { k = ((k % 12) + 12) % 12; return (uint16_t)(((m << k) | (m >> (12 - k))) & 0x0FFF); }
 
+static const float bar_beats[3] = { 4.0f, 8.0f, 2.0f };            // CHORD BARS: 1 BAR, 2 BARS, HALF BAR (file scope:
+                                                                   // the IRAM tool then keeps it in DRAM for the audio task)
 // the chord's degree at a frame (the progression, HOLD, or a chord played live on a linked board): exact on a bar
 // line, where song.degree may still be the last bar's for up to a tick. UI or audio task.
 int host_degree_at(uint32_t frame)
@@ -179,7 +190,6 @@ int host_degree_at(uint32_t frame)
     uint32_t fpb = song.fpb ? song.fpb : 19200;
     int32_t span = song.loop_beats ? (int32_t)(fpb * (uint32_t)song.loop_beats) : (int32_t)(fpb * SONG_WRAP_BEATS);
     float beat = (float)wr_mod((int32_t)(frame - song.origin), span) / (float)fpb;
-    static const float bar_beats[] = { 4.0f, 8.0f, 2.0f };
     uint32_t bar = (uint32_t)(beat / bar_beats[(int)H(H_BARS)] + 1e-4f);
     const prog_t *p = &progs[(int)H(H_PROG)];
     return p->d[bar % (uint32_t)p->n];
@@ -195,7 +205,6 @@ static void set_song(uint32_t frame)
     uint32_t fpb = song.fpb ? song.fpb : 19200;
     int32_t span = song.loop_beats ? (int32_t)(fpb * (uint32_t)song.loop_beats) : (int32_t)(fpb * SONG_WRAP_BEATS);
     float beat = (float)wr_mod((int32_t)(frame - song.origin), span) / (float)fpb;
-    static const float bar_beats[] = { 4.0f, 8.0f, 2.0f };
     uint32_t bar = (uint32_t)(beat / bar_beats[(int)H(H_BARS)]);
     const prog_t *p = &progs[(int)H(H_PROG)];
     int d = chord_live >= 0 ? chord_live : (int)H(H_PROG) == 0 ? (int)H(H_HOLD) : p->d[bar % (uint32_t)p->n];
@@ -233,7 +242,8 @@ static void tempo_set_here(void)
     song.bpm = 60.0f * (float)AUDIO_SR / (float)fpb;
     link_set_time(fpb, origin, song.bar_beats, 0);
 }
-static void harm_set_here(void) { link_set_harm((int)H(H_KEY), (int)H(H_SCALE), (int)H(H_PROG), (int)H(H_HOLD), (int)H(H_BARS), -1); }
+// (a chord another board plays live stays as it is: only its own change ends it)
+static void harm_set_here(void) { link_set_harm((int)H(H_KEY), (int)H(H_SCALE), (int)H(H_PROG), (int)H(H_HOLD), (int)H(H_BARS), chord_live); }
 
 static void link_follow(void)
 {
@@ -272,7 +282,13 @@ static void link_follow(void)
 #ifndef ESP_PLATFORM
 // tools/sim has no USB: a test plays into the "sound card" through this (frames delivered; it fills mono[])
 int (*wr_sim_usb_in)(int16_t *mono, int n);
-int usb_audio_in_pull(int16_t *mono, int n) { return wr_sim_usb_in ? wr_sim_usb_in(mono, n) : 0; }
+int usb_audio_in_pull(int16_t *mono, int n)   // as the device's: what is not delivered is 0
+{
+    int got = wr_sim_usb_in ? wr_sim_usb_in(mono, n) : 0;
+    if (got < 0) got = 0;
+    if (got < n) memset(mono + got, 0, (size_t)(n - got) * sizeof *mono);
+    return got;
+}
 #endif
 static smooth_t g_drums, g_amp, g_usb;
 
@@ -296,13 +312,12 @@ static void audio(const float *in, float *out, int n)
     uint32_t c2 = CYCLES();
     int src = (int)H(H_SOURCE);
     bool usb_on = src == KSRC_USB;
-    if (usb_on) {
+    float tu = usb_on && H(H_USBMON) >= 1.0f ? 1.0f : 0.0f, td = H(H_DRUMS) * 0.01f, ta = H(H_AMP) * 0.01f;
+    if (usb_on || g_usb.y > 0.001f) {                               // (and while USB THRU fades out: no cut)
         int16_t raw[AUDIO_BLOCK];
-        memset(raw, 0, sizeof raw);
-        usb_audio_in_pull(raw, n);
+        usb_audio_in_pull(raw, n);                                  // fills what it has not got with 0
         for (int i = 0; i < n; i++) usb[i] = (float)raw[i] * (1.0f / 32768.0f);
     } else memset(usb, 0, sizeof usb);
-    float tu = usb_on && H(H_USBMON) >= 1.0f ? 1.0f : 0.0f, td = H(H_DRUMS) * 0.01f, ta = H(H_AMP) * 0.01f;
     for (int i = 0; i < n; i++) {
         float gd = smooth_to(&g_drums, td), ga = smooth_to(&g_amp, ta);
         out[i] = drums[i] * gd + amp[i] * ga + usb[i] * smooth_to(&g_usb, tu);
@@ -405,7 +420,7 @@ static void axis_tick(const ctl_t *c)
     uint32_t fpb = song.fpb ? song.fpb : 19200;
     int32_t pos = wr_mod((int32_t)(c->frames - song.origin), (int32_t)(fpb * SONG_WRAP_BEATS));
     int32_t to_beat = (int32_t)fpb - pos % (int32_t)fpb;            // frames to the song's next beat
-    bool tape = H(H_CHANGE) < 1.0f && perf.running;
+    bool tape = H(H_CHANGE) < 1.0f && perf.running && !stopping;    // (a stop under way keeps its own brake)
     if (change_st == 0) {
         if (tape) { fx_brake(0.5f); change_st = 1; change_ms = 0; }
         else change_st = 2;
@@ -421,27 +436,39 @@ static void axis_tick(const ctl_t *c)
     } else if (change_st == 2 && tempo_moved) grid_set(g.feel_q);
 }
 
-// REC: hold = sample, tap = stop / start. REC already down when WRECK starts, or still down after a take filled up
-// (8 s), counts for nothing until it is let go.
+// REC (the REC pin when SYSTEM > REC BUTTON is on, BOOT always, MIDI CC 64 or note 60): held 0.3 s = sample a
+// break (KIT), let go sooner = a tap: stop the machine, or start it. REC already down when WRECK starts, or still
+// down after a take filled up (8 s, KIT's buffer), counts for nothing until it has been up 0.1 s (a bounce is not a
+// release). Boot never samples: KIT prints the first break in init(), and nothing here runs before the first tick.
+#define REC_HOLD_MS   300
+#define REC_FULL_S    8.0f
+#define REC_LOG_MAX   16                                          // REC's presses in the log, then quiet
 static bool rec_ignore = true;
-static int  rec_logs;
+static int  rec_logs, rec_up_ms;
 static void rec_logic(const ctl_t *c)
 {
-    if (c->rec != rec_seen && rec_logs < 40) {                   // what the button does, in the log
+    if (c->rec != rec_seen && rec_logs < REC_LOG_MAX) {            // what the button does, in the log
         rec_logs++;
         app_log("REC %s at %.2f s%s", c->rec ? "down" : "up", (double)((float)c->frames / (float)AUDIO_SR), rec_ignore ? " (ignored until let go)" : "");
     }
     rec_seen = c->rec;
-    if (rec_ignore) { if (!c->rec) rec_ignore = false; rec_was = false; return; }
-    if (beat_editing()) { rec_was = c->rec; return; }             // the grid has REC while it is open
-    if (kit_recording() && kit_rec_seconds() >= 8.0f) {          // the take is full: it ends here
+    if (rec_ignore) {
+        rec_up_ms = c->rec ? 0 : rec_up_ms + 10;
+        if (rec_up_ms >= 100) rec_ignore = false;
+        rec_was = false; return;
+    }
+    bool rec = c->rec;
+    if (kit_recording() && kit_rec_seconds() >= REC_FULL_S) {     // the take is full: it ends here
         kit_rec_release(true); rec_confirmed = false; rec_was = false; rec_ignore = true;
         return;
     }
-    bool rec = c->rec;
+    if (beat_editing()) {                                          // the grid has REC while it is open
+        if (rec_was) { kit_rec_release(rec_confirmed); rec_confirmed = false; }   // (a hold that reached it is kept)
+        rec_was = false; return;
+    }
     if (rec && !rec_was) { kit_rec_press((int)H(H_SOURCE)); rec_confirmed = false; rec_ms = 0; }
     if (rec) rec_ms += 10;
-    if (rec && !rec_confirmed && rec_ms >= 300) { kit_rec_confirm(); rec_confirmed = true; coach_done(LEARN_REC); }
+    if (rec && !rec_confirmed && rec_ms >= REC_HOLD_MS) { kit_rec_confirm(); rec_confirmed = true; coach_done(LEARN_INST + 3); }
     if (!rec && rec_was) {
         kit_rec_release(rec_confirmed);
         if (!rec_confirmed) {                                      // a tap: stop the machine, or start it
@@ -453,9 +480,23 @@ static void rec_logic(const ctl_t *c)
     if (stopping && fx_stopped()) { perf.running = false; stopping = false; }
     rec_was = rec;
 }
+#ifndef ESP_PLATFORM
+void wr_test_rec_as_at_boot(void)                                  // tools/sim: REC's state as at power-on
+{
+    rec_ignore = true; rec_up_ms = 0; rec_was = rec_seen = rec_confirmed = false; rec_ms = 0;
+}
+#endif
 
 static void tick(const ctl_t *c)
 {
+    if (c->ticks == 1 || c->ticks == 100) {                         // the REC pins at boot, once (a stuck pin shows here)
+        int pin_rec = 1, pin_boot = 1;
+#ifdef ESP_PLATFORM
+        pin_rec = gpio_get_level(PIN_REC); pin_boot = gpio_get_level(PIN_BOOT);
+#endif
+        app_log("REC pin (GPIO %d) %s, BOOT %s, REC BUTTON %s; REC %s", PIN_REC, pin_rec ? "up" : "DOWN", pin_boot ? "up" : "DOWN",
+                pv[CP(CP_REC_BTN)] >= 1.0f ? "on" : "off (BOOT samples)", c->rec ? "down (ignored until let go)" : "up");
+    }
     if ((c->ticks % 1000 == 0 || (c->ticks < 3000 && c->ticks % 100 == 0)) && prof_blocks) {   // every second for the
         float us[PROF_N]; wr_prof(us, PROF_N);                                                  // first 30 s, then 10 s
         app_log("cpu us/block: beat %.0f amp %.0f fx %.0f kit %.0f mix %.0f (of 2000)",
@@ -490,9 +531,13 @@ int  wr_peers(void) { return peers_was; }
 
 static void changed(int p)
 {
-    if (p < 0) {
+    if (p < 0) {                                                   // a sound loaded, or everything reset
         for (int m = 0; m < M_N; m++) mods[m]->changed(-1);
-        if (link_up) { tempo_set_here(); harm_set_here(); link_enable(H(H_LINK) >= 1.0f, (int)H(H_GROUP), (int)H(H_RANGE)); }
+        if (link_up && !applying) {                                // the song's settings are PF_SYS: a sound leaves them;
+            if (tempo_fpb(H(H_TEMPO)) != tempo_fpb((float)(int)(song.bpm + 0.5f))) tempo_set_here();   // a reset moves them
+            harm_set_here();
+            link_enable(H(H_LINK) >= 1.0f, (int)H(H_GROUP), (int)H(H_RANGE));
+        }
         return;
     }
     if (p < HB) { int m = p / MOD_PARAMS_MAX, i = p % MOD_PARAMS_MAX; if (i < mods[m]->nparams) mods[m]->changed(i); return; }
@@ -531,15 +576,17 @@ static bool hold(void)
     return false;
 }
 
-// LEARN_INST + 0: knocked; + 1: opened the grid; + 2: stopped or started with REC. Modules use + 8 and up.
+// LEARN_INST + 0: knocked; + 1: opened the grid; + 2: stopped or started with a tap; + 3: held REC long enough to
+// sample (the core's LEARN_REC is marked by any press, a tap too). Modules use + 8 and up. BOOT is named, not REC:
+// REC BUTTON starts OFF on WRECK (INST.rec_button_off) and BOOT is a REC on every board either way.
 static const hint_t hints[] = {
     { "TURN THE KNOB: FROM BREAKCORE TO DOOM", LEARN_TURN },
     { "TIP IT FORWARD FOR CHAOS, BACK TO DRAG", LEARN_TILT },
     { "KNOCK ON THE BOX FOR A FILL", LEARN_INST + 0 },
     { "HOLD THE KNOB TO CHOP IT YOURSELF", LEARN_INST + 1 },
-    { "HOLD REC TO SAMPLE A NEW BREAK", LEARN_REC },
-    { "TAP REC TO STOP THE MACHINE", LEARN_INST + 2 },
-    { "THE STICK: ROLLS, DIVE, CRUSH, DRIVE", LEARN_JOY },
+    { "HOLD BOOT TO SAMPLE A NEW BREAK", LEARN_INST + 3 },
+    { "TAP BOOT TO STOP, TAP AGAIN TO GO", LEARN_INST + 2 },
+    { "STICK UP: A ROLL. DOWN: A DIVE", LEARN_JOY },
     { "PRESS THE KNOB FOR THE MENU", LEARN_MENU },
 };
 
@@ -553,6 +600,8 @@ const instrument_t INST = {
     .presets = presets, .npresets = WR_NSOUNDS,
     .hints = hints, .nhints = (int)(sizeof hints / sizeof hints[0]),
     .burst = true, .looper = false, .knob = "xaxs", .midi_notes = false,
+    .rec_button_off = true,    // the REC pin is ignored until SYSTEM > REC BUTTON is on (a board here has it stuck low:
+                               // its joystick's click); BOOT and MIDI sample meanwhile. The hints say BOOT
     .init = init, .audio = audio, .tick = tick, .draw = draw, .splash = splash,
     .changed = changed, .action = action, .saver = saver, .hold = hold,
 };

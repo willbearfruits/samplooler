@@ -24,6 +24,7 @@
 #define N_USER      8
 #define NAME_LEN    12          // a user sound's blob starts with its name
 #define BLOB_MAX    (NAME_LEN + PARAMS_MAX * 8)
+#define SOUND_LIST_MAX (1 + 64 + N_USER)   // MY EDIT, the factory sounds (64 at most are listed), the user sounds
 
 front_meta_t meta = { .axis = { 1, -2, 3 } };      // a right-handed IMU, x right and z out of the screen: its y points up
 static front_status_t status;
@@ -66,7 +67,7 @@ void coach_done(int learn)
     uint32_t b = 1u << learn;
     if (meta.learned & b) return;
     meta.learned |= b; dirty = true;
-    if (hint_ms > 0 && hint_i < INST.nhints && INST.hints[hint_i].learn == learn) { hint_ms = 0; hint_gap_ms = 2500; }
+    if (hint_ms > 0 && hint_i >= 0 && hint_i < INST.nhints && INST.hints[hint_i].learn == learn) { hint_ms = 0; hint_gap_ms = 2500; }
 }
 
 // ---------------------------------------------------------------- LED and MIDI for the instruments
@@ -104,6 +105,8 @@ void midi_cc(int cc, int val)
 static void on_param(int p, float old)
 {
     if (p == CP(CP_MIC)) plat_mic_gain((int)pv[p]);
+    if (p == CP(CP_SPEAKER)) plat_speaker(pv[p] >= 1.0f);
+    if (p == CP(CP_REC_BTN)) plat_rec_button(pv[p] >= 1.0f);
     if (p == CP(CP_HINTS) && pv[p] >= 1.0f && old < 1.0f) { meta.learned = 0; hint_gap_ms = 800; }
     if (p == CP(CP_LED)) led_apply();
 }
@@ -127,11 +130,11 @@ static UI_RAM float stash[PARAMS_MAX];
 static bool  stash_ok;
 static UI_RAM char  user_name[N_USER][NAME_LEN + 1];
 
-static int sound_list(int16_t *ids)
+static int sound_list(int16_t *ids)                 // ids[SOUND_LIST_MAX]
 {
     int n = 0;
     if (stash_ok) ids[n++] = -1;
-    for (int i = 0; i < INST.npresets; i++) ids[n++] = (int16_t)i;
+    for (int i = 0; i < INST.npresets && i < 64; i++) ids[n++] = (int16_t)i;
     for (int k = 0; k < N_USER; k++) if (meta.user_mask & (1u << k)) ids[n++] = (int16_t)(SOUND_ID_USER + k);
     return n;
 }
@@ -180,7 +183,7 @@ static void browse(int d)
         stash_ok = true;
         if (meta.sound == -1) params_snapshot();
     }
-    int16_t ids[2 + 64 + N_USER];
+    int16_t ids[SOUND_LIST_MAX];
     int n = sound_list(ids), i = sound_pos(ids, n, meta.sound), j = i + d;
     if (j < 0) j = 0;
     if (j > n - 1) j = n - 1;
@@ -319,6 +322,8 @@ static void factory_reset(void)
     params_defaults(false);
     load_sound(0, false);
     plat_mic_gain((int)pv[CP(CP_MIC)]);
+    plat_speaker(pv[CP(CP_SPEAKER)] >= 1.0f);
+    plat_rec_button(pv[CP(CP_REC_BTN)] >= 1.0f);
     led_apply();
     dirty = true;
     toast("FACTORY RESET DONE", 1800);
@@ -397,6 +402,8 @@ void front_init(bool has_imu, bool safe_mode, bool from_flash)
         if (from_flash && !safe_mode) memcpy(pv, cur, sizeof cur);   // a fresh device starts on the sound itself
     }
     plat_mic_gain((int)pv[CP(CP_MIC)]);
+    plat_speaker(pv[CP(CP_SPEAKER)] >= 1.0f);
+    plat_rec_button(pv[CP(CP_REC_BTN)] >= 1.0f);
     if (INST.changed) INST.changed(-1);
     pv[CP(CP_RESET)] = 0;
     led_apply();
@@ -629,7 +636,7 @@ void front_midi(uint8_t st, uint8_t d1, uint8_t d2)
         if (p >= 0) { set_param(p, param_from_cc(p, d2), false); return; }
         if (d1 == 64) { midi_rec = d2 >= 64; return; }                 // the sustain pedal is REC
     } else if (k == 0xC0) {
-        int16_t ids[2 + 64 + N_USER];
+        int16_t ids[SOUND_LIST_MAX];
         int n = sound_list(ids), want = d1 < INST.npresets ? d1 : SOUND_ID_USER + (d1 - INST.npresets);
         for (int i = 0; i < n; i++) if (ids[i] == want) { load_sound(ids[i], false); card_ms = 1500; }
         return;
@@ -683,7 +690,7 @@ static void draw_param_strip(int y, int p)
 static void draw_sound_card(int y)
 {
     strip_bg(y);
-    int16_t ids[2 + 64 + N_USER];
+    int16_t ids[SOUND_LIST_MAX];
     int n = sound_list(ids), i = sound_pos(ids, n, meta.sound);
     char b[24]; snprintf(b, sizeof b, "SOUND %d/%d", i + 1, n);
     oled_ftext_ex(F_TINY, 3, y + 3, b, 1);

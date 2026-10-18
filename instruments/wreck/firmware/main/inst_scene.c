@@ -169,6 +169,7 @@ static void amp_scene(const view_t *v, int x0, float fade)
     // the feedback: a line singing up off the head, wider and faster as it grows
     if (av.feedback > 0.08f) {
         fb_ph += 0.6f + 1.5f * av.feedback;
+        if (fb_ph > 6283.185f) fb_ph -= 6283.185f;                  // (kept small: sinf of a huge float is noise)
         int top = 17, bot = cy - 10, cxm = x + 27, amp_w = 1 + (int)(av.feedback * 5.0f);
         for (int y = bot; y > top; y--) {
             float s1 = sinf(fb_ph + (float)y * 0.9f);
