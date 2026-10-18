@@ -123,6 +123,7 @@ typedef struct {
     const hint_t *hints;       int nhints;
     bool  burst;               // wants the 1 kHz accelerometer stream (ctl.burst)
     bool  looper;              // the core looper records what audio() plays: REC is its (hold = record/add, tap = stop/play)
+    bool  rec_button_off;      // SYSTEM > REC BUTTON starts OFF: the REC pin is ignored, BOOT and MIDI (CC 64) record
     const char *knob;          // tag of the param the knob turns in play (until the player edits another in the menu);
                                // NULL: the knob changes the sound
     bool  midi_notes;          // MIDI notes play the instrument: notes 60 and 64 go to midi_in(), not to REC / hold

@@ -58,6 +58,8 @@ int  front_screen(void);                         // 0 splash, 1 play, 2 tilt set
 void plat_midi3(uint8_t status, uint8_t d1, uint8_t d2);
 void plat_led(uint8_t r, uint8_t g, uint8_t b);
 void plat_mic_gain(int db);
+void plat_speaker(bool on);                             // the speaker amp on or off (the line out always plays)
+void plat_rec_button(bool on);                          // the REC pin counts (off: only BOOT and MIDI record)
 bool plat_save_user(int k, const uint8_t *b, int n);    // user sound k (0..7): its blob
 int  plat_load_user(int k, uint8_t *b, int cap);        // bytes read, 0 if none
 void plat_factory_reset(void);                          // erase the saved params and user sounds

@@ -38,14 +38,14 @@ it), WS2812 RGB LED on GPIO 48, native USB (MIDI + a 32 kHz sound card).
 | turn | change the sound (or the setting named in `INST.knob`); once a setting has been edited in the menu, the knob turns that setting instead (a strip shows it) | choose, or change the value being edited |
 | tap the knob | open the menu | open a page, edit a setting, run an action; tap again to go back up |
 | hold the knob 0.6 s | hold the motion (freeze): tilt and spin stay where they are, a padlock shows; again to let go (or the instrument's own use of it: `INST.hold`) | back to play |
-| REC | the instrument's; with `INST.looper` the core's looper: hold = record (or add), tap = stop / play | the same |
+| REC (or BOOT) | the instrument's; with `INST.looper` the core's looper: hold = record (or add), tap = stop / play. SYSTEM > REC BUTTON OFF ignores the REC pin (BOOT and MIDI CC 64 still record); `INST.rec_button_off` starts it OFF | the same |
 | joystick | the instrument's (when one is fitted) | |
-| REC held 3 s from power-on | factory reset (tilt setup kept) | |
+| REC held 3 s from power-on, then let go | factory reset (tilt setup kept); a REC still down after 6 s is taken as stuck: no reset, REC ignored until it lets go, BOOT records meanwhile. Not with REC BUTTON OFF (RESET ALL in the menu still works) | |
 | knob held at power-on | USB stays the Serial/JTAG console (for `idf.py monitor`) | |
 
 The menu's pages: SOUND (choose, SAVE AS a user sound, REVERT), the instrument's pages (`INST.groups`),
-LOOP (with the looper), SYSTEM (volume, mic gain, tilt setup, motion on/off, joystick auto/off and its
-orientation, MIDI channel, MIDI CC out, LED, hints, screen saver, ABOUT, RESET ALL).
+LOOP (with the looper), SYSTEM (volume, speaker on/off, mic gain, tilt setup, motion on/off, joystick auto/off and its
+orientation, the REC button on/off, MIDI channel, MIDI CC out, LED, hints, screen saver, ABOUT, RESET ALL).
 
 ## An editor of the instrument's own
 
@@ -87,7 +87,8 @@ with the sound. The sim checks every one of these limits.
   part of the sound. Nothing reaches the DAC over full scale.
 - Decaying recursive states are flushed (`flush_denormal`) so silence costs nothing.
 - The mic arrives high-passed at 80 Hz with the MIC GAIN applied. What the speaker plays comes back into
-  the mic: anything that listens (breath, knocks, voice) discounts its own output.
+  the mic: anything that listens (breath, knocks, voice) discounts its own output. SYSTEM > SPEAKER: OFF holds
+  the speaker amp in shutdown (its SD pin low) while the line out and USB play on: the cure for feedback.
 - Talk to the UI side with plain 32-bit variables and `spsc.h` queues; never wait.
 - The audio code runs from IRAM: each instrument lists the object files of its audio path in a linker
   fragment (`firmware/main/<name>_iram.lf`, `(noflash)` entries; `front_audio()` is `IRAM_ATTR`). Measured on

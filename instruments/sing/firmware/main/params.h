@@ -7,7 +7,7 @@
 // the core's own params, at index NI + CP_*
 enum {
     CP_LOOP_LEVEL, CP_LOOP_KEEP, CP_LOOP_CLEAR,
-    CP_VOLUME, CP_MIC, CP_TILT_SETUP, CP_MOTION, CP_JOY, CP_JOY_TURN, CP_MIDI_CH, CP_MIDI_OUT, CP_LED, CP_HINTS, CP_SAVER,
+    CP_VOLUME, CP_SPEAKER, CP_MIC, CP_TILT_SETUP, CP_MOTION, CP_JOY, CP_JOY_TURN, CP_REC_BTN, CP_MIDI_CH, CP_MIDI_OUT, CP_LED, CP_HINTS, CP_SAVER,
     CP_ABOUT, CP_RESET,
     CP_N
 };
@@ -19,6 +19,7 @@ extern int NI, NP;                 // instrument params, all params
 const param_t *param(int p);
 void  params_init(void);           // builds the table from INST, sets every param to its default
 void  params_defaults(bool sound_only);
+float param_def(int p);            // p's default (the table's, or the instrument's choice: INST.rec_button_off)
 float param_clamp(int p, float v);
 float param_step(int p, float v, int detents);      // the value after turning; clamped
 int   param_to_cc(int p);                           // 0..127

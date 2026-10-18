@@ -30,6 +30,10 @@ void plat_midi3(uint8_t st, uint8_t d1, uint8_t d2) { if (midi_n < 65536) midi_l
 void plat_led(uint8_t r, uint8_t g, uint8_t b) { sim_led[0] = r; sim_led[1] = g; sim_led[2] = b; }
 int  sim_mic_db = 12;
 void plat_mic_gain(int db) { sim_mic_db = db; }
+bool sim_speaker = true;
+void plat_speaker(bool on) { sim_speaker = on; }
+bool sim_rec_button = true;
+void plat_rec_button(bool on) { sim_rec_button = on; }
 static uint8_t users[8][2048]; static int user_n[8];
 bool plat_save_user(int k, const uint8_t *b, int n) { if (k < 0 || k > 7 || n > 2048) return false; memcpy(users[k], b, (size_t)n); user_n[k] = n; return true; }
 int  plat_load_user(int k, uint8_t *b, int cap_) { if (k < 0 || k > 7 || user_n[k] > cap_) return 0; memcpy(b, users[k], (size_t)user_n[k]); return user_n[k]; }

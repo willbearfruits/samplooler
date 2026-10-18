@@ -110,7 +110,7 @@ static const param_t params[P_N] = {
     [P_VOCT]    = { "OCTAVE", "ooct", G_VOC, PK_NUM, PF_INT | PF_SIGNED, -2, 2, 1, 0, "", NULL, "THE SYNTH UP OR DOWN" },
     [P_VBANDS]  = { "BANDS", "oban", G_VOC, PK_NUM, PF_INT, 8, 20, 1, 16, "", NULL, "MORE: CLEARER WORDS" },
     [P_VSHARP]  = { "SHARPNESS", "osha", G_VOC, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "SMOOTH OR RINGING BANDS" },
-    [P_VREL]    = { "RELEASE", "orel", G_VOC, PK_NUM, PF_LOG, 5, 300, 1.15f, 40, "s", NULL, "HOW LONG THE BANDS RING" },
+    [P_VREL]    = { "RELEASE", "orel", G_VOC, PK_NUM, PF_LOG, 5, 300, 1.15f, 40, "ms", NULL, "HOW LONG THE BANDS RING" },
     [P_VSIB]    = { "ESSES", "osib", G_VOC, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "YOUR S AND T ON TOP" },
     [P_VBRIGHT] = { "BUZZ", "obri", G_VOC, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "DARK OR BUZZY SYNTH" },
     [P_VDET]    = { "DETUNE", "odet", G_VOC, PK_NUM, PF_INT, 0, 30, 1, 8, "c", NULL, "THE SYNTH'S WIDTH" },
@@ -344,7 +344,7 @@ static void engines(void)
     op.octave = (int)P(P_VOCT);
     op.bands = P(P_VBANDS);
     op.sharp = P(P_VSHARP) * 0.01f;
-    op.release_ms = P(P_VREL) * 1000.0f;
+    op.release_ms = P(P_VREL);                                    // ms
     op.sibilance = P(P_VSIB) * 0.01f;
     op.bright = P(P_VBRIGHT) * 0.01f;
     op.detune = P(P_VDET);

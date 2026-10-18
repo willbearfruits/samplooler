@@ -141,7 +141,7 @@ note on and off as you sing. Every setting below is on its CC both ways; program
 | OCTAVE | 39 | The synth up or down (-2..2) |
 | BANDS | 40 | More: clearer words (8..20) |
 | SHARPNESS | 41 | Smooth or ringing bands (0..100 %) |
-| RELEASE | 42 | How long the bands ring (5..300 s) |
+| RELEASE | 42 | How long the bands ring (5..300 ms) |
 | ESSES | 43 | Your s and t on top (0..100 %) |
 | BUZZ | 44 | Dark or buzzy synth (0..100 %) |
 | DETUNE | 45 | The synth's width (0..30 c) |

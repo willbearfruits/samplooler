@@ -150,7 +150,7 @@ Your own: change anything, then SOUND > SAVE AS (eight user sounds, the grid wit
 | hold REC | record the live layer's loop, or add to it; stopped (tapped) first: a new take in its place |
 | tap REC | mute / unmute the live layer's loop |
 | tilt, stick, mic | the live layer's (see each layer below) |
-| REC held from power-on, 3 s | factory reset |
+| REC held from power-on, 3 s, then let go | factory reset |
 
 ## The layers
 

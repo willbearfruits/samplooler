@@ -355,14 +355,29 @@ static void health(void)
     metric("seconds_simulated", sim_t);
 }
 
+extern bool sim_speaker, sim_rec_button;
 static void factory_reset(void)
 {
+    section("speaker");
+    int sp = param_by_tag("spkr");
+    if (sp >= 0) param_set(sp, 0.0f);
+    bool off = !sim_speaker;
+    if (sp >= 0) param_set(sp, 1.0f);
+    check(sp >= 0 && off && sim_speaker, "SYSTEM > SPEAKER: OFF shuts the speaker amp, ON wakes it");
+    section("rec button");
+    int rb = param_by_tag("recb");
+    bool start_ok = rb >= 0 && pv[rb] == (INST.rec_button_off ? 0.0f : 1.0f) && sim_rec_button == !INST.rec_button_off;
+    float rb0 = rb >= 0 ? pv[rb] : 1.0f;
+    if (rb >= 0) param_set(rb, 1.0f - rb0);
+    bool flipped = rb >= 0 && sim_rec_button == (rb0 < 1.0f);
+    if (rb >= 0) param_set(rb, rb0);
+    check(start_ok && flipped, "SYSTEM > REC BUTTON starts %s (INST.rec_button_off) and switches the REC pin", INST.rec_button_off ? "OFF" : "ON");
     section("factory reset");
     sim_menu_param(CP(CP_RESET)); sim_tap(); sim_turn(1); sim_shot("factory_reset"); sim_tap(); sim_run(0.2f);
     bool defaults = true;
     for (int p = 0; p < NP; p++) if (param_in_sound(p) || (param(p)->flags & PF_SYS)) {
         if (param(p)->kind == PK_ACT) continue;
-        if (pv[p] != param(p)->def && !(INST.npresets && param_in_sound(p))) defaults = false;
+        if (pv[p] != param_def(p) && !(INST.npresets && param_in_sound(p))) defaults = false;
     }
     check(defaults && meta.user_mask == 0 && meta.sound == 0 && meta.calibrated, "FACTORY RESET: settings back to new, user sounds gone, the tilt kept");
     sim_menu_close();

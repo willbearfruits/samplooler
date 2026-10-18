@@ -63,7 +63,7 @@ no router, no pairing, a few milliseconds per packet.
 | tap REC, then hold REC | a new take in place of the old one |
 | the mixer, or LOOPS (menu) | erase one layer's loop, or all |
 | tilt, stick, mic | the live layer's |
-| REC held from power-on, 3 s | factory reset |
+| REC held from power-on, 3 s, then let go | factory reset |
 
 ## Sounds
 
