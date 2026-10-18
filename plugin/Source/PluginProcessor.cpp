@@ -1,7 +1,14 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-static const char* ids[] = { "micGain", "mode", "pitch", "tilt", "speedMax", "speedMin", "snap", "grain", "volume", "input", "slot" };
+static const char* ids[] = { "micGain", "mode", "pitch", "tilt", "speedMax", "speedMin", "snap", "grain", "volume", "input",
+                             "voice", "key", "scale", "monitor", "slot" };
+// the device's voices (firmware/main/voice.c), keys and scales, in its order
+static const juce::StringArray voiceNames { "Off", "Clean", "Natural tune", "Hard tune", "Choir", "Barbershop", "Thirds", "Octave down",
+                                            "Robot", "Vocoder", "Talkbox", "Whisper", "Chipmunk", "Monster", "Big throat", "Space echo",
+                                            "Cathedral", "Shimmer", "Dub voice" };
+static const juce::StringArray keyNames { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+static const juce::StringArray scaleNames { "Major", "Minor", "Dorian", "Mixolydian", "Phrygian", "Harmonic minor" };
 const char* SamploolerProcessor::paramId (int p) { return ids[p]; }
 
 juce::AudioProcessorValueTreeState::ParameterLayout SamploolerProcessor::layout()
@@ -18,6 +25,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout SamploolerProcessor::layout(
     p.push_back (std::make_unique<AudioParameterInt>   (ParameterID { ids[pGrain], 1 },  "Grain (ms)", 20, 200, 50));
     p.push_back (std::make_unique<AudioParameterInt>   (ParameterID { ids[pVol], 1 },    "Volume (%)", 0, 150, 100));
     p.push_back (std::make_unique<AudioParameterChoice>(ParameterID { ids[pInput], 1 },  "Input", StringArray { "Mic", "USB (from DAW)" }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice>(ParameterID { ids[pVoice], 1 },  "Voice", voiceNames, 0));
+    p.push_back (std::make_unique<AudioParameterChoice>(ParameterID { ids[pKey], 1 },    "Key", keyNames, 0));
+    p.push_back (std::make_unique<AudioParameterChoice>(ParameterID { ids[pScale], 1 },  "Scale", scaleNames, 0));
+    p.push_back (std::make_unique<AudioParameterBool>  (ParameterID { ids[pMonitor], 1 }, "Monitor always", false));
     p.push_back (std::make_unique<AudioParameterInt>   (ParameterID { ids[pSlot], 1 },   "Slot", 1, 8, 1));
     return { p.begin(), p.end() };
 }
@@ -69,6 +80,10 @@ int SamploolerProcessor::valueTo127 (int p, float v) const
         case pGrain:  return juce::roundToInt ((v - 20.0f) * 127.0f / 180.0f);
         case pVol:    return juce::roundToInt (v * 127.0f / 150.0f);
         case pInput:  return v >= 0.5f ? 127 : 0;
+        case pVoice:  return juce::roundToInt (v) * 127 / (voiceNames.size() - 1);
+        case pKey:    return juce::roundToInt (v) * 127 / 11;
+        case pScale:  return juce::roundToInt (v) * 127 / 5;
+        case pMonitor: return v >= 0.5f ? 127 : 0;
         case pSlot:   return (juce::roundToInt (v) - 1) * 16;
         default:      return 0;
     }
@@ -88,6 +103,10 @@ float SamploolerProcessor::value127To (int p, int v) const
         case pGrain:  return 20.0f + v * 180.0f / 127.0f;
         case pVol:    return v * 150.0f / 127.0f;
         case pInput:  return v >= 64 ? 1.0f : 0.0f;
+        case pVoice:  return (float) ((v * (voiceNames.size() - 1) + 63) / 127);
+        case pKey:    return (float) ((v * 11 + 63) / 127);
+        case pScale:  return (float) ((v * 5 + 63) / 127);
+        case pMonitor: return v >= 64 ? 1.0f : 0.0f;
         case pSlot:   return 1.0f + (float) (v / 16);
         default:      return 0.0f;
     }

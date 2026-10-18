@@ -19,13 +19,14 @@ int main(void) {
     frames(&u, 12); dump("01_splash_walk");
     frames(&u, 13); dump("02_splash_trip");
     frames(&u, 16); dump("03_splash_title");
-    frames(&u, 60); dump("04_idle");
+    frames(&u, 60); dump("04_idle"); u.voice = "HARD TUNE"; frames(&u, 2); dump("04b_idle_voice"); u.voice = NULL;
     frames(&u, 2);  dump("05_idle_gag");
     u.state = REC_RECORDING; u.rec_fill = 0.35f; u.meter_in = 0.8f;
     frames(&u, 1); dump("06_rec_flash"); frames(&u, 5); dump("07_recording");
     u.rec_fill = 0.92f; u.clip = true; frames(&u, 4); dump("08_rec_full_clip"); u.clip = false;
     u.state = REC_PLAYING; u.loop_s = 7.3f; u.pos = 0.42f; u.speed_now = 1.0f; u.speed_cmd = 1.0f; u.tilt_pitch = 8; u.tilt_roll = 0; u.meter_in = 0.5f;
     frames(&u, 12); dump("09_play_forward");
+    u.voice = "NATURAL TUNE"; frames(&u, 2); dump("09b_play_voice"); u.voice = NULL;
     u.speed_now = -1.6f; u.speed_cmd = -1.6f; u.tilt_pitch = -25; frames(&u, 14); dump("10_play_reverse");
     u.speed_now = 2.3f; u.speed_cmd = 2.4f; u.tilt_pitch = 18; u.tilt_roll = -30; u.fx_delay = true; frames(&u, 10); dump("11_delay_ghosts");
     u.fx_delay = false; u.tilt_roll = 35; u.fx_stutter = true; frames(&u, 5); dump("12_stutter");

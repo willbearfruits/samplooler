@@ -199,6 +199,7 @@ static void header(const ui_t *u)
     } else {
         oled_pill(F_MED, x, 2, "READY", false);
     }
+    if (u->voice && u->state == REC_IDLE) oled_ftext_r(F_TINY, 89, 6, u->voice, 1);   // the voice on the input (else below)
     meter(92, 4, 36, 9, u->meter_in, &peak_hold, u->clip);
 }
 
@@ -342,12 +343,16 @@ static void bottom_strip(const ui_t *u)
     if (u->frozen) x += oled_pill(F_SMALL, x + 3, y + 3, "HOLD", true) + 1;         // the tilt is latched
     if (u->mode == REC_MODE_GRAIN) {
         snprintf(b, sizeof b, "GRN %+.0f", (double)(12.0f * log2f(u->pitch_ratio)));
-        oled_pill(F_SMALL, x + 4, y + 3, b, true);
+        x += oled_pill(F_SMALL, x + 4, y + 3, b, true) + 4;
     }
     // right corner: effect pills, else the output level and the cpu
     int rx = OLED_W - 1;
     if (u->fx_stutter) rx -= oled_pill(F_SMALL, rx - oled_pill_w(F_SMALL, "STUTTER"), y + 3, "STUTTER", (fr & 2) != 0) + 2;
     if (u->fx_delay)   rx -= oled_pill(F_SMALL, rx - oled_pill_w(F_SMALL, "DELAY"), y + 3, "DELAY", false) + 2;
+    if (u->voice) {                                             // the voice on the input, where there is room
+        int room = (!u->fx_delay && !u->fx_stutter ? 96 : rx) - (x + 5);
+        if (oled_ftext_w(F_TINY, u->voice, 0) <= room) oled_ftext_ex(F_TINY, x + 5, y + 6, u->voice, 0);
+    }
     if (!u->fx_delay && !u->fx_stutter) {
         snprintf(b, sizeof b, "%d%%", u->cpu);
         oled_ftext_r(F_TINY, OLED_W - 1, y + 3, b, 0);

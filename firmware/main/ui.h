@@ -29,6 +29,7 @@ typedef struct {
     float       busy_frac;           // 0..1
     const char *note;                // NULL for none
     int   idle_ms;                   // since the last touch of any control; the screensaver after 3 min idle
+    const char *voice;               // the Voice's name, NULL when it is OFF
 } ui_t;
 
 void ui_draw(const ui_t *u);         // draws one frame and flushes; call at 20 fps

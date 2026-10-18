@@ -3,6 +3,7 @@
 #include "recorder.h"
 #include "usb.h"
 #include "fx.h"
+#include "voice.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -42,6 +43,9 @@ static volatile int   mute_req;
 static float          mute_g = 1.0f;
 #define MUTE_STEP 0.1f
 #define AMP_GOOD_BLOCKS 25                              // 50 ms of clean reads before the speaker amp wakes
+static volatile bool monitor_on;                        // the Monitor setting: the input heard outside recording too
+static float out_env;                                   // the output's peak envelope, for the voice's speaker guard
+static volatile bool speaker_on = true, clock_good;     // the Speaker setting; the clock has been good once
 static int good_blocks;
 static int8_t scope[AUDIO_SCOPE_N];
 static int    scope_w, scope_dec;
@@ -129,7 +133,7 @@ static void IRAM_ATTR audio_task(void *arg)
         if (i2s_channel_read(rx, raw, SAMPLES * sizeof(int32_t), &got, pdMS_TO_TICKS(100)) != ESP_OK || got == 0) {
             read_err++; good_blocks = 0;
             memset(raw, 0, SAMPLES * sizeof(int32_t)); got = SAMPLES * sizeof(int32_t);
-        } else if (good_blocks < AMP_GOOD_BLOCKS && ++good_blocks == AMP_GOOD_BLOCKS) audio_amp_enable(true);
+        } else if (good_blocks < AMP_GOOD_BLOCKS && ++good_blocks == AMP_GOOD_BLOCKS) { clock_good = true; audio_amp_enable(speaker_on); }
         blocks++;
         int frames = (int)(got / (2 * sizeof(int32_t)));
         uint32_t c0 = esp_cpu_get_cycle_count();
@@ -172,7 +176,10 @@ static void IRAM_ATTR audio_task(void *arg)
         }
         if (pk > in_peak) in_peak = pk;
         in_clips += clips;
+        vox_run(in, frames, out_env);                    // the voice on the input (OFF: untouched)
         recorder_process(in, out, frames);
+        if (monitor_on && recorder_state() != REC_RECORDING)       // Monitor: the voice live over the loop
+            for (int f = 0; f < frames; f++) out[f] += in[f];
         fx_process(out, frames);
         float opk = 0;
         static int16_t usb_out[FRAMES];
@@ -184,6 +191,7 @@ static void IRAM_ATTR audio_task(void *arg)
             usb_out[f] = (int16_t)(c * 32767.0f);
         }
         if (opk > out_peak) out_peak = opk;
+        out_env = opk > out_env ? opk : out_env * 0.95f;
         usb_audio_out_push(usb_out, frames);
         uint32_t used = esp_cpu_get_cycle_count() - c0;
         int pct = (int)((uint64_t)used * 100 / budget);
@@ -212,6 +220,7 @@ float audio_in_peak(void)  { float p = in_peak;  in_peak = 0;  return p; }
 float audio_out_peak(void) { float p = out_peak; out_peak = 0; return p; }
 int   audio_in_clips(void) { int c = in_clips;   in_clips = 0; return c; }
 void  audio_set_input(int src) { in_src = src == AUDIO_IN_USB ? AUDIO_IN_USB : AUDIO_IN_MIC; }
+void  audio_set_monitor(bool on) { monitor_on = on; }
 int   audio_input(void)        { return in_src; }
 void  audio_get_stats(audio_stats_t *s)
 {
@@ -221,6 +230,7 @@ void  audio_get_stats(audio_stats_t *s)
 void  audio_flash_hint(void) { flash_t = esp_timer_get_time(); }
 void  audio_set_mute(bool on) { mute_req = on; }
 bool  audio_silent(void)      { return mute_req && mute_g <= 0.0f; }
+void  audio_speaker(bool on) { speaker_on = on; audio_amp_enable(on && clock_good); }
 void  audio_amp_enable(bool on)
 {
 #if PIN_AMP_SD >= 0

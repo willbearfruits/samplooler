@@ -28,3 +28,5 @@ instruments/*/firmware/managed_components/
 instruments/*/tools/sim/obj/
 instruments/*/tools/sim/sim
 instruments/*/tools/sim/out/
+tools/voicesim/out/
+tools/voicesim/voicesim

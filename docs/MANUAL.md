@@ -25,6 +25,7 @@ Everything it can do:
 | | |
 | - | - |
 | Record | 20 seconds at 32 kHz from the built-in microphone, or from the computer over USB (Input = USB). |
+| Voice | Optional: 18 voices on the input before it is recorded: autotune, harmonies, a choir, a vocoder, pitch and throat shift, echo and reverb. Off by default. See The voice below. |
 | Play | Tilt sets the speed from a crawl to 8x, forward or backwards. Speed max and Speed min are settings. Snap rounds the speed to octaves and fifths. |
 | TAPE mode | Pitch follows speed, like a tape machine. The default. |
 | GRAIN mode | Speed and pitch come apart: the loop plays in grains, and Pitch shifts it up to two octaves either way at any speed. The operator juggles. |
@@ -87,6 +88,36 @@ crawl, it stands still and taps its foot.
 | ![Flung](../media/screens/flung.png) | ![Menu](../media/screens/menu-save.png) | ![Asleep](../media/screens/asleep.png) |
 | above 4.5x: flung | menu: save to a slot | no loop, left alone: asleep |
 
+## The voice
+
+The input can go through a voice before the Samplooler records it: the voice processor of the SING firmware
+(`instruments/sing`). Set Voice in the menu (OFF is the Samplooler as it always was). Key and Scale set the notes
+the tuning lands on and the harmonies use; the harmonies and the vocoder play the key's first chord. The echo's
+time follows the loop (the loop counts as one bar of four beats).
+
+| Voice | |
+| - | - |
+| CLEAN | your voice, evened out, a little echo and room |
+| NATURAL TUNE | a gentle pull to the nearest note in the key |
+| HARD TUNE | the hard robot step to the note |
+| CHOIR | a choir singing with you |
+| BARBERSHOP | three harmonies on the chord |
+| THIRDS | a third above you, in the key |
+| OCTAVE DOWN | an octave under you |
+| ROBOT | a vocoder playing the note you sing, tuned |
+| VOCODER | your voice playing the chord |
+| TALKBOX | a buzzy vocoder on the chord and your note |
+| WHISPER | the vocoder on noise |
+| CHIPMUNK, MONSTER, BIG THROAT | pitch and throat (formant) shifted |
+| SPACE ECHO, CATHEDRAL, SHIMMER, DUB VOICE | echo and reverb, long |
+
+Monitor: WHILE REC (the default) plays the input only while you record, as the Samplooler always did. ALWAYS
+plays it all the time, so you can sing through the voice over the loop. The speaker sits next to the mic: with
+Monitor ALWAYS, use headphones or the line out, or turn Speaker off.
+
+The voice takes CPU (the menu's bottom strip shows it): about a third of it more for most voices, more with the
+vocoder ones. Not yet measured on a board.
+
 ## The menu and the settings
 
 Tap the encoder to open the menu, turn to choose, tap to edit, turn to adjust, tap to go back, hold half a second to
@@ -105,9 +136,14 @@ Load, a turn to the right runs it again.
 | Grain | 20 to 200 ms | 10 ms | 50 ms | Grain length, GRAIN only. Short is smooth, long is choppy. |
 | Volume | 0 to 150 % | 5 % | 100 % | Output level. Above 100 % can clip. |
 | Input | mic, USB | | mic | USB records what the computer plays into the sound card. |
+| Voice | OFF and 18 voices | | OFF | The voice on the input (see The voice). |
+| Key | C to B | | C | The key the voice tunes to. |
+| Scale | MAJOR, MINOR, DORIAN, MIXOLYDIAN, PHRYGIAN, HARM MINOR | | MAJOR | The notes of the key. |
+| Monitor | WHILE REC, ALWAYS | | WHILE REC | When the input (the voice) is heard. |
 | Slot | 1 to 8 | | 1 | The slot that Save and Load use. The menu shows its length, or "empty". |
 | Save | | | | Writes the loop to the slot. The sound fades out, a bar runs under SAVING, then SAVED, and the loop fades back in. A few seconds, more for a long loop. |
 | Load | | | | Reads the slot back. Same fade. Recording is ignored while a save or load runs. |
+| Speaker | on, off | | on | Off silences the speaker amp; the line out and USB keep playing. For when the speaker feeds back into the mic. Not on MIDI. |
 
 Settings stay on the board. A change is written 3 seconds after the last one when no loop is playing, and 30
 seconds after it while a loop plays. Never while recording.
@@ -144,7 +180,8 @@ Any channel.
 
 | Message | What it does |
 | - | - |
-| CC 20 to 30 | Sets a setting, see below. |
+| CC 20 to 34 | Sets a setting, see below. |
+| Program change | Picks the voice: 0 is OFF, 1 to 18 the voices in the order above. |
 | Note 60 | Record while held. |
 | Note 61 | Load the current slot. |
 | Note 63 | Save to the current slot. |
@@ -164,7 +201,11 @@ Any channel.
 | 27 | Grain | 20 to 200 ms |
 | 28 | Volume | 0 to 150 % |
 | 29 | Input | below 64 mic, 64 and up USB |
-| 30 | Slot | 16 per slot: 0 to 15 is slot 1, 112 to 127 is slot 8 |
+| 30 | Voice | 0 is OFF, then about 7 per voice (127 is DUB VOICE) |
+| 31 | Key | about 11.5 per key: 0 is C, 127 is B |
+| 32 | Scale | about 25 per scale: 0 is MAJOR, 127 is HARM MINOR |
+| 33 | Monitor | below 64 WHILE REC, 64 and up ALWAYS |
+| 34 | Slot | 16 per slot: 0 to 15 is slot 1, 112 to 127 is slot 8 |
 
 ### MIDI out
 
@@ -178,7 +219,7 @@ Channel 1. The CCs are sent when they change.
 | CC 4 | Loop position |
 | CC 5, 6 | Joystick X and Y. They stay at 64: the firmware does not read the stick's axes. |
 | CC 7 | Input level |
-| CC 20 to 30 | A setting, when it changes on the device |
+| CC 20 to 34 | A setting, when it changes on the device |
 | Note 60 | On while recording |
 | Note 62 | On while playing |
 | SysEx `F0 7D 4C` text `F7` | The device's log, one line per message |

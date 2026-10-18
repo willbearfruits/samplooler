@@ -17,7 +17,7 @@ public:
     ~SamploolerProcessor() override;
 
     // Settings as the device numbers them: CC 20 + index.
-    enum Param { pMic, pMode, pPitch, pTilt, pSpdMax, pSpdMin, pSnap, pGrain, pVol, pInput, pSlot, pCount };
+    enum Param { pMic, pMode, pPitch, pTilt, pSpdMax, pSpdMin, pSnap, pGrain, pVol, pInput, pVoice, pKey, pScale, pMonitor, pSlot, pCount };
     static const char *paramId (int p);
 
     juce::AudioProcessorValueTreeState apvts;

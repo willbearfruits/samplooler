@@ -15,6 +15,7 @@ float audio_in_peak(void);    // peak since the last call, 0..1+, of the signal 
 float audio_out_peak(void);
 int   audio_in_clips(void);   // samples that hit the rail since the last call
 enum { AUDIO_IN_MIC, AUDIO_IN_USB };
+void  audio_set_monitor(bool on);  // the Monitor setting: hear the input (the voice) all the time, not only while recording
 void  audio_set_input(int src);   // AUDIO_IN_USB takes what the host plays into the device
 int   audio_input(void);
 
@@ -25,3 +26,4 @@ void  audio_flash_hint(void);   // call before writing flash: DMA overflows in t
 void  audio_set_mute(bool on);  // 20 ms fade of everything going out (DAC, speaker, USB); the engine keeps running
 bool  audio_silent(void);       // the mute fade has reached silence
 void  audio_amp_enable(bool on);   // the speaker amp's SD pin (PIN_AMP_SD), raised by the audio task after 50 ms of good clock
+void  audio_speaker(bool on);      // the Speaker setting: off holds the amp in shutdown (the line out and USB play on)

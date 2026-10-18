@@ -20,6 +20,11 @@ typedef struct {
     int   vol_pct;       // 0..150
     int   input;         // AUDIO_IN_MIC / AUDIO_IN_USB
     int   slot;          // 0..SLOT_N-1
+    bool  speaker;       // the speaker amp plays (off: only the line out; the cure for feedback)
+    int   voice;         // 0 = OFF, else one of SING's voices on the input (voice.h)
+    int   key;           // 0..11, C = 0: the key the voice tunes to
+    int   scale;         // 0..5: MAJOR, MINOR, DORIAN, MIXOLYDIAN, PHRYGIAN, HARM MINOR
+    bool  monitor;       // hear the input (the voice) all the time, not only while recording
 } settings_t;
 
 #define SETTINGS_DEBOUNCE_MS   3000

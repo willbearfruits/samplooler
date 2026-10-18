@@ -20,7 +20,8 @@ typedef struct { const char *tag; int type; size_t off; } field_t;
 static const field_t fields[] = {
     F("mic ", T_INT, mic_db),   F("mode", T_INT, mode),     F("ptch", T_INT, pitch_st), F("tilt", T_BOOL, tilt),
     F("smax", T_F1000, spd_max), F("smin", T_F1000, spd_min), F("snap", T_BOOL, snap), F("grn ", T_INT, grain_ms),
-    F("vol ", T_INT, vol_pct),  F("inpt", T_INT, input),    F("slot", T_INT, slot),
+    F("vol ", T_INT, vol_pct),  F("inpt", T_INT, input),    F("slot", T_INT, slot),     F("spkr", T_BOOL, speaker),
+    F("voic", T_INT, voice),    F("key ", T_INT, key),      F("scal", T_INT, scale),    F("mont", T_BOOL, monitor),
 };
 #define NF (sizeof fields / sizeof fields[0])
 

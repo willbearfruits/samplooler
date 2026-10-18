@@ -30,6 +30,7 @@
 #include "slots.h"
 #include "fx.h"
 #include "diag.h"
+#include "voice.h"
 #include "settings.h"
 #if HAS_CONTROLS
 #include "input.h"
@@ -49,12 +50,14 @@ static const char *TAG = "main";
 static void apply_settings(void);
 #define SETTINGS_DEFAULTS { .mic_db = 12, .mode = REC_MODE_TAPE, .pitch_st = 0, .tilt = true, \
                             .spd_max = 2.0f, .spd_min = 0.05f, .snap = false, .grain_ms = 50, .vol_pct = 100, \
-                            .input = AUDIO_IN_MIC, .slot = 0 }
+                            .input = AUDIO_IN_MIC, .slot = 0, .speaker = true, .voice = 0, .key = 0, .scale = 0, .monitor = false }
 static settings_t S = SETTINGS_DEFAULTS;
 static const settings_t S_DEFAULTS = SETTINGS_DEFAULTS;
 
-enum { P_MIC, P_MODE, P_PITCH, P_TILT, P_SPDMAX, P_SPDMIN, P_SNAP, P_GRAIN, P_VOL, P_INPUT, P_SLOT, P_SAVE, P_LOAD, P_N };
-static const char *param_name[P_N] = { "Mic gain", "Mode", "Pitch", "Tilt", "Speed max", "Speed min", "Snap", "Grain", "Volume", "Input", "Slot", "Save", "Load" };
+enum { P_MIC, P_MODE, P_PITCH, P_TILT, P_SPDMAX, P_SPDMIN, P_SNAP, P_GRAIN, P_VOL, P_INPUT, P_VOICE, P_KEY, P_SCALE, P_MONITOR,
+       P_SLOT, P_SAVE, P_LOAD, P_SPEAKER, P_N };
+static const char *param_name[P_N] = { "Mic gain", "Mode", "Pitch", "Tilt", "Speed max", "Speed min", "Snap", "Grain", "Volume", "Input",
+                                       "Voice", "Key", "Scale", "Monitor", "Slot", "Save", "Load", "Speaker" };
 static void slot_save(void);
 static void slot_load(void);
 static void midi_send_setting(int p);
@@ -74,9 +77,14 @@ static void param_adjust(int p, int d)
     case P_GRAIN:  S.grain_ms += 10 * d; if (S.grain_ms < 20) S.grain_ms = 20; if (S.grain_ms > 200) S.grain_ms = 200; break;
     case P_VOL:    S.vol_pct += 5 * d; if (S.vol_pct < 0) S.vol_pct = 0; if (S.vol_pct > 150) S.vol_pct = 150; break;
     case P_INPUT:  S.input = d > 0 ? AUDIO_IN_USB : AUDIO_IN_MIC; break;
+    case P_VOICE:  S.voice = ((S.voice + d) % VOICE_N + VOICE_N) % VOICE_N; break;
+    case P_KEY:    S.key = ((S.key + d) % VOICE_KEYS + VOICE_KEYS) % VOICE_KEYS; break;
+    case P_SCALE:  S.scale += d; if (S.scale < 0) S.scale = 0; if (S.scale >= VOICE_SCALES) S.scale = VOICE_SCALES - 1; break;
+    case P_MONITOR: S.monitor = d > 0; break;
     case P_SLOT:   S.slot += d; if (S.slot < 0) S.slot = 0; if (S.slot >= SLOT_N) S.slot = SLOT_N - 1; break;
     case P_SAVE:   if (d > 0) slot_save(); return;
     case P_LOAD:   if (d > 0) slot_load(); return;
+    case P_SPEAKER: S.speaker = d > 0; audio_speaker(S.speaker); break;
     }
     setting_changed();
     midi_send_setting(p);
@@ -96,9 +104,14 @@ static void param_text(int p, char *b, size_t n)
     case P_GRAIN:  snprintf(b, n, "%d ms", S.grain_ms); break;
     case P_VOL:    snprintf(b, n, "%d%%", S.vol_pct); break;
     case P_INPUT:  snprintf(b, n, "%s", S.input == AUDIO_IN_USB ? "USB" : "MIC"); break;
+    case P_VOICE:  snprintf(b, n, "%s", vox_name(S.voice)); break;
+    case P_KEY:    snprintf(b, n, "%s", vox_key_name(S.key)); break;
+    case P_SCALE:  snprintf(b, n, "%s", vox_scale_name(S.scale)); break;
+    case P_MONITOR: snprintf(b, n, "%s", S.monitor ? "ALWAYS" : "WHILE REC"); break;
     case P_SLOT:   { int l = slots_length(S.slot); if (l) snprintf(b, n, "%d %.1fs", S.slot + 1, (double)l / REC_SAMPLE_RATE); else snprintf(b, n, "%d empty", S.slot + 1); } break;
     case P_SAVE:   snprintf(b, n, "-> slot %d", S.slot + 1); break;
     case P_LOAD:   snprintf(b, n, "<- slot %d", S.slot + 1); break;
+    case P_SPEAKER: snprintf(b, n, "%s", S.speaker ? "ON" : "OFF (line out)"); break;
     }
 }
 
@@ -168,6 +181,10 @@ static int setting_to_127(int p)
     case P_GRAIN:  return (S.grain_ms - 20) * 127 / 180;
     case P_VOL:    return S.vol_pct * 127 / 150;
     case P_INPUT:  return S.input == AUDIO_IN_USB ? 127 : 0;
+    case P_VOICE:  return S.voice * 127 / (VOICE_N - 1);
+    case P_KEY:    return S.key * 127 / (VOICE_KEYS - 1);
+    case P_SCALE:  return S.scale * 127 / (VOICE_SCALES - 1);
+    case P_MONITOR: return S.monitor ? 127 : 0;
     case P_SLOT:   return S.slot * 16;
     default:       return 0;
     }
@@ -185,6 +202,10 @@ static void setting_from_127(int p, int v)
     case P_GRAIN:  S.grain_ms = 20 + v * 180 / 127; break;
     case P_VOL:    S.vol_pct = v * 150 / 127; break;
     case P_INPUT:  S.input = v >= 64 ? AUDIO_IN_USB : AUDIO_IN_MIC; break;
+    case P_VOICE:  S.voice = (v * (VOICE_N - 1) + 63) / 127; break;
+    case P_KEY:    S.key = (v * (VOICE_KEYS - 1) + 63) / 127; break;
+    case P_SCALE:  S.scale = (v * (VOICE_SCALES - 1) + 63) / 127; break;
+    case P_MONITOR: S.monitor = v >= 64; break;
     case P_SLOT:   S.slot = v / 16; if (S.slot >= SLOT_N) S.slot = SLOT_N - 1; break;
     default: break;
     }
@@ -198,6 +219,7 @@ static volatile bool midi_freeze_req;              // note 64: toggle the tilt l
 static void midi_in(uint8_t st, uint8_t d1, uint8_t d2)
 {
     if (st == 0xB0 && d1 >= 20 && d1 < 20 + P_SAVE) { setting_from_127(d1 - 20, d2); apply_settings(); setting_changed(); }
+    else if (st == 0xC0) { S.voice = d1 % VOICE_N; apply_settings(); setting_changed(); midi_send_setting(P_VOICE); }   // program change: the voice
     else if (st == 0x90 && d2 > 0) {
         if (d1 == 60) midi_rec_hold = true;
         else if (d1 == 64) midi_freeze_req = true;
@@ -221,6 +243,9 @@ static void clamp_settings(void)
     S.vol_pct  = clampi(S.vol_pct, 0, 150);
     S.input    = S.input == AUDIO_IN_USB ? AUDIO_IN_USB : AUDIO_IN_MIC;
     S.slot     = clampi(S.slot, 0, SLOT_N - 1);
+    S.voice    = clampi(S.voice, 0, VOICE_N - 1);
+    S.key      = clampi(S.key, 0, VOICE_KEYS - 1);
+    S.scale    = clampi(S.scale, 0, VOICE_SCALES - 1);
 }
 static void apply_settings(void)
 {
@@ -229,6 +254,9 @@ static void apply_settings(void)
     recorder_set_grain_ms(S.grain_ms);
     recorder_set_volume(S.vol_pct / 100.0f);
     audio_set_input(S.input);
+    audio_speaker(S.speaker);
+    audio_set_monitor(S.monitor);
+    vox_select(S.voice, S.key, S.scale);
 }
 
 // -1..1 control (tilt angle over TILT_FULL_DEG, or joystick Y) to a speed.
@@ -324,6 +352,7 @@ void app_main(void)
     input_init();
 #endif
     audio_i2s_init();
+    vox_init();                             // the voice's engines (SING's): idle until a Voice is chosen
     if (!recorder_init()) {
         ESP_LOGE(TAG, "halt");
 #if OLED_ENABLE
@@ -391,6 +420,7 @@ void app_main(void)
         usb_midi_poll(midi_in);
         job_poll();
         settings_poll(&S);
+        vox_tick(recorder_state() == REC_PLAYING ? recorder_loop_seconds() : 0.0f);
         bool down = gpio_get_level(PIN_BOOT) == 0 || midi_rec_hold;
 #if HAS_CONTROLS
         input_poll(&in);
@@ -508,6 +538,7 @@ void app_main(void)
                 .busy_text = job != JOB_NONE ? job_text : NULL, .busy_frac = slots_progress(),
                 .note = result_ms > 0 ? result_text : tick < 700 ? diag_note() : NULL,
                 .idle_ms = recorder_state() == REC_IDLE ? idle_ms : 0,
+                .voice = vox_on() ? vox_name(S.voice) : NULL,
             };
 #if HAS_JOY
             u.has_joy = in.has_joy;

@@ -1,6 +1,8 @@
-set(srcs "main.c" "audio.c" "recorder_f32.c" "imu.c" "oled.c" "input.c" "slots.c" "usb.c" "fx.c" "ui.c" "diag.c" "settings.c" "font_data.c" "usb/usb_descriptors.c")
+set(srcs "main.c" "audio.c" "recorder_f32.c" "imu.c" "oled.c" "input.c" "slots.c" "usb.c" "fx.c" "ui.c" "diag.c" "settings.c" "font_data.c" "usb/usb_descriptors.c"
+         "voice.c" "sing_voice.c" "sing_vocoder.c" "sing_fx.c")   # the voice on the input: SING's engines (voice.h)
 set(reqs driver esp_driver_i2s esp_driver_i2c esp_driver_gpio esp_driver_pcnt esp_adc esp_timer fatfs wear_levelling nvs_flash esp_app_format esp_system esp_hw_support xtensa usb)
-idf_component_register(SRCS ${srcs} INCLUDE_DIRS "." REQUIRES ${reqs})
+file(GLOB voice_lf "${CMAKE_CURRENT_LIST_DIR}/*.lf")   # voice_iram.lf: the voice's per-sample code in IRAM (tools/iram_lf.py)
+idf_component_register(SRCS ${srcs} INCLUDE_DIRS "." REQUIRES ${reqs} LDFRAGMENTS ${voice_lf})
 target_compile_options(${COMPONENT_LIB} PRIVATE -O3 -ffast-math -fno-math-errno -Wall -Wextra -Wdouble-promotion -Werror)
 # Panics are recorded in RTC memory by diag.c's __wrap_esp_panic_handler before the real handler runs.
 target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--wrap=esp_panic_handler" "-u __wrap_esp_panic_handler")
