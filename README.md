@@ -29,13 +29,15 @@ the screen is the firmware's own drawing code.
 | Tilt | Forward plays faster, back plays backwards. Snap rounds the speed to octaves and fifths. |
 | Roll | Left adds a tape delay, right a stutter. |
 | Modes | TAPE (speed and pitch move together) and GRAIN (they move apart). |
+| Voice | Optional: SING's 18 voices on the input before it records (autotune, harmonies, choir, vocoder, echo). |
+| Speaker | Can be switched off, so only the line out plays, when the speaker feeds back into the mic. |
 | Slots | 8 loops saved on the board, kept when you update it. |
 | With a computer | USB MIDI and a USB sound card on one cable, and a VST3 plugin that shows and sets everything. |
-| Other instruments | Ten more firmwares for the same box, from a singing voice processor to a drum machine you knock on. |
+| Other instruments | Eleven more firmwares for the same box, from a singing voice processor to a drum machine you knock on. |
 
-## Ten more instruments
+## Eleven more instruments
 
-The same Stack can be flashed with SING, BAND, WRECK, ETHER, JAM, KNOCK, HUFF, HOWL, SNIFF or CHIRP, and
+The same Stack can be flashed with SING, BAND, WRECK, MANTRA, ETHER, JAM, KNOCK, HUFF, HOWL, SNIFF or CHIRP, and
 flashed back. The list, what each one does and how far it is tested: [instruments/](instruments/).
 Anyone can add one ([CONTRIBUTING.md](CONTRIBUTING.md)).
 

@@ -13,6 +13,7 @@ and flash the Samplooler back the same way. Anyone can add an instrument.
 | [HUFF](huff) | Blow at the mic and tilt the box for the notes. Ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle. | Simulator only |
 | [JAM](jam) | Drums, bass, breath and howl, looped on top of each other in one key and one tempo. Turn the knob to pick the one you play. | Runs on a board |
 | [KNOCK](knock) | Knock on the box to play drums. Each side is a different drum. Hold REC while you knock and it loops. | Simulator only |
+| [MANTRA](mantra) | A formant voice and a seated Buddha who sings it: monks chanting OM, overtone singing, Daisy Bell, and a wall of amps behind him. Tilt for the vowels, turn it for the overtones. | Runs on a board |
 | [SING](sing) | Sing and it tunes you, sings harmonies and a choir with you, or turns you into a vocoder. Hold REC to loop it; tilt to play the loop faster or backwards. Syncs with a BAND. | Runs on a board |
 | [SNIFF](sniff) | The Wi-Fi around you as sound. Every device gets a note and plays it each time it sends something. HUNT finds one by ear. | Simulator only |
 | [WRECK](wreck) | A breakcore machine that turns into a doom machine: one knob from a chopped, rolled, crushed break at twice the tempo down to one chord held under a break slowed into thunder. | Simulator only |

@@ -1,0 +1,22 @@
+{
+  "name": "MANTRA",
+  "summary": "A formant voice and a seated Buddha who sings it: monks chanting OM, overtone singing, Daisy Bell, and a wall of amps behind him. Tilt for the vowels, turn it for the overtones.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.2.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt",
+    "joystick",
+    "wifi"
+  ],
+  "hardware_note": "Best with headphones or the line out when the mic is used: the speaker sits next to it.",
+  "status": "board",
+  "status_note": "Built 2026-10-17 and 18; the chant ran on a board, the wall of amps (added on the 18th) only in the simulator so far.",
+  "image": "images/mantra-daisy.gif",
+  "more": [
+    "images/mantra-splash.gif"
+  ],
+  "added": "2026-10-17"
+}
