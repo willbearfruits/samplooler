@@ -339,16 +339,26 @@
   async function openLine(b) {
     if (S.line?.port === b.port) return;
     closeLine();
-    S.line = { port: b.port, params: new Map(), order: [], log: [], described: false, opened: Date.now(), error: null };
+    const L = S.line = { port: b.port, params: new Map(), order: [], log: [], described: false, opened: Date.now(), error: null, asks: 0 };
     try {
       await invoke("line_open", { port: b.port });
+      // every 2 s: still here (a board stops sending changes after 5 s of silence), and the list asked for
+      // again, twice at most, if its end has not come
+      if (S.line === L) L.ping = setInterval(() => {
+        invoke("line_ping").catch(() => {});
+        if (!L.described && (b.proto || L.order.length) && L.asks < 2 && Date.now() - L.opened > 4000 * (L.asks + 1)) {
+          L.asks++;
+          invoke("line_describe").catch(() => {});
+        }
+      }, 2000);
     } catch (e) {
-      S.line.error = err(e);
+      L.error = err(e);
     }
-    setTimeout(() => { if (route === "board") paintParams(); }, 1600);
+    setTimeout(() => { if (route === "board" && S.line === L) paintParams(); }, 1600);
   }
   function closeLine() {
     if (!S.line) return;
+    clearInterval(S.line.ping);
     S.line = null;
     invoke("line_close").catch(() => {});
   }
@@ -366,6 +376,9 @@
       if (!f.tag) return;
       if (!L.params.has(f.tag)) L.order.push(f.tag);
       L.params.set(f.tag, f);
+      // a list that comes late or loses its end is shown as far as it came, a moment after its last line
+      clearTimeout(L.paintT);
+      L.paintT = setTimeout(() => { if (route === "board" && S.line === L && !L.described) paintParams(); }, 400);
     } else if (msg.kind === "value") {
       const f = msg.fields;
       const p = L.params.get(f.tag);
@@ -474,7 +487,8 @@
   function guessText(p, v) {
     if (p.kind === "enum") return (p.labels || "").split("|")[Math.round(v - num(p.min))] ?? String(v);
     const n = flagsOf(p).includes("int") ? String(Math.round(v)) : String(+(+v).toPrecision(3));
-    return (flagsOf(p).includes("signed") && v > 0 ? "+" : "") + n + (p.unit ? " " + p.unit : "");
+    const tight = p.unit === "%" || p.unit === "x";        // as the board writes them (params.c param_text)
+    return (flagsOf(p).includes("signed") && v > 0 ? "+" : "") + n + (p.unit ? (tight ? "" : " ") + p.unit : "");
   }
 
   function paramRow(p) {
@@ -489,11 +503,15 @@
         : `<select data-p="${esc(p.tag)}" data-kind="select">${labels.map((l, i) => `<option value="${i + lo}" ${i + lo === Math.round(v) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
     } else if (p.kind === "act") {
       ctl = `<div><button class="btn" data-p="${esc(p.tag)}" data-kind="act">${px("RUN")}</button></div>`;
+    } else if (p.kind === "step") {
+      ctl = `<div class="seg" data-p="${esc(p.tag)}" data-kind="step"><button data-d="-1" aria-label="less">${px("-", 2)}</button><button data-d="1" aria-label="more">${px("+", 2)}</button></div>`;
     } else {
       ctl = `<input type="range" min="0" max="1000" step="1" value="${toSlider(p, v)}" data-p="${esc(p.tag)}" data-kind="range" aria-label="${esc(p.name)}">`;
     }
-    const shown = p.kind === "act" || ctl.includes('data-kind="seg"') ? "" : p.text || guessText(p, v);
-    return `<div class="param" data-row="${esc(p.tag)}">${px(p.name, 2, "small", "pn")}${ctl}<div class="val" data-val="${esc(p.tag)}" ${shown ? "" : "data-quiet"}>${esc(shown)}</div>${help}</div>`;
+    // the value's text: none beside the segments (they show it) or for an action without one
+    const quiet = ctl.includes('data-kind="seg"') || (p.kind === "act" && !p.text);
+    const shown = quiet ? "" : p.kind === "act" || p.kind === "step" ? p.text || "" : p.text || guessText(p, v);
+    return `<div class="param" data-row="${esc(p.tag)}">${px(p.name, 2, "small", "pn")}${ctl}<div class="val" data-val="${esc(p.tag)}" ${quiet ? "data-quiet" : ""}>${esc(shown)}</div>${help}</div>`;
   }
 
   const sendTimers = new Map();
@@ -523,8 +541,25 @@
         send(tag, b.dataset.v);
         PX.all(el);
       }));
+    } else if (kind === "step") {
+      // each press is a turn of the encoder: sent at once, not merged
+      $$("button", el).forEach((b) => b.addEventListener("click", () => invoke("line_set", { tag, value: b.dataset.d }).catch((e) => toast(err(e)))));
     } else if (kind === "act") {
-      el.addEventListener("click", () => send(tag, 1));
+      let armed = 0;
+      el.addEventListener("click", () => {
+        if (p.confirm && Date.now() - armed > 4000) {
+          armed = Date.now();
+          toast(p.confirm + " Press again to go ahead.");
+          setTimeout(() => { if (armed && Date.now() - armed >= 4000) { el.querySelector(".px").dataset.t = "RUN"; PX.letter(el.querySelector(".px")); } }, 4100);
+          el.querySelector(".px").dataset.t = "SURE?";
+          PX.letter(el.querySelector(".px"));
+          return;
+        }
+        armed = 0;
+        invoke("line_set", { tag, value: "1" }).catch((e) => toast(err(e)));
+        el.querySelector(".px").dataset.t = "RUN";
+        PX.letter(el.querySelector(".px"));
+      });
     }
   }
 
@@ -533,7 +568,7 @@
     if (!row) return;
     const v = num(p.value);
     const val = $("[data-val]", row);
-    if (val && p.kind !== "act" && !val.hasAttribute("data-quiet")) val.textContent = p.text || guessText(p, v);
+    if (val && !val.hasAttribute("data-quiet")) val.textContent = p.kind === "act" || p.kind === "step" ? p.text || "" : p.text || guessText(p, v);
     const r = $("input[type=range]", row);
     if (r && document.activeElement !== r) r.value = toSlider(p, v);
     const s = $("select", row);

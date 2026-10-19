@@ -167,6 +167,108 @@ static void flash_and_midi(void)
     note("%d MIDI messages out so far (%d CC)", midi_n, sent);
 }
 
+// The app's line (front.c): who it is, the settings described, set by tag, changes sent back, quiet once the app
+// has gone or stops reading, and what it missed sent when it is back.
+static const char *sx_field(const char *t, const char *key, char *out, int cap)
+{
+    char k[24];
+    snprintf(k, sizeof k, "%s=", key);
+    for (const char *s = t + 1; s && *s; ) {
+        if (!strncmp(s, k, strlen(k))) {
+            const char *e = strchr(s, '\n');
+            int n = e ? (int)(e - s - (int)strlen(k)) : (int)strlen(s + strlen(k));
+            if (n > cap - 1) n = cap - 1;
+            memcpy(out, s + strlen(k), (size_t)n); out[n] = 0;
+            return out;
+        }
+        s = strchr(s, '\n'); if (s) s++;
+    }
+    return NULL;
+}
+static void sx_in(char cmd, const char *body)
+{
+    front_sysex((uint8_t)cmd, (const uint8_t *)body, (int)strlen(body));
+}
+static void app_line(void)
+{
+    section("app line");
+    char v[96];
+    int from = sim_sysex_n;
+    sx_in('I', "");
+    bool who = sim_sysex_n == from + 1 && sim_sysex[from % 256][0] == 'I';
+    check(who && sx_field(sim_sysex[from % 256], "name", v, sizeof v) && !strcmp(v, INST.name),
+          "'I' is answered with the name (%s)", who ? v : "nothing");
+    int shown = who && sx_field(sim_sysex[from % 256], "params", v, sizeof v) ? atoi(v) : -1;
+    check(who && sx_field(sim_sysex[from % 256], "proto", v, sizeof v) && !strcmp(v, "1"), "... and protocol 1");
+
+    from = sim_sysex_n;
+    sx_in('D', "");
+    sim_run(2.0f);
+    int described = 0, ended = -1, bad = 0, n_ok = 0;
+    char tag[8] = "", tag_tag[8] = "";
+    for (int i = from; i < sim_sysex_n && i < from + 256; i++) {
+        const char *t = sim_sysex[i % 256];
+        if (t[0] != 'D') continue;
+        if (sx_field(t, "end", v, sizeof v)) { ended = atoi(v); continue; }
+        described++;
+        char k[16];
+        if (!sx_field(t, "tag", tag, sizeof tag) || !sx_field(t, "kind", k, sizeof k) || !sx_field(t, "name", v, sizeof v)
+            || !sx_field(t, "cc", v, sizeof v)) bad++;
+        else if (!strcmp(k, "enum")) {               // every label there: nothing cut off at the end
+            int p = param_by_tag(tag), bars = 0;
+            char lab[720];
+            if (p < 0 || !sx_field(t, "labels", lab, sizeof lab)) { bad++; continue; }
+            for (const char *c = lab; *c; c++) bars += *c == '|';
+            if (bars != (int)(param(p)->max - param(p)->min)) bad++;
+        } else if (!strcmp(k, "num") && !tag_tag[0]) {
+            int p = param_by_tag(tag);
+            if (p >= 0 && p < NI && param(p)->max > param(p)->min) { memcpy(tag_tag, tag, 5); n_ok = 1; }
+        }
+    }
+    check(described > 0 && described == ended && described == shown && bad == 0,
+          "'D' describes every setting (%d, end=%d, 'I' said %d), each with a tag, a name, a kind and all its labels", described, ended, shown);
+
+    if (n_ok) {
+        int p = param_by_tag(tag_tag);
+        float want = param(p)->max;
+        char msg[40];
+        snprintf(msg, sizeof msg, "%.4s=%.7g", param(p)->tag, (double)want);
+        from = sim_sysex_n;
+        sx_in('P', msg);
+        bool answered = sim_sysex_n > from && sim_sysex[from % 256][0] == 'V' && sx_field(sim_sysex[from % 256], "text", v, sizeof v);
+        check(fabsf(pv[p] - want) < 1e-4f * (fabsf(want) + 1) && answered, "'P %s' sets %s and is answered with 'V' (%s)", msg, param(p)->name, answered ? v : "nothing");
+        from = sim_sysex_n;
+        param_set(p, param(p)->def);              // as the knob would
+        sim_run(0.1f);
+        bool followed = false;
+        for (int i = from; i < sim_sysex_n; i++) if (sim_sysex[i % 256][0] == 'V' && sx_field(sim_sysex[i % 256], "tag", v, sizeof v) && !strncmp(v, param(p)->tag, 4)) followed = true;
+        check(followed, "a change on the device goes out as 'V'");
+        from = sim_sysex_n;
+        sx_in('P', "zzzz=1");
+        sx_in('P', "rset=1");
+        check(sim_sysex_n == from && pv[CP(CP_RESET)] == 0, "an unknown tag and RESET ALL are ignored");
+        sim_run(6.0f);                            // the app is gone
+        from = sim_sysex_n;
+        param_set(p, param(p)->max);
+        sim_run(0.1f);
+        check(sim_sysex_n == from, "after 5 s without a word from the app, changes stay home");
+        sx_in('I', "");                           // the app is back (its next 'I')
+        sim_run(0.1f);
+        bool caught_up = false;
+        for (int i = from; i < sim_sysex_n; i++) if (sim_sysex[i % 256][0] == 'V' && sx_field(sim_sysex[i % 256], "tag", v, sizeof v) && !strncmp(v, param(p)->tag, 4)) caught_up = true;
+        check(caught_up, "when it speaks again, the change it missed goes out");
+        sim_sysex_off = true;                     // the computer stops reading
+        param_set(p, param(p)->def);
+        sim_run(0.1f);
+        sim_sysex_off = false;
+        from = sim_sysex_n;
+        param_set(p, param(p)->max);
+        sim_run(0.1f);
+        check(sim_sysex_n == from, "a message that cannot go out quiets the line");
+        param_set(p, param(p)->def);
+    }
+}
+
 // With INST.knob the knob in play turns that param, and the sounds are walked in SOUND > SOUND instead.
 static void browse_open(void) { if (INST.knob) { sim_menu_goto(0, 0); sim_tap(); } }
 static void browse_close(void) { if (INST.knob) sim_menu_close(); }
@@ -404,6 +506,7 @@ void core_checks(void)
 {
     tables();
     flash_and_midi();
+    app_line();
     sounds();
     menu_walk();
     tilt_setup();

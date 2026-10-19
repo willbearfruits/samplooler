@@ -69,6 +69,14 @@ void plat_speaker(bool on) { audio_speaker(on); }
 bool plat_save_user(int k, const uint8_t *b, int n) { return settings_user_save(k, b, n); }
 int  plat_load_user(int k, uint8_t *b, int cap) { return settings_user_load(k, b, cap); }
 void plat_factory_reset(void) { settings_erase(); }
+bool plat_sysex(const uint8_t *m, int n) { return usb_midi_send_sysex(m, n); }
+const char *plat_version(void) { return esp_app_get_description()->version; }
+#if HAS_USB
+extern char usb_serial[];                       // usb/usb_descriptors.c
+const char *plat_serial(void) { return usb_connected() ? usb_serial : ""; }
+#else
+const char *plat_serial(void) { return ""; }
+#endif
 int  plat_about(char l[][32], int max)
 {
     audio_stats_t a; audio_get_stats(&a);
@@ -199,7 +207,7 @@ void app_main(void)
     front_init(has_imu, safe, from_flash);
     audio_run();
     if (gpio_get_level(PIN_ENC_SW) == 0) ESP_LOGW(TAG, "knob held at boot: USB MIDI/audio off, console kept");
-    else { vTaskDelay(pdMS_TO_TICKS(200)); usb_start(); }
+    else { vTaskDelay(pdMS_TO_TICKS(200)); usb_start(); usb_midi_on_sysex(front_sysex); }
     const char *note = diag_note();
     if (note) front_note(note);
 

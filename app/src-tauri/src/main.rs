@@ -408,6 +408,12 @@ fn line_status(app: AppHandle) -> Result<(), String> {
     with_line(&app, |l| l.send(&midi::STATUS))
 }
 
+/// The window says it is still there (every 2 s): a board stops sending changes after 5 s of silence.
+#[tauri::command]
+fn line_ping(app: AppHandle) -> Result<(), String> {
+    with_line(&app, |l| l.send(&midi::IDENTIFY))
+}
+
 // ---------------------------------------------------------------- lib:// (the library's files)
 
 fn unescape(s: &str) -> String {
@@ -543,6 +549,7 @@ fn main() {
             line_cc,
             line_describe,
             line_status,
+            line_ping,
         ])
         .run(tauri::generate_context!())
         .expect("the window did not start");

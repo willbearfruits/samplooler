@@ -8,9 +8,9 @@ settings and log, and installs a build of your own.
 
 ## What it does
 
-- Lists the Samplooler and the eleven instruments from the project page (or a folder on this computer), with
-  their screens, status, README and manual. What it downloads it keeps, so a firmware installs again without
-  a connection.
+- Lists the Samplooler and the instruments on the list from the project page (or a folder on this computer),
+  with their screens, status, README and manual. What it downloads it keeps, so a firmware installs again
+  without a connection.
 - Finds the boards plugged in: one running any of these firmwares shows up by its MIDI port's name; one in
   download mode (BOOT held while plugging in) shows up as Espressif's serial port.
 - Installs with one click: asks the board over its own MIDI port to restart into download mode
@@ -20,8 +20,10 @@ settings and log, and installs a build of your own.
   back. A board that is not one of ours, a TWOFOLD among them, is never opened or written. A board already in
   download mode is written only when it is the only one.
 - Your build: pick an instrument's folder (or its `firmware/` or `build/`) and install what `flash_args` lists.
-- A board's settings and log, for firmwares that describe their settings over MIDI (protocol 1); every
-  firmware's log works.
+- A board's settings and log. The settings show for firmwares that describe them over MIDI (protocol 1, in
+  `src-tauri/src/midi.rs`): the current Samplooler, WRECK, MANTRA and HUFF. A change made on the board shows
+  up in the window. The Samplooler's settings are - and + buttons, one turn of its encoder each. An older
+  build shows only its log.
 
 ## Build and run
 
@@ -48,11 +50,12 @@ mode, reads its MAC and restarts it without writing anything.
 ## Working on the window
 
 `ui/` is plain HTML, CSS and JS (no build step). Opened in a browser it runs against `tools/mock.js`, a
-stand-in for the Rust side, with a library folder served next to it; `tools/shots.sh` takes the screenshots in
-`screenshots/` that way (needs Chromium). `tools/fonts.py` exports the firmware's pixel fonts to `ui/fonts.js`,
-`tools/icon.py` draws the icon.
+stand-in for the Rust side, with a library folder served next to it (`?scene=one` is a Samplooler,
+`?scene=mantra` a MANTRA); `tools/shots.sh` takes the screenshots in `screenshots/` that way (needs Chromium).
+`tools/fonts.py` exports the firmware's pixel fonts to `ui/fonts.js`, `tools/icon.py` draws the icon.
 
 ## Status
 
-Built and run on Linux against a local library. Not yet used to flash a real board from the app (the flashing
-code is the espflash crate, with the same rules as `tools/flash.sh`); not built on Windows or macOS yet.
+Built and used on Linux: it installs onto a Stack. The settings view has run only against the simulators'
+checks and `tools/mock.js` so far, not yet against a board running the new firmwares. Not built on Windows or
+macOS yet.

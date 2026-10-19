@@ -46,6 +46,7 @@ void front_tick(const front_in_t *in);           // 100 Hz
 void front_draw(void);                           // one frame into oled.c's buffer
 void front_audio(const float *in, float *out, int n);   // the audio task's process function
 void front_midi(uint8_t status, uint8_t d1, uint8_t d2);   // a channel message from USB MIDI (UI task)
+void front_sysex(uint8_t cmd, const uint8_t *body, int n); // one of the app's SysEx messages, F0 7D <cmd> <body> F7 (UI task)
 void front_note(const char *s);                  // a boot note (CRASH: ..., WATCHDOG) for the first seconds
 bool front_dirty(void);                          // params or meta changed since front_saved()
 void front_saved(void);
@@ -64,3 +65,6 @@ bool plat_save_user(int k, const uint8_t *b, int n);    // user sound k (0..7): 
 int  plat_load_user(int k, uint8_t *b, int cap);        // bytes read, 0 if none
 void plat_factory_reset(void);                          // erase the saved params and user sounds
 int  plat_about(char lines[][32], int max);             // status lines for ABOUT: version, CPU, memory, uptime
+bool plat_sysex(const uint8_t *m, int n);               // a whole SysEx message out on USB MIDI; false: not sent
+const char *plat_version(void);                         // the firmware's version ("0.2.0")
+const char *plat_serial(void);                          // the USB serial ("SG-727600D0"), "" without USB

@@ -38,6 +38,21 @@ static uint8_t users[8][2048]; static int user_n[8];
 bool plat_save_user(int k, const uint8_t *b, int n) { if (k < 0 || k > 7 || n > 2048) return false; memcpy(users[k], b, (size_t)n); user_n[k] = n; return true; }
 int  plat_load_user(int k, uint8_t *b, int cap_) { if (k < 0 || k > 7 || user_n[k] > cap_) return 0; memcpy(b, users[k], (size_t)user_n[k]); return user_n[k]; }
 void plat_factory_reset(void) { memset(user_n, 0, sizeof user_n); }
+char sim_sysex[256][720]; int sim_sysex_n;      // the app's line: what went out, as text after F0 7D (the letter first)
+bool sim_sysex_off;                             // the host stops reading
+bool plat_sysex(const uint8_t *m, int n)
+{
+    if (sim_sysex_off) return false;
+    if (n < 3 || m[0] != 0xF0 || m[n - 1] != 0xF7) return false;
+    char *t = sim_sysex[sim_sysex_n % 256];
+    int k = 0;
+    for (int i = 2; i < n - 1 && k < 719; i++) t[k++] = (char)m[i];
+    t[k] = 0;
+    sim_sysex_n++;
+    return true;
+}
+const char *plat_version(void) { return "0.1.0-sim"; }
+const char *plat_serial(void) { return "SM-00000000"; }
 int  plat_about(char l[][32], int max)
 {
     int n = 0;

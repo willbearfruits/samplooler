@@ -166,6 +166,8 @@ main.wrap { padding-top: 26px; padding-bottom: 60px; }
 .seg { display: flex; gap: 4px; flex-wrap: wrap; }
 .seg button { all: unset; cursor: pointer; padding: 4px 8px; border: 1.5px solid var(--line); border-radius: 2px; --px: var(--mute); }
 .seg button[aria-pressed="true"] { border-color: var(--c); background: var(--c); --px: #000; }
+.seg[data-kind="step"] button { min-width: 18px; padding: 8px 12px; text-align: center; --px: var(--ink); }
+.seg[data-kind="step"] button:active { border-color: var(--c); }
 .log { background: #000; border: 1.5px solid var(--line); border-radius: 3px; font: 12.5px/1.5 var(--mono); color: #b9b5aa; padding: 12px; height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
 .log .w { color: #f2c94c; }
 .log .e { color: var(--bad); }

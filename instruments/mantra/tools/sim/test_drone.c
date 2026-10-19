@@ -424,7 +424,9 @@ static void with_wreck(void)
         double off = fabs(pb / 16.0 - floor(pb / 16.0 + 0.5)) * 16.0 * 60000.0 / 96.0;   // ms from WRECK's nearest machine bar (16 song beats)
         if (off > worst) worst = (float)off;
         if (off < 25.0) on_wreck_bar++;                            // the take waits 12 ms for the song's chord (host_degree_at would make it exact)
-        uint32_t b; bar_of(E->frame, &b);
+        // the bar it starts: a change on the line can sit a few frames before it as the line is now (the link's
+        // servo has moved the origin a little since), so it is looked up 2 ms on
+        uint32_t b; bar_of(E->frame + AUDIO_SR / 500, &b);
         if (E->note == want[(b / 2) % 4]) in_tune++;
     }
     check(synced && nch >= 2 && on_wreck_bar == nch && in_tune == nch,

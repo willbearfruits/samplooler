@@ -5,8 +5,12 @@
 //!   F0 7D 4C <text> F7     'L'  a log line, from the board
 //!   F0 7D 49 F7            'I'  who are you: the board answers F0 7D 49 name= version= serial= proto= params=
 //!   F0 7D 44 F7            'D'  describe the settings: one F0 7D 44 <one setting> F7 each, then end=<count>
-//!   F0 7D 50 tag=value F7  'P'  set one; the board answers with 'V'
+//!   F0 7D 50 tag=value F7  'P'  set one; the board answers with 'V'. A kind=step setting (the Samplooler's)
+//!                               takes +1 or -1, as a turn of its encoder; a kind=act one runs at 1
 //!   F0 7D 56 <text> F7     'V'  a setting's value, from the board: tag= value= text=
+//!
+//! While the window shows a board it says 'I' every 2 s: a board stops sending 'V' after 5 s of silence and
+//! catches up when it hears from the window again.
 //!
 //! 'I', 'D', 'P' and 'V' are protocol 1. A firmware that does not answer 'I' still reboots on 'R'.
 
@@ -138,6 +142,14 @@ pub fn decode(msg: &[u8]) -> Option<Incoming> {
     }
 }
 
+/// 'P' tag=value, 7-bit: a byte of 0x80 or more would end the SysEx early.
+pub fn set_message(tag: &str, value: &str) -> Vec<u8> {
+    let mut m = vec![0xF0, 0x7D, b'P'];
+    m.extend(format!("{tag}={value}").bytes().filter(|b| *b < 0x80));
+    m.push(0xF7);
+    m
+}
+
 /// An open line to one board, for the settings and its log. Dropping it closes both ports.
 pub struct Line {
     pub port: String,
@@ -164,10 +176,7 @@ impl Line {
 
     /// 'P': set a setting by its tag.
     pub fn set(&mut self, tag: &str, value: &str) -> Result<(), String> {
-        let mut m = vec![0xF0, 0x7D, b'P'];
-        m.extend(format!("{tag}={value}").bytes().filter(|b| *b < 0x80));
-        m.push(0xF7);
-        self.send(&m)
+        self.send(&set_message(tag, value))
     }
 
     pub fn cc(&mut self, channel: u8, cc: u8, value: u8) -> Result<(), String> {
@@ -196,5 +205,29 @@ mod tests {
         }
         assert!(matches!(decode(&[0xB2, 20, 64]), Some(Incoming::Cc { channel: 2, cc: 20, value: 64 })));
         assert!(matches!(decode(&[0x90, 60, 0]), Some(Incoming::Note { note: 60, on: false })));
+    }
+
+    #[test]
+    fn setting() {
+        assert_eq!(set_message("p03", "-1"), [0xF0, 0x7D, b'P', b'p', b'0', b'3', b'=', b'-', b'1', 0xF7]);
+        assert_eq!(set_message("vol ", "80"), b"\xF0\x7DPvol =80\xF7".to_vec());
+        assert_eq!(set_message("x\u{e9}", "1"), [0xF0, 0x7D, b'P', b'x', b'=', b'1', 0xF7]);
+    }
+
+    #[test]
+    fn describing() {
+        // a step setting of the Samplooler's, as its firmware describes it
+        match decode(b"\xF0\x7DDi=1\ntag=p01\nname=Mode\ngroup=PLAY\nkind=step\ntext=TAPE\nhelp=TAPE: the pitch follows the speed.\xF7") {
+            Some(Incoming::Param { fields }) => {
+                assert_eq!(fields["kind"], "step");
+                assert_eq!(fields["text"], "TAPE");
+                assert_eq!(fields["help"], "TAPE: the pitch follows the speed.");
+            }
+            x => panic!("{x:?}"),
+        }
+        match decode(b"\xF0\x7DDend=23\xF7") {
+            Some(Incoming::Param { fields }) => assert_eq!(fields["end"], "23"),
+            x => panic!("{x:?}"),
+        }
     }
 }

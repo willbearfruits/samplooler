@@ -16,6 +16,7 @@
 #define IRAM_ATTR
 #endif
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define HOLD_MS     600         // the knob held this long: back to play, or freeze
@@ -56,6 +57,7 @@ static bool   saver;
 static int    strip_kind, strip_anim;          // which strip is up and how far it has slid in (frames)
 static uint32_t frame;
 static float  sel_y_anim = -1;
+static void   remote_tick(int dtm);             // the app's line, below front_midi()
 
 void toast(const char *s, int ms) { snprintf(toast_s, sizeof toast_s, "%s", s); toast_ms = ms; }
 void ui_awake(void) { saver_idle_ms = 0; }
@@ -472,6 +474,7 @@ void front_tick(const front_in_t *in)
     ticks++;
     t_now += in->dt;
     int dtm = (int)(in->dt * 1000.0f + 0.5f);
+    remote_tick(dtm);
 
     // the meters (the audio task keeps maxima; read and restart them)
     float op = master.peak; master.peak = 0;
@@ -647,6 +650,150 @@ void front_midi(uint8_t st, uint8_t d1, uint8_t d2)
         return;
     }
     if (INST.midi_in) INST.midi_in(st, d1, d2);
+}
+
+// ---------------------------------------------------------------- the app's line (app/ on a computer)
+// SysEx F0 7D <letter> <text> F7, the text 7-bit ASCII, one key=value per line (protocol 1):
+//   in  'I'         who are you: answered 'I' name= version= serial= proto= params=
+//   in  'D'         describe the settings: a 'D' per setting (i= tag= name= group= kind= min= max= step= unit=
+//                   flags= cc= labels= help= value= text=) and then 'D' end=<count>, two a tick
+//   in  'P' TAG=v   set one by its 4-character tag (an action runs at v >= 1); answered by 'V'
+//   out 'V'         tag= value= text=: a setting changed (the knob, MIDI, a sound), once the app has the
+//                   description and while it keeps talking (it says 'I' every 2 s while it shows the board).
+//                   After REMOTE_QUIET_MS of silence, or a message that could not go out, nothing goes out
+//                   until the app speaks again; then the changes it missed follow.
+// RESET ALL, ABOUT and TILT SETUP stay on the device: they need its screen.
+#define REMOTE_QUIET_MS 5000
+static int   rm_desc = -1, rm_count;          // the next setting to describe (-1: none pending), described so far
+static int   rm_quiet_ms = -1;                // ms since the app last spoke; -1: no app, or it stopped reading
+static bool  rm_ready;                        // the app has the whole description: changes go out
+static UI_RAM float rm_seen[PARAMS_MAX];      // the values the app has
+
+static bool rm_shown(int p)
+{
+    const param_t *d = param(p);
+    if (p == CP(CP_RESET) || p == CP(CP_ABOUT) || p == CP(CP_TILT_SETUP)) return false;
+    if (d->group == GROUP_LOOP && !INST.looper) return false;
+    return true;
+}
+
+static int addf(char *b, int cap, int k, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+static int addf(char *b, int cap, int k, const char *fmt, ...)
+{
+    if (k >= cap - 1) return k;
+    va_list ap;
+    va_start(ap, fmt);
+    int w = vsnprintf(b + k, (size_t)(cap - k), fmt, ap);
+    va_end(ap);
+    return w < 0 ? k : (k + w > cap - 1 ? cap - 1 : k + w);
+}
+
+static bool rm_send(char letter, const char *text)
+{
+    static UI_RAM uint8_t m[720];
+    int k = 0;
+    m[k++] = 0xF0; m[k++] = 0x7D; m[k++] = (uint8_t)letter;
+    for (const char *s = text; *s && k < (int)sizeof m - 1; s++) {
+        uint8_t c = (uint8_t)*s;
+        if (c == '\n' || (c >= 0x20 && c < 0x7F)) m[k++] = c;    // the screen's own symbols stay home
+    }
+    m[k++] = 0xF7;
+    if (plat_sysex(m, k)) return true;
+    rm_quiet_ms = -1; rm_desc = -1;               // nobody reads: quiet until the app speaks again
+    return false;
+}
+
+static void rm_value(int p)
+{
+    char b[96], v[32];
+    const param_t *d = param(p);
+    int k = addf(b, sizeof b, 0, "tag=%.4s\nvalue=%.7g", d->tag, (double)pv[p]);
+    if (d->kind != PK_ACT) k = addf(b, sizeof b, k, "\ntext=%s", param_text(p, v, sizeof v));
+    if (rm_send('V', b)) rm_seen[p] = pv[p];      // one that did not go out goes again later
+}
+
+static void rm_describe(int p)
+{
+    static UI_RAM char b[640];
+    char v[32];
+    const param_t *d = param(p);
+    static const char *const kinds[] = { "num", "enum", "act" };
+    int k = addf(b, sizeof b, 0, "i=%d\ntag=%.4s\nname=%s\ngroup=%s\nkind=%s", p, d->tag, d->name,
+                 d->group == GROUP_LOOP ? "LOOP" : d->group == GROUP_SYSTEM ? "SYSTEM" : d->group < INST.ngroups ? INST.groups[d->group] : "",
+                 kinds[d->kind < 3 ? d->kind : 0]);
+    if (d->kind != PK_ACT) {
+        k = addf(b, sizeof b, k, "\nmin=%.7g\nmax=%.7g\nstep=%.7g\nunit=%s", (double)d->min, (double)d->max, (double)d->step, d->unit ? d->unit : "");
+        k = addf(b, sizeof b, k, "\nvalue=%.7g\ntext=%s", (double)pv[p], param_text(p, v, sizeof v));
+    }
+    static const char *const fl[] = { "int", "log", "nocc", "signed", "sys", "hide" };
+    k = addf(b, sizeof b, k, "\nflags=");
+    for (int i = 0, n = 0; i < 6; i++) if (d->flags & (1 << i)) k = addf(b, sizeof b, k, "%s%s", n++ ? "," : "", fl[i]);
+    k = addf(b, sizeof b, k, "\ncc=%d", param_cc_number(p));
+    if (d->kind == PK_ENUM && d->labels) {
+        k = addf(b, sizeof b, k, "\nlabels=");
+        for (int i = 0; i <= (int)(d->max - d->min); i++) k = addf(b, sizeof b, k, "%s%s", i ? "|" : "", d->labels[i]);
+    }
+    if (d->help) k = addf(b, sizeof b, k, "\nhelp=%s", d->help);
+    rm_seen[p] = pv[p];
+    rm_send('D', b);
+}
+
+static void rm_set(const char *t)
+{
+    const char *eq = strchr(t, '=');
+    if (!eq || eq == t || eq - t > 4) return;
+    char tag[5] = "    ";
+    memcpy(tag, t, (size_t)(eq - t));             // "mot" is "mot ": tags are four characters
+    int p = param_by_tag(tag);
+    if (p < 0 || !rm_shown(p)) return;
+    float v = strtof(eq + 1, NULL);
+    if (param(p)->kind == PK_ACT) { if (v >= 1.0f) run_action(p); return; }
+    set_param(p, v, true);
+    rm_value(p);                                  // also when it did not move: the app shows what the board has
+}
+
+void front_sysex(uint8_t cmd, const uint8_t *body, int n)
+{
+    char t[64];
+    if (n > (int)sizeof t - 1) n = (int)sizeof t - 1;
+    for (int i = 0; i < n; i++) t[i] = (char)body[i];
+    t[n < 0 ? 0 : n] = 0;
+    rm_quiet_ms = 0;
+    if (cmd == 'I') {
+        int shown = 0;
+        for (int p = 0; p < NP; p++) shown += rm_shown(p);
+        char b[160];
+        addf(b, sizeof b, 0, "name=%s\nversion=%s\nserial=%s\nproto=1\nparams=%d", INST.name, plat_version(), plat_serial(), shown);
+        rm_send('I', b);
+    } else if (cmd == 'D') {
+        rm_desc = 0; rm_count = 0; rm_ready = false;
+    } else if (cmd == 'P') {
+        rm_set(t);
+    }
+}
+
+static void remote_tick(int dtm)
+{
+    if (rm_quiet_ms < 0) return;
+    rm_quiet_ms += dtm;
+    if (rm_quiet_ms > REMOTE_QUIET_MS) { rm_quiet_ms = -1; rm_desc = -1; return; }   // the app has gone
+    for (int sent = 0; rm_desc >= 0 && sent < 2; ) {
+        if (rm_desc >= NP) {
+            char b[24];
+            snprintf(b, sizeof b, "end=%d", rm_count);
+            rm_desc = -1;
+            rm_ready = rm_send('D', b);           // not sent: the app asks again
+            break;
+        }
+        int p = rm_desc++;
+        if (!rm_shown(p)) continue;
+        rm_describe(p);
+        rm_count++;
+        sent++;
+    }
+    if (!rm_ready) return;
+    for (int p = 0, n = 0; p < NP && n < 4 && rm_quiet_ms >= 0; p++)
+        if (rm_shown(p) && param(p)->kind != PK_ACT && pv[p] != rm_seen[p]) { rm_value(p); n++; }
 }
 
 // ---------------------------------------------------------------- drawing

@@ -33,6 +33,7 @@
 #include "voice.h"
 #include "flock.h"
 #include "settings.h"
+#include "app_line.h"
 #if HAS_CONTROLS
 #include "input.h"
 #endif
@@ -56,7 +57,8 @@ static void apply_settings(void);
 static settings_t S = SETTINGS_DEFAULTS;
 static const settings_t S_DEFAULTS = SETTINGS_DEFAULTS;
 
-// The settings before P_SAVE are on MIDI (CC 20 + index); the rest are the device's own.
+// The settings before P_SAVE are on MIDI (CC 20 + index); the rest are the device's own. A new one also gets a
+// line in app_line.c's INFO: its group in the desktop app and a line of help (without one it lands under SETTINGS).
 enum { P_MIC, P_MODE, P_PITCH, P_TILT, P_SPDMAX, P_SPDMIN, P_SNAP, P_GRAIN, P_VOL, P_INPUT, P_VOICE, P_KEY, P_SCALE, P_MONITOR,
        P_SLOT, P_SAVE, P_LOAD, P_SPEAKER, P_RECBTN, P_LINK, P_GROUP, P_RANGE, P_PEERS, P_N };
 static const char *param_name[P_N] = { "Mic gain", "Mode", "Pitch", "Tilt", "Speed max", "Speed min", "Snap", "Grain", "Volume", "Input",
@@ -349,6 +351,16 @@ static const char *state_name(int s)
     return s == REC_RECORDING ? "REC" : s == REC_PLAYING ? "PLAY" : "IDLE";
 }
 
+// The app's line (app_line.c): the settings as the menu has them, stepped as the encoder steps them.
+static const char *app_name(int p) { return param_name[p]; }
+static void app_text(int p, char *b, int n) { param_text(p, b, (size_t)n); }
+#if HAS_CONTROLS
+static void app_step(int p, int d) { param_adjust(p, d); apply_settings(); }
+#else
+static void app_step(int p, int d) { (void)p; (void)d; }
+#endif
+static const app_settings_t APP_SETTINGS = { P_N, app_name, app_text, app_step, is_action };
+
 static float meter_in, meter_out;                    // decaying peak meters for the screen and MIDI
 static int   clip_hold;
 #if OLED_ENABLE
@@ -442,7 +454,10 @@ void app_main(void)
     keep_console = gpio_get_level(PIN_ENC_SW) == 0;      // encoder held at power-on: stay on the Serial/JTAG console
 #endif
     if (keep_console) ESP_LOGW(TAG, "encoder held at boot: USB MIDI/audio off, console kept");
-    else { vTaskDelay(pdMS_TO_TICKS(200)); ESP_LOGI(TAG, "switching the USB port to MIDI + audio + CDC console"); usb_start(); }
+    else {
+        vTaskDelay(pdMS_TO_TICKS(200)); ESP_LOGI(TAG, "switching the USB port to MIDI + audio + CDC console"); usb_start();
+        app_line_init(&APP_SETTINGS); usb_midi_on_sysex(app_line_sysex);
+    }
     link_apply();
 
     int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0, idle_ms = 0;
@@ -466,6 +481,7 @@ void app_main(void)
         if (tick == 1000) diag_mark_alive();                      // 10 s up: this boot counts as a good one
 
         usb_midi_poll(midi_in);
+        app_line_tick(10);
         job_poll();
         settings_poll(&S);
         vox_tick(recorder_state() == REC_PLAYING ? recorder_loop_seconds() : 0.0f);

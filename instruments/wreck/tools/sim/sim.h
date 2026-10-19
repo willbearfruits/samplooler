@@ -60,6 +60,11 @@ float m_click(float t_change, float *spike, float *ctx);   // a discontinuity at
 float hz_to_midi(float f);
 float sim_noise(void);                         // -1..1
 
+// the app's line (front_sysex): each SysEx message the device sent, as text from its letter on
+extern char sim_sysex[256][720];
+extern int  sim_sysex_n;
+extern bool sim_sysex_off;
+
 // checks: printed, counted, and written to out/results.json with the section they ran in
 extern int checks_run, checks_failed;
 void section(const char *name);

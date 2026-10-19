@@ -129,6 +129,26 @@ goes to `INST.midi_in`. One channel (SYSTEM > MIDI
 CH) for everything except what the instrument sends on purpose elsewhere (`midi_note_ch`, drums on 10).
 SysEx `F0 7D 52 F7` reboots into download mode, `F0 7D 53 F7` logs status and the last crash.
 
+## The app's line
+
+The desktop app (`app/` in the repository) shows a board's settings and changes them over the same MIDI port
+(`front_sysex()` in `front.c`, protocol 1). Each message is SysEx `F0 7D <letter> <text> F7`, the text 7-bit
+ASCII, one `key=value` per line:
+
+| | |
+| - | - |
+| in `I` | who are you: answered with `I` `name= version= serial= proto=1 params=<count>` |
+| in `D` | describe the settings: one `D` per setting (`i tag name group kind min max step unit value text flags cc labels help`), two per tick, then `D` `end=<count>` |
+| in `P` `tag=value` | set one by its tag; an action (`kind=act`) runs at 1 or more; answered with `V` |
+| out `V` | `tag= value= text=`: a setting changed on the board (the knob, MIDI, a sound) |
+
+Every param is described except RESET ALL, ABOUT and TILT SETUP, which need the board's screen, and the LOOP
+page without `INST.looper`. Changes go out only once the app has the whole list and while it keeps talking:
+the app says `I` every 2 s while it shows the board. After 5 s without a word from it, or a message that could
+not go out, the board stops sending; the next word from the app brings the changes it missed. An instrument
+needs nothing for this: its params table is the description. The checks in `tools/sim/core_checks.c`
+("app line") cover it. The Samplooler speaks the same protocol over its own settings (`firmware/main/app_line.c`).
+
 ## The link (a flock of boards)
 
 `link.h` lets boards play together: each one that calls it broadcasts a small packet every 100 ms over ESP-NOW

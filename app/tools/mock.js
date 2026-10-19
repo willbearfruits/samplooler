@@ -2,7 +2,7 @@
 // for its screenshots (tools/shots.sh). ui/app.js loads it only when there is no Tauri. It reads a
 // library folder written by `tools/library.py site --local --out <dir>`, served at ../../site/.
 //
-// ?scene=   one (a Samplooler), update (SING with a newer one in the library), two, download, none
+// ?scene=   one (a Samplooler), mantra (MANTRA), update (SING with a newer one in the library), two, download, none
 // ?shot=    pick (the install dialog), progress (an install halfway), done, error
 (function () {
   const q = new URLSearchParams(location.search);
@@ -15,6 +15,7 @@
 
   const BOARDS = {
     one: [{ key: "midi:Samplooler:Samplooler MIDI 1 24:0", mode: "running", name: "Samplooler", port: "Samplooler:Samplooler MIDI 1 24:0", serial: "SL-727600D0", mac_tail: "72:76:00:D0", version: "0.1.0", proto: 1 }],
+    mantra: [{ key: "midi:MANTRA:MANTRA MIDI 1 24:0", mode: "running", name: "MANTRA", port: "MANTRA:MANTRA MIDI 1 24:0", serial: "MN-727600D0", mac_tail: "72:76:00:D0", version: "0.2.0", proto: 1 }],
     update: [{ key: "midi:SING:SING MIDI 1 24:0", mode: "running", name: "SING", port: "SING:SING MIDI 1 24:0", serial: "SG-727600D0", mac_tail: "72:76:00:D0", version: "0.0.9", proto: 1 }],
     two: [
       { key: "midi:Samplooler:Samplooler MIDI 1 24:0", mode: "running", name: "Samplooler", port: "Samplooler:Samplooler MIDI 1 24:0", serial: "SL-727600D0", mac_tail: "72:76:00:D0", version: "0.1.0", proto: 1 },
@@ -25,39 +26,75 @@
   };
   let boards = BOARDS[scene] || BOARDS.one;
 
-  // the Samplooler's settings as protocol 1 describes them
-  const P = (tag, name, group, kind, min, max, value, extra = {}) => ({ tag, name, group, kind, min: String(min), max: String(max), value: String(value), ...extra });
+  // the Samplooler's settings as its firmware describes them (firmware/main/app_line.c): steps, each with the
+  // texts the screen shows; a press of - or + moves one along, as a turn of the encoder
+  const range = (a, b, d, f) => Array.from({ length: Math.round((b - a) / d) + 1 }, (_, k) => f(a + k * d));
+  const VOICES = ["OFF", "CLEAN", "NATURAL TUNE", "HARD TUNE", "CHOIR", "BARBERSHOP", "THIRDS", "OCTAVE DOWN", "ROBOT", "VOCODER", "TALKBOX", "WHISPER", "CHIPMUNK", "MONSTER", "BIG THROAT", "SPACE ECHO", "CATHEDRAL", "SHIMMER", "DUB VOICE"];
+  const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const ST = (i, name, group, texts, at, help, extra = {}) => ({ i: String(i), tag: "p" + String(i).padStart(2, "0"), name, group, kind: "step", texts, at, text: texts[at], help, ...extra });
+  const ACT = (i, name, group, text, help, extra = {}) => ({ i: String(i), tag: "p" + String(i).padStart(2, "0"), name, group, kind: "act", text, help, ...extra });
   const SAMPLOOLER = [
-    P("MODE", "MODE", "PLAY", "enum", 0, 1, 0, { labels: "TAPE|GRAIN", help: "TAPE plays the take; GRAIN keeps the pitch apart from the speed" }),
-    P("PTCH", "PITCH", "PLAY", "num", -24, 24, 0, { unit: "st", flags: "int,signed", text: "= speed", help: "GRAIN only: the pitch in semitones" }),
-    P("GRAN", "GRAIN", "PLAY", "num", 20, 200, 80, { unit: "ms", flags: "int", step: "10" }),
-    P("SNAP", "SNAP", "PLAY", "enum", 0, 1, 1, { labels: "OFF|ON", help: "Speeds snap to whole ratios near them" }),
-    P("TILT", "TILT", "TILT", "enum", 0, 1, 1, { labels: "OFF|ON", help: "Off: the joystick sets the speed" }),
-    P("SPMX", "SPEED MAX", "TILT", "num", 0.25, 8, 2, { unit: "x", step: "0.25", text: "2.00x" }),
-    P("SPMN", "SPEED MIN", "TILT", "num", 0, 1, 0.25, { unit: "x", step: "0.05", text: "0.25x" }),
-    P("MICG", "MIC GAIN", "SOUND", "num", 0, 36, 18, { unit: "dB", flags: "int" }),
-    P("VOL ", "VOLUME", "SOUND", "num", 0, 150, 100, { unit: "%", flags: "int", step: "5" }),
-    P("INPT", "INPUT", "SOUND", "enum", 0, 1, 0, { labels: "MIC|USB" }),
-    P("MONI", "MONITOR", "SOUND", "enum", 0, 1, 0, { labels: "WHILE REC|ALWAYS" }),
-    P("SPKR", "SPEAKER", "SOUND", "enum", 0, 1, 1, { labels: "OFF|ON", flags: "sys", help: "Off holds the amp off: the line out only" }),
-    P("VOIC", "VOICE", "VOICE", "enum", 0, 7, 0, { labels: "OFF|TUNE|HARMONY|CHOIR|OCTAVES|VOCODER|ROBOT|WHISPER" }),
-    P("KEY ", "KEY", "VOICE", "enum", 0, 11, 9, { labels: "C|C#|D|D#|E|F|F#|G|G#|A|A#|B" }),
-    P("SCAL", "SCALE", "VOICE", "enum", 0, 5, 1, { labels: "MAJOR|MINOR|DORIAN|PENTA|BLUES|CHROMATIC" }),
-    P("LINK", "LINK", "LINK", "enum", 0, 1, 1, { labels: "OFF|ON", flags: "sys", help: "Play in time with the other boards in the room" }),
-    P("GRUP", "GROUP", "LINK", "num", 1, 8, 1, { flags: "int,sys" }),
-    P("RANG", "RANGE", "LINK", "enum", 0, 2, 1, { labels: "NEAR|ROOM|FAR", flags: "sys" }),
+    ST(1, "Mode", "PLAY", ["TAPE", "GRAIN"], 0, "TAPE: the pitch follows the speed. GRAIN: they are apart."),
+    ST(2, "Pitch", "PLAY", ["= speed"], 0, "Semitones, in GRAIN only."),
+    ST(6, "Snap", "PLAY", ["OFF", "ON"], 0, "Speeds rounded to octaves and fifths."),
+    ST(7, "Grain", "PLAY", range(20, 200, 10, (v) => v + " ms"), 3, "The grain's length, in GRAIN only. Short is smooth, long is choppy."),
+    ST(18, "Rec button", "PLAY", ["OFF (BOOT)", "ON"], 1, "Off: the stick's button is ignored. BOOT and MIDI note 60 still record."),
+    ST(3, "Tilt", "TILT", ["OFF (joy Y)", "ON"], 1, "Off: it plays forward at 1x, whatever the angle."),
+    ST(4, "Speed max", "TILT", range(0.25, 8, 0.25, (v) => v.toFixed(2) + "x"), 7, "The speed at 45 degrees."),
+    ST(5, "Speed min", "TILT", range(0, 1, 0.05, (v) => v.toFixed(2) + "x"), 1, "The crawl when flat. 0 stops the tape."),
+    ST(0, "Mic gain", "SOUND", range(0, 36, 1, (v) => v + " dB"), 12, "How hard the mic listens."),
+    ST(8, "Volume", "SOUND", range(0, 150, 5, (v) => v + "%"), 20, "Above 100% it can clip."),
+    ST(9, "Input", "SOUND", ["MIC", "USB"], 0, "USB records what the computer plays into the board."),
+    ST(13, "Monitor", "SOUND", ["WHILE REC", "ALWAYS"], 0, "When the input (the voice) is heard."),
+    ST(17, "Speaker", "SOUND", ["OFF (line out)", "ON"], 1, "Off: the line out and USB only. The cure for feedback."),
+    ST(10, "Voice", "VOICE", VOICES, 0, "A voice on the input, before the recorder.", { wrap: true }),
+    ST(11, "Key", "VOICE", KEYS, 0, "The key the voice tunes to. Shared with the boards on the link.", { wrap: true }),
+    ST(12, "Scale", "VOICE", ["MAJOR", "MINOR", "DORIAN", "MIXOLYDIAN", "PHRYGIAN", "HARM MINOR"], 0, "The notes of the key."),
+    ST(14, "Slot", "SLOTS", ["1 4.2s", "2 12.8s", "3 empty", "4 empty", "5 empty", "6 empty", "7 empty", "8 empty"], 0, "The slot Save and Load use, with its length."),
+    ACT(15, "Save", "SLOTS", "-> slot 1", "Writes the loop to the slot.", { confirm: "It writes over what is in the slot." }),
+    ACT(16, "Load", "SLOTS", "<- slot 1", "Reads the slot back into the loop."),
+    ST(19, "Link", "LINK", ["OFF", "ON"], 1, "The radio to the other instruments."),
+    ST(20, "Group", "LINK", range(1, 8, 1, String), 0, "Boards in the same group play together."),
+    ST(21, "Range", "LINK", ["NEAR", "ROOM", "FAR"], 1, "The radio's power. Lower is kinder to the supply."),
+    ACT(22, "Who is there", "LINK", "2 boards", "Names the boards heard right now, on the board's screen."),
   ];
-  const LOG = [
+  // an instrument on the core: ranges and choices, as front.c describes them (MANTRA's, shortened)
+  const P = (tag, name, group, kind, min, max, value, extra = {}) => ({ tag, name, group, kind, min: String(min), max: String(max), value: String(value), ...extra });
+  const MANTRA = [
+    P("hbld", "BLEND", "HANDS", "num", 0, 100, 0, { flags: "int,sys", step: "2", help: "0 THE CHANT, 100 DAISY" }),
+    P("hrol", "ROLL", "HANDS", "enum", 0, 2, 0, { labels: "PITCH|OVERTONE|OFF", help: "WHAT ROLLING IT DOES" }),
+    P("hrng", "PITCH RANGE", "HANDS", "num", 1, 24, 12, { unit: "st", flags: "int", step: "1", help: "HOW FAR A FULL ROLL GOES" }),
+    P("fech", "ECHO", "FX", "num", 0, 100, 30, { unit: "%", flags: "int", step: "5", help: "THE CHANT COMES BACK" }),
+    P("fetm", "ECHO TIME", "FX", "enum", 0, 5, 3, { labels: "1/8|1/8 DOT|1/4|1/4 DOT|1/2|1 BAR", help: "IN TIME WITH THE SONG" }),
+    P("frev", "REVERB", "FX", "num", 0, 100, 45, { unit: "%", flags: "int", step: "5", help: "HOW LOUD THE HALL IS" }),
+    P("frtm", "HALL SIZE", "FX", "num", 0.3, 12, 4, { unit: "s", flags: "log", step: "1.12", help: "HOW LONG IT RINGS" }),
+    P("mvoi", "VOICES", "MIX", "num", 0, 100, 85, { unit: "%", flags: "int", step: "5", help: "THE SINGERS' LEVEL" }),
+    P("mbow", "BOWL", "MIX", "num", 0, 100, 70, { unit: "%", flags: "int", step: "5", help: "THE SINGING BOWL'S LEVEL" }),
+    P("mdrn", "DRONE", "MIX", "num", 0, 100, 0, { unit: "%", flags: "int", step: "5", help: "THE WALL OF AMPS' LEVEL" }),
+    P("stmp", "TEMPO", "SONG", "num", 40, 180, 72, { unit: "bpm", flags: "int,sys", step: "1", help: "SHARED WITH THE FLOCK" }),
+    P("skey", "KEY", "SONG", "enum", 0, 11, 7, { labels: KEYS.join("|"), flags: "sys", help: "THE KEY THEY SING IN" }),
+    P("nlnk", "LINK", "LINK", "enum", 0, 1, 1, { labels: "OFF|ON", flags: "nocc,sys", help: "SYNC WITH BOARDS NEARBY" }),
+    P("ngrp", "GROUP", "LINK", "num", 1, 8, 1, { flags: "int,nocc,sys", step: "1", help: "SAME GROUP: THEY SYNC" }),
+    P("nwho", "WHO IS THERE", "LINK", "act", 0, 0, 0, { flags: "nocc", help: "THE BOARDS LINKED NOW" }),
+    P("lplv", "LOOP LEVEL", "LOOP", "num", 0, 100, 80, { unit: "%", flags: "int,sys", step: "5", help: "HOW LOUD THE LOOP PLAYS" }),
+    P("lpcl", "CLEAR LOOP", "LOOP", "act", 0, 0, 0, { flags: "nocc,sys", help: "PRESS TO ERASE IT" }),
+    P("vol ", "VOLUME", "SYSTEM", "num", 0, 150, 100, { unit: "%", flags: "int,sys", step: "5", help: "OVER 100%: LIMITER WORKS" }),
+    P("spkr", "SPEAKER", "SYSTEM", "enum", 0, 1, 1, { labels: "OFF|ON", flags: "nocc,sys", help: "OFF: THE LINE OUT ONLY" }),
+    P("mic ", "MIC GAIN", "SYSTEM", "num", 0, 36, 12, { unit: "dB", flags: "int,nocc,sys", step: "3", help: "HOW HARD THE MIC LISTENS" }),
+    P("mch ", "MIDI CH", "SYSTEM", "num", 1, 16, 1, { flags: "int,nocc,sys", step: "1", help: "CHANNEL FOR NOTES AND CC" }),
+  ];
+  const LOG = (b) => [
     "I (312) diag: boot: power on",
-    "I (318) main: Samplooler 0.1.0, settings from flash",
-    "I (402) usb: USB composite up: MIDI + audio 32000 Hz, logs over SysEx, serial SL-727600D0",
+    `I (318) main: ${b.name} ${b.version}, settings from flash`,
+    `I (402) usb: USB composite up: MIDI + audio 32000 Hz, logs over SysEx, serial ${b.serial}`,
     "I (455) imu: QMI8658 at 0x6B, 500 Hz",
     "I (460) oled: SSD1306 128x64",
-    "I (1020) flock: link on, group 1, alone",
+    "I (1020) link: on, group 1, alone",
     "I (10020) diag: alive: cpu 31 %, 0 overruns, 0 underruns",
     "W (14310) audio: input clipped 3 blocks (mic gain 18 dB)",
     "I (20022) main: rec 2.84 s",
   ];
+
 
   let lib = null;
   async function library() {
@@ -114,18 +151,32 @@
     line_open: async ({ port }) => {
       setTimeout(() => {
         const b = boards.find((x) => x.port === port);
+        const set = b?.name === "Samplooler" ? SAMPLOOLER : MANTRA;
         if (b?.proto) {
-          SAMPLOOLER.forEach((f, i) => emit("board", { port, msg: { kind: "param", fields: { i: String(i), ...f } } }));
-          emit("board", { port, msg: { kind: "param", fields: { end: String(SAMPLOOLER.length) } } });
+          set.forEach((f, i) => { const { texts, at, wrap, ...d } = f; emit("board", { port, msg: { kind: "param", fields: { i: String(i), ...d } } }); });
+          emit("board", { port, msg: { kind: "param", fields: { end: String(set.length) } } });
         }
-        LOG.forEach((t) => emit("board", { port, msg: { kind: "log", text: t } }));
+        if (b) LOG(b).forEach((t) => emit("board", { port, msg: { kind: "log", text: t } }));
       }, 120);
     },
     line_close: async () => {},
     line_set: async ({ tag, value }) => {
       const port = boards[0]?.port;
-      setTimeout(() => emit("board", { port, msg: { kind: "value", fields: { tag, value } } }), 20);
+      const b = boards.find((x) => x.port === port);
+      let fields = { tag, value };
+      if (b?.name === "Samplooler") {
+        const st = SAMPLOOLER.find((x) => x.tag === tag);
+        if (!st) return;
+        if (st.kind === "step") {
+          const n = st.texts.length;
+          st.at = st.wrap ? (st.at + Math.sign(+value) + n) % n : Math.min(n - 1, Math.max(0, st.at + Math.sign(+value)));
+          st.text = st.texts[st.at];
+        }
+        fields = { tag, text: st.text };
+      }
+      setTimeout(() => emit("board", { port, msg: { kind: "value", fields } }), 20);
     },
+    line_ping: async () => {},
     line_cc: async () => {},
     line_describe: async () => {},
     line_status: async () => {
