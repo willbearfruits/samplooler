@@ -23,7 +23,7 @@ CONFIG_I2S_ISR_IRAM_SAFE=y
 CONFIG_ESP_TASK_WDT_PANIC=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=12288
 
-# Wi-Fi only listens (Sniff): it keeps nothing in NVS.
+# The radio keeps nothing in NVS.
 CONFIG_ESP_WIFI_NVS_ENABLED=n
 
 # USB composite: MIDI + UAC2 sound card (2 in, 2 out, 32 kHz, 16-bit). Descriptors and tusb_config.h are ours (main/usb/).
@@ -36,3 +36,27 @@ CONFIG_UAC_SUPPORT_MACOS=y
 CONFIG_UAC_TINYUSB_TASK_CORE=0
 CONFIG_UAC_SPK_TASK_CORE=0
 CONFIG_UAC_MIC_TASK_CORE=0
+
+# The link (ESP-NOW on the Wi-Fi radio, link_esp.c): ten small packets a second, so the radio gets the least memory
+# it can work with. Its buffers go to PSRAM where they can; no aggregation (that is for streams); its code stays in
+# flash (the IRAM options are for throughput we do not need, and IRAM is shared with the sound's code); no access
+# point, no WPA3, no enterprise. The radio keeps nothing in NVS (set above).
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_EXTRA_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
+CONFIG_ESP_WIFI_ENABLE_WPA3_SAE=n
+CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA=n
+CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
+CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM=0
+CONFIG_LWIP_IRAM_OPTIMIZATION=n
+
+# Buffers only the screen and the radio touch (UI_RAM in core.h) live in PSRAM: internal RAM is for the sound's code
+# and the radio's own buffers.
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y

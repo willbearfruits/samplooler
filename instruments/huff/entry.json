@@ -1,16 +1,18 @@
 {
   "name": "HUFF",
-  "summary": "Blow at the mic and tilt the box for the notes. Ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle.",
+  "summary": "Blow at the mic and tilt the box for the notes. Ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle; links to the other boards.",
   "author": "willbearfruits",
   "licence": "GPL-3.0",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "chip": "esp32s3",
   "uses": [
     "mic",
-    "tilt"
+    "tilt",
+    "joystick",
+    "wifi"
   ],
   "status": "simulator",
-  "status_note": "Not tried on a board yet.",
+  "status_note": "Not tried on a board yet: everything was checked in the simulator.",
   "image": "images/play.gif",
   "more": [
     "images/splash.gif",

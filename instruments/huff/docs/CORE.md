@@ -1,6 +1,6 @@
 # The core
 
-KNOCK, HUFF, HOWL, SNIFF and CHIRP share one core, copied into each project (they are separate firmwares,
+Every instrument in the library shares one core, copied into each project (they are separate firmwares,
 each in its own folder, so each folder builds and ships on its own). This is how the core works and what an
 instrument has to provide. The instrument itself is `firmware/main/instrument.c` (plus any `inst_*.c`).
 
@@ -24,6 +24,8 @@ it), WS2812 RGB LED on GPIO 48, native USB (MIDI + a 32 kHz sound card).
 | `calib.c/h` | tilt setup's arithmetic | yes |
 | `dsp.h` | DSP pieces and the master limiter | yes |
 | `oled.c/h`, `font*.{c,h}` | the panel, TWOFOLD's proportional fonts | yes |
+| `link.c/h` | the flock: boards that share a clock, a tempo, a loop's length and a harmony over ESP-NOW (instruments that call it) | yes (`tools/sim/link_sim.c`, `tools/linktest`) |
+| `link_esp.c` | the link's radio (ESP-NOW on Wi-Fi channel 1) | no |
 | `shell.c` | the device: boot, drivers, the 10 ms loop | no |
 | `audio.c/h` | I2S full duplex, 64 frames at 32 kHz, float, core 1; mute ramp; health counters | no |
 | `imu.c/h`, `input.c/h`, `led.c/h`, `usb.c/h`, `usb/`, `diag.c/h`, `settings.c/h` | drivers, USB MIDI + sound card, crash notes, NVS | no |
@@ -35,15 +37,23 @@ it), WS2812 RGB LED on GPIO 48, native USB (MIDI + a 32 kHz sound card).
 | - | - | - |
 | turn | change the sound (or the setting named in `INST.knob`); once a setting has been edited in the menu, the knob turns that setting instead (a strip shows it) | choose, or change the value being edited |
 | tap the knob | open the menu | open a page, edit a setting, run an action; tap again to go back up |
-| hold the knob 0.6 s | hold the motion (freeze): tilt and spin stay where they are, a padlock shows; again to let go | back to play |
-| REC | the instrument's; with `INST.looper` the core's looper: hold = record (or add), tap = stop / play | the same |
+| hold the knob 0.6 s | hold the motion (freeze): tilt and spin stay where they are, a padlock shows; again to let go (or the instrument's own use of it: `INST.hold`) | back to play |
+| REC (or BOOT) | the instrument's; with `INST.looper` the core's looper: hold = record (or add), tap = stop / play. SYSTEM > REC BUTTON OFF ignores the REC pin (BOOT and MIDI CC 64 still record); `INST.rec_button_off` starts it OFF | the same |
 | joystick | the instrument's (when one is fitted) | |
-| REC held 3 s from power-on | factory reset (tilt setup kept) | |
+| REC held 3 s from power-on, then let go | factory reset (tilt setup kept); a REC still down after 6 s is taken as stuck: no reset, REC ignored until it lets go, BOOT records meanwhile. Not with REC BUTTON OFF (RESET ALL in the menu still works) | |
 | knob held at power-on | USB stays the Serial/JTAG console (for `idf.py monitor`) | |
 
 The menu's pages: SOUND (choose, SAVE AS a user sound, REVERT), the instrument's pages (`INST.groups`),
-LOOP (with the looper), SYSTEM (volume, mic gain, tilt setup, motion on/off, joystick auto/off and its
-orientation, MIDI channel, MIDI CC out, LED, hints, screen saver, ABOUT, RESET ALL).
+LOOP (with the looper), SYSTEM (volume, speaker on/off, mic gain, tilt setup, motion on/off, joystick auto/off and its
+orientation, the REC button on/off, MIDI channel, MIDI CC out, LED, hints, screen saver, ABOUT, RESET ALL).
+
+## An editor of the instrument's own
+
+`INST.hold` is called when the knob is held 0.6 s in play; returning true takes that gesture (BAND opens its drum
+grid with it) and the motion is not held. `knob_grab(true)` then gives the instrument the knob in play: the core
+neither changes the sound nor opens the menu, hints stop, and every tick `ctl.knob` (detents), `ctl.knob_tap`,
+`ctl.knob_hold`, `ctl.knob_down` and `ctl.knob_turned` (pressed and turned: a drag) say what it did.
+`knob_grab(false)` gives it back.
 
 ## Sounds
 
@@ -77,7 +87,8 @@ with the sound. The sim checks every one of these limits.
   part of the sound. Nothing reaches the DAC over full scale.
 - Decaying recursive states are flushed (`flush_denormal`) so silence costs nothing.
 - The mic arrives high-passed at 80 Hz with the MIC GAIN applied. What the speaker plays comes back into
-  the mic: anything that listens (breath, knocks, voice) discounts its own output.
+  the mic: anything that listens (breath, knocks, voice) discounts its own output. SYSTEM > SPEAKER: OFF holds
+  the speaker amp in shutdown (its SD pin low) while the line out and USB play on: the cure for feedback.
 - Talk to the UI side with plain 32-bit variables and `spsc.h` queues; never wait.
 - The audio code runs from IRAM: each instrument lists the object files of its audio path in a linker
   fragment (`firmware/main/<name>_iram.lf`, `(noflash)` entries; `front_audio()` is `IRAM_ATTR`). Measured on
@@ -118,6 +129,26 @@ goes to `INST.midi_in`. One channel (SYSTEM > MIDI
 CH) for everything except what the instrument sends on purpose elsewhere (`midi_note_ch`, drums on 10).
 SysEx `F0 7D 52 F7` reboots into download mode, `F0 7D 53 F7` logs status and the last crash.
 
+## The link (a flock of boards)
+
+`link.h` lets boards play together: each one that calls it broadcasts a small packet every 100 ms over ESP-NOW
+(Espressif's own protocol on the Wi-Fi radio: no router, no pairing). The board with the highest priority (then the
+lowest MAC) is the clock; every other board measures its offset to it from the packets' send and receive times, as NTP
+does (the round trips least delayed win, a PI servo follows the crystals' drift), and maps its own audio frames to the
+clock's. The session they share: the tempo as a whole number of frames per beat, the frame of beat 0, the session's
+loop length, and a harmony (key, scale, progression, a chord played live). It is leaderless like Ableton Link: any
+board may change it and the newest change wins; a board meeting a clock board joins its session; a session with a loop
+outranks one without, so a board switched on late never moves a loop that plays. Measured with `tools/linktest`
+(several pretend boards, crystals 35 ppm apart, a lossy air): the beats agree within 0.5 ms (1 ms with a quarter of
+the packets lost and 8 ms queues).
+
+An instrument calls `link_init(name, priority)`, `link_boot_time()` and `link_boot_harm()` once, `link_enable()` from
+its settings, `link_tick()` every tick, and reads `link_origin()` / `link_fpb()` (beat 0 in its own frames and the
+frames per beat) and `link_harm()`; it sets the session with `link_set_time()`, `link_set_harm()` and
+`link_set_flags(LINKF_LOOP)`. It adds `link.c link_esp.c` to its sources and `esp_wifi esp_event` to its
+`INSTRUMENT_REQUIRES`, and the simulator builds `link` and `link_sim` (a pretend room: `sim_peer_add()` and friends in
+`sim.h`). Packets go out at low power (2, 8 or 14 dBm: every one is a burst of current from the DAC's supply).
+
 ## Robustness (from the Samplooler's production pass)
 
 Crash notes on screen and in the log after a panic, a brownout or a watchdog; safe mode (defaults) after
@@ -128,8 +159,8 @@ and reset after a run of failed reads.
 
 ## The simulator
 
-`tools/sim/run.sh` builds `front.c`, `params.c`, `looper.c`, `ui.c`, `calib.c`, `oled.c`, the fonts and
-the instrument on the host with stand-ins for the drivers, and runs the core's checks (tables, sounds,
+`tools/sim/run.sh` builds `front.c`, `params.c`, `looper.c`, `ui.c`, `calib.c`, `oled.c`, the fonts (and `link.c`
+with `link_sim.c` for instruments on the link) and the instrument on the host with stand-ins for the drivers, and runs the core's checks (tables, sounds,
 flash and MIDI round trips, the whole menu, tilt setup for all 24 mountings, the looper, every param's
 edges for clicks, the screensaver, the factory reset, no NaN, nothing over full scale), then the
 instrument's own (`tools/sim/test_inst.c`). Out: `out/<name>.png` (every screen shot), `out/<name>-*.gif`

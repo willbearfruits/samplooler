@@ -35,7 +35,8 @@ extern int    sim_n;
 extern float  sim_t;                           // seconds since boot
 extern const char *sim_name;                   // lower-case instrument name: out/<name>...
 
-void sim_boot(bool show_splash);               // a fresh device: defaults, tilt set, first-run screens skipped unless asked
+void sim_boot(bool show_splash);
+void sim_tick_hook(void);                      // runs before every tick; weak, for stand-ins that need time (link_sim.c)               // a fresh device: defaults, tilt set, first-run screens skipped unless asked
 void sim_tick(void);
 void sim_run(float seconds);
 void sim_turn(int detents);                    // one tick with the knob turned
@@ -76,3 +77,11 @@ extern uint8_t sim_led[3];
 void inst_tests(void);                         // its scenarios and checks
 void inst_excite(void);                        // make it sound steadily (for the click checks): set SI.mic etc.
 extern const char *const inst_click_skip[];    // param tags the click check leaves out (NULL-terminated), with a reason in the test file
+
+// the link's pretend room (link_sim.c, for instruments that use link.c)
+int    sim_peer_add(const char *name, int prio, double ppm, double off_us);   // a pretend board; its index
+void   sim_peer_use(int k);                    // link_* calls now act as board k (-1: the board under test)
+void   sim_peer_power(int k, bool on);         // its radio
+double sim_peer_beats(int k);                  // where board k is in the session's beats now
+float  sim_peer_gap_ms(int k);                 // board k's beat against the board under test's, ms
+extern double sim_link_loss;

@@ -10,7 +10,7 @@ and flash the Samplooler back the same way. Anyone can add an instrument.
 | [CHIRP](chirp) | The Bluetooth devices around you, played as birds. Phones, earbuds and watches sing on three wires. | Simulator only |
 | [ETHER](ether) | SNIFF and CHIRP at once: the Wi-Fi on the ground, the Bluetooth in the air, in one key and one tempo. | Runs on a board |
 | [HOWL](howl) | Feedback in tune. Only the notes of a chord can build up into a howl. Tip the box to bring it in, lean to pick the note. | Simulator only |
-| [HUFF](huff) | Blow at the mic and tilt the box for the notes. Ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle. | Simulator only |
+| [HUFF](huff) | Blow at the mic and tilt the box for the notes. Ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle; links to the other boards. | Simulator only |
 | [JAM](jam) | Drums, bass, breath and howl, looped on top of each other in one key and one tempo. Turn the knob to pick the one you play. | Runs on a board |
 | [KNOCK](knock) | Knock on the box to play drums. Each side is a different drum. Hold REC while you knock and it loops. | Simulator only |
 | [MANTRA](mantra) | A formant voice and a seated Buddha who sings it: monks chanting OM, overtone singing, Daisy Bell, and a wall of amps behind him. Tilt for the vowels, turn it for the overtones. | Runs on a board |

@@ -17,11 +17,16 @@
 // Pitch comes from the tilt (a ladder of notes, with hysteresis), the joystick, or your own humming (YIN on
 // the mic); MIDI notes in override it while held, so a keyboard can play it while you blow. MIDI out:
 // notes, breath as CC 2, the bend as pitch bend.
+//
+// The link (link.h): KEY and SCALE are the flock's harmony (change them here and the other boards follow, as
+// theirs change HUFF's), the SONG page's TEMPO is the flock's, and ECHO BEATS puts the echo on its beat.
 #include "core.h"
 #include "dsp.h"
 #include "ui.h"
 #include "oled.h"
 #include "looper.h"
+#include "front.h"
+#include "link.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -35,20 +40,26 @@ enum {
     P_AIR, P_CHIFF, P_BRIGHT, P_VIB, P_VIBR, P_VIBD, P_HARM, P_HLVL,
     P_REVERB, P_SIZE, P_DAMP, P_ECHO, P_ETIME, P_EFB,
     P_BRANGE,
+    P_ESYNC, P_TEMPO, P_LINK, P_GROUP, P_RANGE, P_PEERS,      // added with the link (2026-10-19): after the hidden one, so CCs stay
     P_N
 };
-enum { G_PLAY, G_PITCH, G_BREATH, G_TONE, G_SPACE };
-static const char *const groups[] = { "PLAY", "PITCH", "BREATH", "TONE", "SPACE" };
+enum { G_PLAY, G_PITCH, G_BREATH, G_TONE, G_SPACE, G_SONG, G_LINK, G_N };
+static const char *const groups[G_N] = { "PLAY", "PITCH", "BREATH", "TONE", "SPACE", "SONG", "LINK" };
 
 enum { M_OCARINA, M_FLUTE, M_PANPIPE, M_SHAKU, M_CLARINET, M_WHISTLE, M_BOTTLE, M_N };
 static const char *const model_l[M_N] = { "OCARINA", "FLUTE", "PAN PIPE", "SHAKUHACHI", "CLARINET", "WHISTLE", "BOTTLE" };
-enum { SC_N = 10 };
-static const char *const scale_l[SC_N] = { "MAJ PENTA", "MIN PENTA", "MAJOR", "MINOR", "DORIAN", "MIXOLYDIAN", "HIJAZ", "BLUES", "IN SEN", "CHROMATIC" };
+// the scales: the link's six (MAJOR, MINOR, DORIAN, MIXOLYDIAN, PHRYGIAN, HARM MINOR, numbered as SING does) and HUFF's own
+enum { SC_MAJPENTA, SC_MINPENTA, SC_MAJOR, SC_MINOR, SC_DORIAN, SC_MIXO, SC_HIJAZ, SC_BLUES, SC_INSEN, SC_CHROMATIC, SC_PHRYGIAN, SC_HARMMIN, SC_N };
+static const char *const scale_l[SC_N] = { "MAJ PENTA", "MIN PENTA", "MAJOR", "MINOR", "DORIAN", "MIXOLYDIAN", "HIJAZ", "BLUES", "IN SEN", "CHROMATIC", "PHRYGIAN", "HARM MINOR" };
 static const struct { int n; int8_t st[12]; } scales[SC_N] = {
     { 5, { 0, 2, 4, 7, 9 } }, { 5, { 0, 3, 5, 7, 10 } }, { 7, { 0, 2, 4, 5, 7, 9, 11 } }, { 7, { 0, 2, 3, 5, 7, 8, 10 } },
     { 7, { 0, 2, 3, 5, 7, 9, 10 } }, { 7, { 0, 2, 4, 5, 7, 9, 10 } }, { 7, { 0, 1, 4, 5, 7, 8, 10 } }, { 6, { 0, 3, 5, 6, 7, 10 } },
     { 5, { 0, 1, 5, 7, 10 } }, { 12, { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 } },
+    { 7, { 0, 1, 3, 5, 7, 8, 10 } }, { 7, { 0, 2, 3, 5, 7, 8, 11 } },
 };
+// each scale as the link numbers it (the shared scale its notes sit in); -1: none, the flock keeps its own
+static const int8_t scale_to_link[SC_N] = { 0, 1, 0, 1, 2, 3, 4, 1, 4, -1, 4, 5 };
+static const int8_t scale_from_link[6] = { SC_MAJOR, SC_MINOR, SC_DORIAN, SC_MIXO, SC_PHRYGIAN, SC_HARMMIN };
 static const char *const key_l[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 static const char *const source_l[] = { "TILT", "JOYSTICK", "HUMMING" };
 static const char *const onoff_l[] = { "OFF", "ON" };
@@ -57,6 +68,10 @@ static const char *const joyy_l[] = { "VIBRATO", "BRIGHTNESS", "OCTAVE" };
 static const char *const curve_l[] = { "SOFT", "EVEN", "HARD" };
 static const char *const harm_l[] = { "OFF", "3RD UP", "5TH UP", "OCTAVE UP", "OCTAVE DN", "DRONE", "DRONE 5TH" };
 enum { H_OFF, H_THIRD, H_FIFTH, H_OCTUP, H_OCTDN, H_DRONE, H_DRONE5 };
+static const char *const esync_l[] = { "OFF", "1/8", "1/8 DOT", "1/4", "1/4 DOT", "1/2" };
+static const float esync_beats[] = { 0, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f };
+static const char *const range_l[] = { "NEAR", "ROOM", "FAR" };
+#define SYS (PF_SYS | PF_NOCC)
 
 static const param_t params[P_N] = {
     [P_MODEL]  = { "MODEL", "modl", G_PLAY, PK_ENUM, 0, 0, M_N - 1, 1, M_OCARINA, "", model_l, "WHAT YOU ARE BLOWING INTO" },
@@ -93,6 +108,12 @@ static const param_t params[P_N] = {
     [P_ETIME]  = { "ECHO TIME", "etim", G_SPACE, PK_NUM, 0, 0.05f, 0.6f, 0.01f, 0.33f, "s", NULL, "TIME BETWEEN REPEATS" },
     [P_EFB]    = { "REPEATS", "efb ", G_SPACE, PK_NUM, PF_INT, 0, 90, 5, 35, "%", NULL, "HOW LONG THE ECHO LASTS" },
     [P_BRANGE] = { "BREATH RANGE", "brng", G_BREATH, PK_NUM, PF_HIDE | PF_SYS | PF_NOCC | PF_LOG, 0.01f, 1.0f, 1.1f, 0.14f, "", NULL, "SET BY BREATH SETUP" },
+    [P_ESYNC]  = { "ECHO BEATS", "esyn", G_SPACE, PK_ENUM, 0, 0, 5, 1, 0, "", esync_l, "ON THE FLOCK'S BEAT" },
+    [P_TEMPO]  = { "TEMPO", "stmp", G_SONG, PK_NUM, PF_INT | PF_SYS, 40, 180, 1, 100, "bpm", NULL, "SHARED WITH THE FLOCK" },
+    [P_LINK]   = { "LINK", "nlnk", G_LINK, PK_ENUM, SYS, 0, 1, 1, 1, "", onoff_l, "SYNC WITH BOARDS NEARBY" },
+    [P_GROUP]  = { "GROUP", "ngrp", G_LINK, PK_NUM, SYS | PF_INT, 1, 8, 1, 1, "", NULL, "SAME GROUP: THEY SYNC" },
+    [P_RANGE]  = { "RANGE", "npow", G_LINK, PK_ENUM, SYS, 0, 2, 1, 1, "", range_l, "HOW FAR THE RADIO REACHES" },
+    [P_PEERS]  = { "WHO IS THERE", "nwho", G_LINK, PK_ACT, PF_NOCC, 0, 0, 0, 0, "", NULL, "THE BOARDS LINKED NOW" },
 };
 
 // ---------------------------------------------------------------- the sounds
@@ -161,6 +182,7 @@ static volatile int   a_harm_on;                         // the harmony voice so
 static volatile int   a_mute;                            // breath setup listens with the voice off
 static volatile float a_cc_breath;                       // MIDI CC 2 in, 0..1 (decays when it stops)
 static volatile int   a_onset_req;                       // the UI saw a new note while blowing: a small chiff
+static volatile uint32_t a_fpb = 19200;                  // the flock's frames per beat (the echo's beats)
 // audio -> UI
 static volatile float v_breath, v_amp, v_benv, v_floor, v_oenv;
 static float v_lvl;
@@ -182,6 +204,9 @@ typedef struct {
     float ob_s;                // smoothed overblow (semitones, reed)
     float press_s, amp_s, dyn, tone_z, tone_z2;
     float chiff;
+    bool  fold;                // jet: the note is past the jet's reach (about 2 kHz): played an octave down (hysteresis, block rate)
+    bool  awake;               // it sounds, or still rings; asleep it costs nothing
+    int   quiet;               // blocks in a row with no breath and nothing coming out
 } voice_t;
 static voice_t vo[2];
 static int    model_cur, model_want;
@@ -195,25 +220,31 @@ static float blp[4], olp[4], oenv, lp_k;         // breath lives low: the mic an
 static int   over;
 static float b_slow;
 static float vib_ph;
+static float tone_k_s = 0.5f, damp_s = 0.6f, efb_s;
 // YIN feed: the mic at 8 kHz
 #define YR 2048
 static float yring[YR];
 static volatile uint32_t yring_w;
 static float ylp1, ylp2; static int ydec;
-// reverb: four lines, a Householder mix, damping in each line
+// reverb: four lines, a Householder mix, damping in each line. It sleeps once its tail has gone
 static const int rv_len[4] = { 1123, 1381, 1621, 1871 };
 static float rv_buf[4][2048];
 static float rv_lp[4], rv_ap_buf[2][512];
 static int   rv_w, rv_apw[2];
 static const int rv_aplen[2] = { 211, 337 };
 static float rv_g_s = 0.7f;
-// echo (PSRAM)
-#define ECHO_N 20480
+static bool  rvb_awake; static int rvb_quiet;
+// echo (PSRAM): up to 1.5 s, so a slow tempo's beats fit; it sleeps when it is off and its repeats have died
+#define ECHO_N 49152
 static float *echo_buf;
 static int    echo_w;
 static float  echo_d_s = 0.33f * AUDIO_SR, echo_lp;
+static bool   echo_awake; static int echo_quiet;
 static float  fx_rvb_s, fx_echo_s;
 static float  a4_s = 440.0f, bend_s, vib_s;
+static float  blk_0005, blk_0008, blk_0015;       // the per-sample smoothers' steps over a whole block (set in init)
+static volatile int v_sleep;                      // what sleeps now: 1 the voice, 2 the harmony, 4 the reverb, 8 the echo (for tools/sim)
+int huff_sleep(void) { return v_sleep; }
 
 static inline float jet_table(float x) { float y = x * (x * x - 1.0f); return clampf(y, -1.0f, 1.0f); }
 static inline float reed_table(float x) { return clampf(0.7f - 0.3f * x, -1.0f, 1.0f); }
@@ -226,7 +257,7 @@ static void voice_reset(voice_t *v)
     v->bore_last = v->refl_lp = v->reed_z = 0; v->dcb = (dcb_t){ 0, 0 };
     v->jet_s = 0.45f; v->press_s = v->amp_s = v->dyn = 0; v->tone_z = v->tone_z2 = 0; v->chiff = 0;
     v->air_bp = (svf_t){ 0 }; v->chiff_bp = (svf_t){ 0 };
-    v->ob_s = 0;
+    v->ob_s = 0; v->fold = false; v->awake = false; v->quiet = 0;
 }
 
 // One voice for one sample. m: the note (MIDI, with bends and vibrato), b: breath 0..1, ob: overblown.
@@ -236,7 +267,7 @@ static inline float voice_run(voice_t *v, const model_t *md, float m, float b, i
     float y;
     switch (md->eng) {
     case E_JET: {
-        if (f > 2000.0f) f *= 0.5f;                                 // past about B6 the jet loses its mode: an octave down
+        if (v->fold) f *= 0.5f;                                     // past about B6 the jet loses its mode: an octave down
         // the jet speaks from a pressure of about 0.85 and its pitch moves with it: keep the pressure in a
         // narrow band that speaks on every note and take the loudness from the breath instead
         float p_t = b > 0.02f ? 0.9f + 0.22f * b : 0.0f;
@@ -312,7 +343,7 @@ static inline float reverb_run(float x, float g, float damp)
     for (int k = 0; k < 2; k++) {
         float *b = rv_ap_buf[k];
         int r = rv_apw[k] - rv_aplen[k]; if (r < 0) r += 512;
-        float d = b[r], u = x + 0.6f * d;
+        float d = b[r], u = flush_denormal(x + 0.6f * d);
         b[rv_apw[k]] = u; rv_apw[k] = (rv_apw[k] + 1) & 511;
         x = d - 0.6f * u;
     }
@@ -388,24 +419,49 @@ static void audio(const float *in, float *out, int n)
     float bpitch = pv[P_BPITCH] * 0.01f * (b - 0.5f);
     float bend = a_bend + bpitch, vib = a_vib;
     float vib_inc = pv[P_VIBR] / (float)AUDIO_SR;
-    // per-voice filters at the note
+    float hw = a_harm_on ? pv[P_HLVL] * 0.01f : 0.0f;
+    // per-voice filters at the note; the jet's fold with a semitone of hysteresis, so vibrato on B6 does not flip octaves
     for (int k = 0; k < 2; k++) {
-        float m = k ? vo[1].m_s : vo[0].m_s;
-        float f = a4 * exp2f((m - 69.0f) / 12.0f);
-        svf_set(&vo[k].air_bp, f, md->eng == E_VESSEL ? md->q : 2.0f);
-        svf_set(&vo[k].chiff_bp, f * md->chiff_f, 1.5f);
+        voice_t *v = &vo[k];
+        float f = a4 * exp2f((v->m_s - 69.0f) / 12.0f);
+        svf_set(&v->air_bp, f, md->eng == E_VESSEL ? md->q : 2.0f);
+        svf_set(&v->chiff_bp, f * md->chiff_f, 1.5f);
+        float fb = a4 * exp2f((v->m_s + bend_s - 69.0f) / 12.0f);
+        if (md->eng == E_JET) { if (!v->fold && fb > 2000.0f) v->fold = true; else if (v->fold && fb < 1890.0f) v->fold = false; }
+        else v->fold = false;
+        // sleep: no breath, nothing left to ring (the breath's gate also wakes it through the chiff and the onset)
+        bool fed = (b > 0.02f || v->chiff > 0.001f) && (k == 0 || hw > 0.0f || harm_g > 0.002f);
+        if (fed) { v->awake = true; v->quiet = 0; }
     }
     float tone_hz = a4 * exp2f((vo[0].m_s - 69.0f) / 12.0f) * md->tone * exp2f((bright - 0.5f) * 3.0f);
-    float tone_k = onepole_hz(clampf(tone_hz, 300.0f, 14000.0f));
-    float hw = a_harm_on ? pv[P_HLVL] * 0.01f : 0.0f;
+    tone_k_s += 0.3f * (onepole_hz(clampf(tone_hz, 300.0f, 14000.0f)) - tone_k_s);
+    float tone_k = tone_k_s;
     // effects
     float size = pv[P_SIZE] * 0.01f, rt = 0.5f + 5.5f * size * size;
     float g_t = exp2f(-3.0f * 3.3219f * 1500.0f / (rt * (float)AUDIO_SR));     // per pass of an average line
-    float damp = 0.95f - 0.75f * pv[P_DAMP] * 0.01f;
+    damp_s += 0.05f * ((0.95f - 0.75f * pv[P_DAMP] * 0.01f) - damp_s);
+    float damp = damp_s;
     float rvb_t = pv[P_REVERB] * 0.01f, echo_t = echo_buf ? pv[P_ECHO] * 0.01f : 0.0f;
-    float ed_t = pv[P_ETIME] * (float)AUDIO_SR, efb = pv[P_EFB] * 0.01f;
+    int   es = (int)pv[P_ESYNC];
+    float ed_t = es > 0 && es < 6 ? clampf(esync_beats[es] * (float)a_fpb, 0.05f * (float)AUDIO_SR, (float)(ECHO_N - 64)) : pv[P_ETIME] * (float)AUDIO_SR;
+    float efb = pv[P_EFB] * 0.01f;
+    // the effects wake when something feeds them (or they are turned up) and sleep once their tails have gone
+    if (rvb_t > 0.001f || fx_rvb_s > 0.001f) { if (vo[0].awake || vo[1].awake || echo_awake) { rvb_awake = true; rvb_quiet = 0; } }
+    if (echo_t > 0.001f || fx_echo_s > 0.001f) { if (vo[0].awake || vo[1].awake) { echo_awake = true; echo_quiet = 0; } }
+    bool run_rvb = rvb_awake, run_echo = echo_awake && echo_buf;
+    if (!run_echo) echo_d_s = ed_t;                                  // asleep, the echo's time just follows (no tape to bend)
 
-    float pk = 0, vpk = 0;
+    float pk = 0, ypk = 0, vpk = 0, hpk = 0, epk = 0, wpk = 0;
+    if (!vo[0].awake && !vo[1].awake && !run_rvb && !run_echo && duck >= 1.0f && model_want == model_cur) {
+        // nothing sounds: the block is silence, and the smoothers take their n steps at once
+        memset(out, 0, (size_t)n * sizeof(float));
+        float kg = 1.0f - powf(1.0f - glide_k, (float)n);
+        harm_g += blk_0005 * (hw - harm_g); efb_s += blk_0005 * (efb - efb_s);
+        fx_echo_s += blk_0005 * (echo_t - fx_echo_s); fx_rvb_s += blk_0005 * (rvb_t - fx_rvb_s); rv_g_s += blk_0005 * (g_t - rv_g_s);
+        vib_s += blk_0008 * (vib - vib_s); bend_s += blk_0015 * (bend - bend_s);
+        vib_ph = wrap1(vib_ph + (float)n * vib_inc);
+        vo[0].m_s += kg * (tgt - vo[0].m_s); vo[1].m_s += kg * (tgt_h - vo[1].m_s);
+    } else
     for (int i = 0; i < n; i++) {
         // duck for a model switch: 8 ms down, swap at the next block, 8 ms up
         if (model_want != model_cur) { duck -= 1.0f / 256.0f; if (duck < 0) duck = 0; }
@@ -414,37 +470,74 @@ static void audio(const float *in, float *out, int n)
         vib_ph = wrap1(vib_ph + vib_inc);
         vib_s += 0.0008f * (vib - vib_s);
         bend_s += 0.0015f * (bend - bend_s);
+        efb_s += 0.0005f * (efb - efb_s);
         float vs = vib_s * sin_turns(vib_ph);
         vo[0].m_s += glide_k * (tgt - vo[0].m_s);
         vo[1].m_s += glide_k * (tgt_h - vo[1].m_s);
-        float nz = rng_bi(&seed);
-        float y = voice_run(&vo[0], md, vo[0].m_s + bend_s + vs, b, ob, a4, air, nz);
-        if (harm_g > 0.002f) y += harm_g * voice_run(&vo[1], md, vo[1].m_s + bend_s + vs, b, ob, a4, air, rng_bi(&seed));
+        float y = 0;
+        if (vo[0].awake) {
+            y = voice_run(&vo[0], md, vo[0].m_s + bend_s + vs, b, ob, a4, air, rng_bi(&seed));
+            float ay = fabsf(y); if (ay > vpk) vpk = ay;
+        }
+        if (vo[1].awake && harm_g > 0.002f) {
+            float h = voice_run(&vo[1], md, vo[1].m_s + bend_s + vs, b, ob, a4, air, rng_bi(&seed));
+            float ah = fabsf(h); if (ah > hpk) hpk = ah;
+            y += harm_g * h;
+        }
         // tone: two one-poles at a few harmonics of the note
         vo[0].tone_z += tone_k * (y - vo[0].tone_z);
         vo[0].tone_z2 += tone_k * (vo[0].tone_z - vo[0].tone_z2);
         y = biquad_run(&out_hp, (0.35f * y + 0.65f * vo[0].tone_z2) * md->gain * duck);   // no rumble, no DC
-        float ay = fabsf(y); if (ay > vpk) vpk = ay;
+        float ay = fabsf(y); if (ay > ypk) ypk = ay;
         // effects
         fx_echo_s += 0.0005f * (echo_t - fx_echo_s);
         fx_rvb_s += 0.0005f * (rvb_t - fx_rvb_s);
         rv_g_s += 0.0005f * (g_t - rv_g_s);
         float e = 0;
-        if (echo_buf) {
+        if (run_echo) {
             echo_d_s += 0.0002f * (ed_t - echo_d_s);
             float rp = (float)echo_w - echo_d_s;
             if (rp < 0) rp += (float)ECHO_N;
             int i0 = (int)rp; float fr = rp - (float)i0; int i1 = i0 + 1 >= ECHO_N ? 0 : i0 + 1;
             e = echo_buf[i0] + fr * (echo_buf[i1] - echo_buf[i0]);
             echo_lp += 0.35f * (e - echo_lp);
-            echo_buf[echo_w] = flush_denormal(y * fx_echo_s + echo_lp * efb);
+            echo_buf[echo_w] = flush_denormal(y * fx_echo_s + echo_lp * efb_s);
             if (++echo_w >= ECHO_N) echo_w = 0;
+            float ae = fabsf(e); if (ae > epk) epk = ae;
         }
-        float wet = reverb_run((y + 0.5f * e) * 0.3f, rv_g_s, damp);
+        float wet = 0;
+        if (run_rvb) {
+            wet = reverb_run((y + 0.5f * e) * 0.3f, rv_g_s, damp);
+            float aw = fabsf(wet); if (aw > wpk) wpk = aw;
+        }
         float o = y + fx_echo_s * e + fx_rvb_s * 1.2f * wet;
         out[i] = o;
         float a = fabsf(o); if (a > pk) pk = a;
     }
+    // what has gone quiet sleeps: a voice after 16 blocks (32 ms) with no breath and no sound; the echo once nothing
+    // above -100 dBFS has come out of it for a whole delay's length, the reverb for its longest line (the little that
+    // is left in their lines stays there, far below hearing)
+    for (int k = 0; k < 2; k++) {
+        voice_t *v = &vo[k];
+        float p = k ? hpk : vpk;
+        bool silent = b <= 0.02f && v->chiff <= 0.001f && p < 1e-4f && v->press_s < 1e-4f;
+        if (k == 1 && harm_g <= 0.002f) { silent = true; v->chiff = 0; }   // not run: its chiff would wait for the harmony
+        if (v->awake && silent) { if (++v->quiet >= 16) { v->awake = false; v->quiet = 0; } }
+        v->press_s = flush_denormal(v->press_s); v->dyn = flush_denormal(v->dyn); v->amp_s = flush_denormal(v->amp_s);
+        v->tone_z = flush_denormal(v->tone_z); v->tone_z2 = flush_denormal(v->tone_z2);
+    }
+    if (run_echo) {
+        bool fed = (vo[0].awake || vo[1].awake) && fx_echo_s > 0.001f;
+        if (!fed && epk < 1e-5f && fabsf(echo_lp) < 1e-5f) { if (++echo_quiet * n >= (int)echo_d_s + 8 * n) { echo_awake = false; echo_quiet = 0; } } else echo_quiet = 0;
+        echo_lp = flush_denormal(echo_lp);
+    }
+    if (run_rvb) {
+        bool fed = vo[0].awake || vo[1].awake || echo_awake;
+        if (!fed && wpk < 1e-5f) { if (++rvb_quiet >= 32) { rvb_awake = false; rvb_quiet = 0; } } else rvb_quiet = 0;
+    }
+    harm_g = flush_denormal(harm_g); vib_s = flush_denormal(vib_s); bend_s = flush_denormal(bend_s);
+    fx_echo_s = flush_denormal(fx_echo_s); fx_rvb_s = flush_denormal(fx_rvb_s); efb_s = flush_denormal(efb_s);
+    bms = flush_denormal(bms); b_smooth = flush_denormal(b_smooth); b_slow = flush_denormal(b_slow);
     // our own low band, as the mic would hear it from the speaker (for the next block's threshold)
     float opk = 0;
     for (int i = 0; i < n; i++) {
@@ -456,8 +549,9 @@ static void audio(const float *in, float *out, int n)
     oenv = opk > oenv ? opk : oenv * 0.97f;
     (void)pk;
     v_breath = b; v_benv = benv; v_floor = bfloor; v_over = ob; v_oenv = oenv;
-    v_lvl = vpk > v_lvl ? vpk : v_lvl * 0.97f;
+    v_lvl = ypk > v_lvl ? ypk : v_lvl * 0.97f;
     v_amp = clampf(v_lvl / 0.3f, 0.0f, 1.0f);
+    v_sleep = (vo[0].awake ? 0 : 1) | (vo[1].awake ? 0 : 2) | (rvb_awake ? 0 : 4) | (echo_awake ? 0 : 8);
 }
 
 // ---------------------------------------------------------------- the UI side
@@ -511,15 +605,100 @@ static float snap_to_scale(float m)
     return best;
 }
 
+// ---------------------------------------------------------------- the song and the link (as MANTRA's)
+// KEY and SCALE are the flock's harmony: a change here (the menu, MIDI, a sound) goes out, and a change heard comes
+// in. The link numbers six scales; HUFF's others tell the flock the shared scale their notes sit in and stay as
+// they are while the flock is on that one. TEMPO is the flock's time: HUFF only plays its echo on it (ECHO BEATS).
+static bool link_up, applying;
+static int  peers_was, beat_flash;
+static uint32_t song_fpb = 19200, song_origin, last_beat = 0xFFFFFFFFu;
+int huff_peers(void) { return peers_was; }      // for tools/sim
+
+static uint32_t tempo_fpb(float bpm) { return (uint32_t)(60.0f * (float)AUDIO_SR / (bpm < 20.0f ? 20.0f : bpm) + 0.5f); }
+static int link_scale_here(void) { int ls = scale_to_link[(int)pv[P_SCALE]]; return ls < 0 ? link_harm()->scale : ls; }
+
+static void link_start(void)
+{
+    link_init("HUFF", 0);                                            // a melody: any rhythm board makes a better clock
+    link_boot_time(tempo_fpb(pv[P_TEMPO]), 0, 4);
+    int ls = scale_to_link[(int)pv[P_SCALE]];
+    link_boot_harm((int)pv[P_KEY], ls < 0 ? 0 : ls, 0, 0, 0);
+    link_enable(pv[P_LINK] >= 1.0f, (int)pv[P_GROUP], (int)pv[P_RANGE]);
+    link_up = true;
+}
+static void tempo_set_here(void)
+{
+    uint32_t fpb = tempo_fpb(pv[P_TEMPO]);
+    if (fpb == song_fpb) return;
+    if (link_flags_any() & LINKF_LOOP) {                              // a loop somewhere keeps the tempo
+        applying = true; param_set(P_TEMPO, (float)(int)(60.0f * (float)AUDIO_SR / (float)song_fpb + 0.5f)); applying = false;
+        toast("A LOOP KEEPS THE TEMPO", 1200);
+        return;
+    }
+    uint32_t now = audio_frames();
+    float beat = (float)((now - song_origin) % song_fpb) / (float)song_fpb;   // stay on the beat's phase
+    uint32_t origin = now - (uint32_t)(beat * (float)fpb);
+    song_fpb = fpb; song_origin = origin; a_fpb = fpb;
+    link_set_time(fpb, origin, 4, 0);
+}
+static void harm_set_here(void)
+{
+    const link_harm_t *h = link_harm();
+    link_set_harm((int)pv[P_KEY], link_scale_here(), h->prog, h->hold, h->bars, h->live);
+}
+static void link_follow(void)
+{
+    if (link_synced()) {
+        uint32_t o; float f; link_origin(&o, &f);
+        uint32_t fpb = link_fpb();
+        if (fpb) {
+            bool tempo = fpb != song_fpb;
+            song_fpb = fpb; song_origin = o; a_fpb = fpb;
+            int bpm = (int)(60.0f * (float)AUDIO_SR / (float)fpb + 0.5f);
+            if (tempo && bpm != (int)pv[P_TEMPO]) { applying = true; param_set(P_TEMPO, (float)bpm); applying = false; }
+        }
+    }
+    link_time_news();
+    if (link_harm_news()) {
+        const link_harm_t *h = link_harm();
+        applying = true;
+        if (h->key < 12) param_set(P_KEY, (float)h->key);
+        if (h->scale < 6 && scale_to_link[(int)pv[P_SCALE]] != h->scale) param_set(P_SCALE, (float)scale_from_link[h->scale]);
+        applying = false;
+    }
+    link_peer_t pr[LINK_PEERS_MAX];
+    int np = link_peers(pr, LINK_PEERS_MAX);
+    if (np != peers_was) {
+        char b[40];
+        if (np > peers_was && np > 0) snprintf(b, sizeof b, "LINKED: %s", pr[np - 1].name);
+        else snprintf(b, sizeof b, np ? "A BOARD LEFT" : "LINK: ALONE");
+        toast(b, 1500);
+        peers_was = np;
+    }
+}
+
 static void changed(int p)
 {
-    if (p < 0 || p == P_SCALE || p == P_KEY || p == P_OCT || p == P_NOTES) build_notes();
+    if (p < 0 || p == P_SCALE || p == P_KEY || p == P_OCT || p == P_NOTES) { build_notes(); voice_m = -1; }
     if (p < 0 || p == P_MODEL) model_want = (int)pv[P_MODEL];
+    if (!link_up || applying) return;
+    if (p < 0) { tempo_set_here(); harm_set_here(); link_enable(pv[P_LINK] >= 1.0f, (int)pv[P_GROUP], (int)pv[P_RANGE]); return; }
+    switch (p) {
+    case P_TEMPO: tempo_set_here(); break;
+    case P_KEY: case P_SCALE: harm_set_here(); break;
+    case P_LINK: case P_GROUP: case P_RANGE:
+        link_enable(false, 1, 1);
+        link_enable(pv[P_LINK] >= 1.0f, (int)pv[P_GROUP], (int)pv[P_RANGE]);
+        peers_was = 0;
+        break;
+    }
 }
 
 static void init(void)
 {
     ms_k = onepole_s(0.03f); lp_k = onepole_hz(250.0f);
+    blk_0005 = 1.0f - powf(1.0f - 0.0005f, (float)AUDIO_BLOCK); blk_0008 = 1.0f - powf(1.0f - 0.0008f, (float)AUDIO_BLOCK);
+    blk_0015 = 1.0f - powf(1.0f - 0.0015f, (float)AUDIO_BLOCK);
     biquad_set(&out_hp, BQ_HP, 60.0f, 0.707f, 0);
     for (int k = 0; k < 2; k++) voice_reset(&vo[k]);
     echo_buf = app_alloc(ECHO_N * sizeof(float));
@@ -533,6 +712,19 @@ static void init(void)
 
 static void action(int p)
 {
+    if (p == P_PEERS) {
+        link_peer_t pr[LINK_PEERS_MAX];
+        int np = link_peers(pr, LINK_PEERS_MAX);
+        char b[48];
+        if (!link_radio()) snprintf(b, sizeof b, "LINK IS OFF");
+        else if (!np) snprintf(b, sizeof b, "NO BOARD IN GROUP %d YET", (int)pv[P_GROUP]);
+        else {
+            int k = snprintf(b, sizeof b, "%s", pr[0].name);
+            for (int i = 1; i < np && k < (int)sizeof b - 10; i++) k += snprintf(b + k, sizeof b - (size_t)k, " + %s", pr[i].name);
+        }
+        toast(b, 2500);
+        return;
+    }
     if (p != P_BSETUP) return;
     menu_leave();
     setup_step = 1; setup_ms = 0; setup_quiet = setup_blow = setup_peak = 0; setup_n = 0; setup_msg = NULL;
@@ -630,6 +822,12 @@ static void midi_out(float b, int note)
 
 static void tick(const ctl_t *c)
 {
+    if (!link_up) link_start();
+    link_tick(c->dt);
+    link_follow();
+    uint32_t bt = (c->frames - song_origin) / (song_fpb ? song_fpb : 19200u);
+    if (bt != last_beat) { last_beat = bt; beat_flash = (bt % 4 == 0) ? 3 : 2; }
+    else if (beat_flash > 0 && c->ticks % 4 == 0) beat_flash--;
     if (setup_step) { setup_tick(); coach_pause(); return; }
     float b = v_breath;
     breath_s += 0.3f * (b - breath_s);
@@ -825,6 +1023,7 @@ static void scene(const view_t *v)
     }
     parts_step(&notes_p, 0.04f, 0, 0);
     note_wob += 0.04f * pv[P_VIBR] * 6.2831853f;
+    if (note_wob > 6.2831853f) note_wob -= 6.2831853f;
     for (int i = 0; i < notes_p.n; i++) {
         particle_t *q = &notes_p.p[i];
         if (q->y < 16.0f || q->x > 60.0f) { q->life = 0; continue; }
@@ -883,10 +1082,61 @@ static void draw_setup(const view_t *v)
     (void)v;
 }
 
+// ---------------------------------------------------------------- the header: the core's, with the link's glyph
+// (as BAND's and SING's: blinking while alone, two boards that fill on the beat once linked and in step)
+static void link_glyph(int x, int y, const view_t *v)
+{
+    if (!link_radio()) return;
+    int bf = beat_flash;
+    if (!peers_was) { if ((v->frame / 12) % 2 == 0) { oled_pixel(x + 2, y + 3, true); ui_arc(x + 2, y + 3, 3, -60, 60); } return; }
+    bool on = bf > 1 || (bf > 0 && (v->frame & 1));
+    oled_frame(x, y + 1, 3, 6); oled_frame(x + 4, y + 1, 3, 6);
+    if (link_synced() && link_error_ms() < 2.0f) { if (on) { oled_rect(x, y + 1, 3, 6, true); oled_rect(x + 4, y + 1, 3, 6, true); } }
+    else if ((v->frame / 3) % 2 == 0) oled_pixel(x + 3, y + 3, true);
+}
+
+static void header(const view_t *v)
+{
+    const front_status_t *st = front_status();
+    char lb[24]; int x_end;
+    loop_state_t ls = looper_state();
+    float l = looper_len_s();
+    bool filled = ls == LOOP_RECORDING || ls == LOOP_DUBBING;
+    const char *left = NULL;
+    switch (ls) {
+    case LOOP_RECORDING: snprintf(lb, sizeof lb, "REC %.1fs", (double)l); left = lb; break;
+    case LOOP_DUBBING:   snprintf(lb, sizeof lb, "ADD %.1fs", (double)l); left = lb; break;
+    case LOOP_PLAYING:   snprintf(lb, sizeof lb, "LOOP %.1fs", (double)l); left = lb; break;
+    case LOOP_STOPPED:   snprintf(lb, sizeof lb, "STOP %.1fs", (double)l); left = lb; break;
+    default: break;
+    }
+    if (left) x_end = oled_pill(F_SMALL, 0, 2, left, filled);
+    else x_end = oled_ftext_ex(F_MED, 1, 3, INST.name, 1);
+    int rx = OLED_W - 22;                                           // the meter
+    ui_meter(rx, 3, 22, 9, st->out_level, st->clip);
+    rx -= 3;
+    if (link_radio()) { link_glyph(rx - 7, 4, v); rx -= 10; }
+    if (st->frozen) {                                               // the padlock
+        int x = rx - 6, y = 3;
+        oled_rframe(x, y + 3, 6, 5, 1); oled_pixel(x + 2, y + 5, true); oled_pixel(x + 3, y + 5, true);
+        oled_line(x + 1, y + 3, x + 1, y + 1, true); oled_line(x + 4, y + 3, x + 4, y + 1, true);
+        oled_line(x + 2, y, x + 3, y, true);
+        rx -= 9;
+    }
+    char nm[28];
+    snprintf(nm, sizeof nm, "%s%s", st->sound ? st->sound : "", st->edited ? "*" : "");
+    int room = rx - (x_end + 5);
+    if (room > 8) {
+        int w = oled_ftext_w(F_SMALL, nm, 1);
+        if (w <= room) oled_ftext_ex(F_SMALL, rx - w, 5, nm, 1);
+        else ui_text_fit(F_SMALL, x_end + 5, 5, room, nm);
+    }
+}
+
 static void draw(const view_t *v)
 {
     if (setup_step) { draw_setup(v); return; }
-    ui_head(NULL, false);
+    header(v);
     scene(v);
     if (!v->cover) {
         oled_hline_pat(0, 47, OLED_W, 0x11, true);
@@ -971,7 +1221,7 @@ static void saver(uint32_t f)
 
 const instrument_t INST = {
     .name = "HUFF", .tagline = "A TILT OCARINA YOU BLOW",
-    .params = params, .nparams = P_N, .groups = groups, .ngroups = 5,
+    .params = params, .nparams = P_N, .groups = groups, .ngroups = G_N,
     .presets = presets, .npresets = N_PRESETS, .hints = hints, .nhints = (int)(sizeof hints / sizeof hints[0]),
     .looper = true, .midi_notes = true,
     .init = init, .audio = audio, .tick = tick, .draw = draw, .splash = splash,

@@ -3,7 +3,9 @@
 ## The screen
 
 - Top line: HUFF, or the looper's state (REC, LOOP, ADD, STOP and the loop's length); the sound's name (a
-  `*` once you have changed it); the output level. A padlock means the tilt is held.
+  `*` once you have changed it); the output level. A padlock means the tilt is held. With LINK on, a small
+  glyph before the meter: a blinking dot while no other board is heard, two boards that fill on the beat
+  once linked and in step.
 - Left: the ocarina. Its holes open as the note climbs, low to high (the two small sub holes first, then the
   right hand, the left hand and the thumbs underneath). Air streams into the mouthpiece as you blow; notes
   float out of the window, swaying with the vibrato.
@@ -32,7 +34,7 @@ play changes that setting; choose SOUND in the menu to make the knob change soun
 | | |
 | - | - |
 | MODEL | OCARINA, FLUTE, PAN PIPE, SHAKUHACHI, CLARINET, WHISTLE (an octave up), BOTTLE (an octave down) |
-| SCALE | the notes the tilt walks: pentatonics, major, minor, dorian, mixolydian, Hijaz, blues, In Sen, chromatic |
+| SCALE | the notes the tilt walks: pentatonics, major, minor, dorian, mixolydian, Hijaz, blues, In Sen, chromatic, phrygian, harmonic minor |
 | KEY | the scale's home note |
 | OCTAVE | shifts everything by octaves |
 | NOTES | how many notes on the ladder (3 to 15); fewer notes are easier to hit |
@@ -83,13 +85,34 @@ play changes that setting; choose SOUND in the menu to make the knob change soun
 | DAMPING | soft walls make a darker tail |
 | ECHO | a repeat behind you |
 | ECHO TIME | the time between repeats (changing it while it plays bends the echo, like tape) |
+| ECHO BEATS | OFF: ECHO TIME counts. 1/8 to 1/2: the repeats fall on the shared tempo's beat (up to 1.5 s) |
 | REPEATS | how long the echo lasts |
+
+### SONG
+
+| | |
+| - | - |
+| TEMPO | the tempo shared with the other boards (40 to 180 BPM). HUFF only uses it for ECHO BEATS; a board with a loop keeps the tempo |
+
+KEY and SCALE (on PLAY) are shared the same way: change them here, or load a sound, and linked boards follow;
+theirs change HUFF's. The other boards know six scales (major, minor, dorian, mixolydian, phrygian, harmonic
+minor). HUFF's others tell them the one their notes sit in (a pentatonic its major or minor, blues minor, Hijaz
+and In Sen phrygian) and stay as they are while the flock is on that one; CHROMATIC leaves the flock's scale alone.
+
+### LINK
+
+| | |
+| - | - |
+| LINK | ON: the radio is on and boards nearby in the same group share the tempo, the key and the scale |
+| GROUP | 1 to 8: boards sync only within a group |
+| RANGE | NEAR, ROOM, FAR: how far the radio reaches (and how much current it draws) |
+| WHO IS THERE | shows the boards heard now |
 
 ### LOOP and SYSTEM
 
 Shared by all the Samplooler instruments: loop level, loop keep (less than 100 % fades each pass),
-clear; volume, mic gain, tilt setup, motion, joystick, MIDI channel and CC out, LED, hints, screen saver,
-about, reset all. See `docs/CORE.md`.
+clear; volume, speaker on or off, mic gain, tilt setup, motion, joystick, the REC button on or off, MIDI
+channel and CC out, LED, hints, screen saver, about, reset all. See `docs/CORE.md`.
 
 ## Tips
 
@@ -99,5 +122,5 @@ about, reset all. See `docs/CORE.md`.
 - HUMMING follows your voice. With the speaker on it may follow its own sound: use headphones.
 - The speaker playing into the mic does not count as breath (HUFF listens to the low rumble of your breath
   and leaves out the same band of its own sound), but very loud speakers close to the mic can still sustain
-  a note. Turn the volume down or use headphones.
+  a note. Turn the volume down, use headphones, or set SYSTEM > SPEAKER to OFF: the line out still plays.
 - The LED shows the note as a colour around the scale; it flashes white when the note jumps up.

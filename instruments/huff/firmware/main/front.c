@@ -24,6 +24,7 @@
 #define N_USER      8
 #define NAME_LEN    12          // a user sound's blob starts with its name
 #define BLOB_MAX    (NAME_LEN + PARAMS_MAX * 8)
+#define SOUND_LIST_MAX (1 + 64 + N_USER)   // MY EDIT, the factory sounds (64 at most are listed), the user sounds
 
 front_meta_t meta = { .axis = { 1, -2, 3 } };      // a right-handed IMU, x right and z out of the screen: its y points up
 static front_status_t status;
@@ -66,7 +67,7 @@ void coach_done(int learn)
     uint32_t b = 1u << learn;
     if (meta.learned & b) return;
     meta.learned |= b; dirty = true;
-    if (hint_ms > 0 && hint_i < INST.nhints && INST.hints[hint_i].learn == learn) { hint_ms = 0; hint_gap_ms = 2500; }
+    if (hint_ms > 0 && hint_i >= 0 && hint_i < INST.nhints && INST.hints[hint_i].learn == learn) { hint_ms = 0; hint_gap_ms = 2500; }
 }
 
 // ---------------------------------------------------------------- LED and MIDI for the instruments
@@ -104,6 +105,8 @@ void midi_cc(int cc, int val)
 static void on_param(int p, float old)
 {
     if (p == CP(CP_MIC)) plat_mic_gain((int)pv[p]);
+    if (p == CP(CP_SPEAKER)) plat_speaker(pv[p] >= 1.0f);
+    if (p == CP(CP_REC_BTN)) plat_rec_button(pv[p] >= 1.0f);
     if (p == CP(CP_HINTS) && pv[p] >= 1.0f && old < 1.0f) { meta.learned = 0; hint_gap_ms = 800; }
     if (p == CP(CP_LED)) led_apply();
 }
@@ -123,15 +126,15 @@ static void set_param(int p, float v, bool echo)
 void param_set(int p, float v) { set_param(p, v, true); }
 
 // ---------------------------------------------------------------- sounds
-static float stash[PARAMS_MAX];
+static UI_RAM float stash[PARAMS_MAX];
 static bool  stash_ok;
-static char  user_name[N_USER][NAME_LEN + 1];
+static UI_RAM char  user_name[N_USER][NAME_LEN + 1];
 
-static int sound_list(int16_t *ids)
+static int sound_list(int16_t *ids)                 // ids[SOUND_LIST_MAX]
 {
     int n = 0;
     if (stash_ok) ids[n++] = -1;
-    for (int i = 0; i < INST.npresets; i++) ids[n++] = (int16_t)i;
+    for (int i = 0; i < INST.npresets && i < 64; i++) ids[n++] = (int16_t)i;
     for (int k = 0; k < N_USER; k++) if (meta.user_mask & (1u << k)) ids[n++] = (int16_t)(SOUND_ID_USER + k);
     return n;
 }
@@ -157,7 +160,7 @@ static bool load_sound(int16_t id, bool announce)
         if (!stash_ok) return false;
         for (int p = 0; p < NI; p++) if (param_in_sound(p)) pv[p] = stash[p];
     } else if (id >= SOUND_ID_USER) {
-        static uint8_t blob[BLOB_MAX];
+        static UI_RAM uint8_t blob[BLOB_MAX];
         int k = id - SOUND_ID_USER, n = plat_load_user(k, blob, sizeof blob);
         if (n <= NAME_LEN) { meta.user_mask &= (uint8_t)~(1u << k); dirty = true; return false; }
         params_defaults(true);
@@ -180,7 +183,7 @@ static void browse(int d)
         stash_ok = true;
         if (meta.sound == -1) params_snapshot();
     }
-    int16_t ids[2 + 64 + N_USER];
+    int16_t ids[SOUND_LIST_MAX];
     int n = sound_list(ids), i = sound_pos(ids, n, meta.sound), j = i + d;
     if (j < 0) j = 0;
     if (j > n - 1) j = n - 1;
@@ -189,7 +192,7 @@ static void browse(int d)
 
 static void save_user(int k)
 {
-    static uint8_t blob[BLOB_MAX];
+    static UI_RAM uint8_t blob[BLOB_MAX];
     char nm[NAME_LEN + 1];
     const char *base = sound_name(meta.sound);
     if (meta.sound >= SOUND_ID_USER || meta.sound == -1) base = meta.sound == -1 ? "EDIT" : base + 3;
@@ -209,7 +212,7 @@ static void save_user(int k)
 
 static void load_user_names(void)
 {
-    static uint8_t blob[BLOB_MAX];
+    static UI_RAM uint8_t blob[BLOB_MAX];
     for (int k = 0; k < N_USER; k++) {
         if (!(meta.user_mask & (1u << k))) continue;
         int n = plat_load_user(k, blob, sizeof blob);
@@ -285,6 +288,8 @@ static void menu_close(void) { mlev = 0; edit_ms = 0; }
 void menu_leave(void) { menu_close(); }
 static int coach_pause_ms;
 void coach_pause(void) { coach_pause_ms = 100; hint_ms = 0; }
+static bool grab, grab_turned;                  // knob_grab(): the instrument has the knob in play
+void knob_grab(bool on) { grab = on; grab_turned = false; if (on) { hint_ms = 0; card_ms = 0; quick_ms = 0; } }
 
 enum { SCR_SPLASH, SCR_PLAY, SCR_CALIB, SCR_ABOUT };
 static int scr = SCR_SPLASH, splash_f, calib_step, calib_msg_ms;
@@ -317,6 +322,8 @@ static void factory_reset(void)
     params_defaults(false);
     load_sound(0, false);
     plat_mic_gain((int)pv[CP(CP_MIC)]);
+    plat_speaker(pv[CP(CP_SPEAKER)] >= 1.0f);
+    plat_rec_button(pv[CP(CP_REC_BTN)] >= 1.0f);
     led_apply();
     dirty = true;
     toast("FACTORY RESET DONE", 1800);
@@ -381,7 +388,7 @@ void front_init(bool has_imu, bool safe_mode, bool from_flash)
     if (INST.looper && !looper_init()) app_log("looper: not enough memory");
     if (INST.init) INST.init();                         // before anything can call changed()
     // What the flash held is the current state; the snapshot is what the sound itself sets, for the '*'.
-    static float cur[PARAMS_MAX];
+    static UI_RAM float cur[PARAMS_MAX];
     memcpy(cur, pv, sizeof cur);
     int16_t id = safe_mode ? 0 : meta.sound;            // safe mode: the first factory sound
     if (id == -1) {                                     // the last edit: it is MY EDIT again
@@ -395,6 +402,8 @@ void front_init(bool has_imu, bool safe_mode, bool from_flash)
         if (from_flash && !safe_mode) memcpy(pv, cur, sizeof cur);   // a fresh device starts on the sound itself
     }
     plat_mic_gain((int)pv[CP(CP_MIC)]);
+    plat_speaker(pv[CP(CP_SPEAKER)] >= 1.0f);
+    plat_rec_button(pv[CP(CP_REC_BTN)] >= 1.0f);
     if (INST.changed) INST.changed(-1);
     pv[CP(CP_RESET)] = 0;
     led_apply();
@@ -512,9 +521,21 @@ void front_tick(const front_in_t *in)
     }
     if (screen_had_rec) rec = false;                            // REC on a full screen only closes it
 
+    // the knob for an instrument that holds it: turns, taps and holds are its own; a press with a turn is neither
+    int g_enc = 0; bool g_tap = false, g_hold = false;
+    if (grab && scr == SCR_PLAY && mlev == 0) {
+        if (in->pressed && enc) grab_turned = true;
+        g_enc = enc; g_tap = tap && !grab_turned; g_hold = hold && !grab_turned;
+        if (!in->pressed) grab_turned = false;
+        enc = 0; tap = hold = false;
+        coach_pause();
+    }
     if (scr == SCR_PLAY) {
         if (mlev == 0) {
-            if (hold) { frozen = !frozen; toast(frozen ? "MOTION HELD" : "MOTION FREE", 1100); coach_done(LEARN_HOLD); }
+            if (hold) {
+                if (INST.hold && INST.hold()) coach_done(LEARN_HOLD);
+                else { frozen = !frozen; toast(frozen ? "MOTION HELD" : "MOTION FREE", 1100); coach_done(LEARN_HOLD); }
+            }
             if (tap) menu_open();
             if (enc) {
                 int qp = meta.quick[0] ? param_by_tag(meta.quick) : INST.knob ? param_by_tag(INST.knob) : -1;
@@ -554,6 +575,7 @@ void front_tick(const front_in_t *in)
         .has_imu = motion, .frozen = frozen, .acc = acc_s, .gyro = frozen ? (vec3_t){ 0, 0, 0 } : gyro_s,
         .lean_x = lean_x, .lean_y = lean_y, .burst = burst_s, .nburst = nb,
         .has_joy = in->joy_ok && pv[CP(CP_JOY)] >= 1.0f, .menu_open = mlev > 0,
+        .knob = g_enc, .knob_tap = g_tap, .knob_hold = g_hold, .knob_down = grab && in->pressed, .knob_turned = grab && grab_turned,
     };
     ctl.gyro_mag = sqrtf(ctl.gyro.x * ctl.gyro.x + ctl.gyro.y * ctl.gyro.y + ctl.gyro.z * ctl.gyro.z);
     if (ctl.has_joy) {
@@ -614,7 +636,7 @@ void front_midi(uint8_t st, uint8_t d1, uint8_t d2)
         if (p >= 0) { set_param(p, param_from_cc(p, d2), false); return; }
         if (d1 == 64) { midi_rec = d2 >= 64; return; }                 // the sustain pedal is REC
     } else if (k == 0xC0) {
-        int16_t ids[2 + 64 + N_USER];
+        int16_t ids[SOUND_LIST_MAX];
         int n = sound_list(ids), want = d1 < INST.npresets ? d1 : SOUND_ID_USER + (d1 - INST.npresets);
         for (int i = 0; i < n; i++) if (ids[i] == want) { load_sound(ids[i], false); card_ms = 1500; }
         return;
@@ -668,7 +690,7 @@ static void draw_param_strip(int y, int p)
 static void draw_sound_card(int y)
 {
     strip_bg(y);
-    int16_t ids[2 + 64 + N_USER];
+    int16_t ids[SOUND_LIST_MAX];
     int n = sound_list(ids), i = sound_pos(ids, n, meta.sound);
     char b[24]; snprintf(b, sizeof b, "SOUND %d/%d", i + 1, n);
     oled_ftext_ex(F_TINY, 3, y + 3, b, 1);

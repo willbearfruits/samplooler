@@ -29,6 +29,12 @@ static const char *TAG = "audio";
 static i2s_chan_handle_t tx, rx;
 static volatile audio_process_t process;
 static volatile uint32_t frame_now;
+// When frame 0 began on the microsecond clock: each block's start time minus its frames, the lowest seen lately
+// (a block is never handled early, only sometimes late). The link maps frames between boards with it.
+static uint64_t frames64;
+static int64_t  epoch_us = INT64_MAX;
+static volatile uint32_t epoch_seq;
+static volatile int64_t  epoch_pub;
 static volatile int cpu_pct;
 static volatile int mic_slot;
 static int          slot_vote;
@@ -45,6 +51,7 @@ static volatile int   mute_req;
 static float          mute_g = 1.0f;
 #define MUTE_STEP 0.1f
 #define AMP_GOOD_BLOCKS 25                              // 50 ms of clean reads before the speaker amp wakes
+static volatile bool speaker_on = true, clock_good;     // SYSTEM > SPEAKER; the clock has been good once
 static int good_blocks;
 static int8_t scope[AUDIO_SCOPE_N];
 static int    scope_w, scope_dec;
@@ -124,8 +131,15 @@ static void IRAM_ATTR audio_task(void *arg)
         if (i2s_channel_read(rx, raw, SAMPLES * sizeof(int32_t), &got, pdMS_TO_TICKS(100)) != ESP_OK || got == 0) {
             read_err++; good_blocks = 0;
             memset(raw, 0, SAMPLES * sizeof(int32_t)); got = SAMPLES * sizeof(int32_t);
-        } else if (good_blocks < AMP_GOOD_BLOCKS && ++good_blocks == AMP_GOOD_BLOCKS) audio_amp_enable(true);
+        } else if (good_blocks < AMP_GOOD_BLOCKS && ++good_blocks == AMP_GOOD_BLOCKS) { clock_good = true; audio_amp_enable(speaker_on); }
         int frames = (int)(got / (2 * sizeof(int32_t)));
+        {
+            int64_t e = esp_timer_get_time() - (int64_t)(frames64 * 125u / 4u);
+            if (e < epoch_us) epoch_us = e; else epoch_us += (e - epoch_us) / 1024;   // follows a slow drift upwards
+            __atomic_add_fetch(&epoch_seq, 1, __ATOMIC_ACQ_REL);
+            epoch_pub = epoch_us;
+            __atomic_add_fetch(&epoch_seq, 1, __ATOMIC_ACQ_REL);
+        }
         uint32_t c0 = esp_cpu_get_cycle_count();
         float mg = mute_g, mt = mute_req ? 0.0f : 1.0f;
         if (mg < mt) { mg += MUTE_STEP; if (mg > mt) mg = mt; } else if (mg > mt) { mg -= MUTE_STEP; if (mg < mt) mg = mt; }
@@ -157,6 +171,7 @@ static void IRAM_ATTR audio_task(void *arg)
         audio_process_t p = process;
         if (p) p(in, out, frames); else memset(out, 0, frames * sizeof(float));
         frame_now += (uint32_t)frames;
+        frames64 += (uint64_t)frames;
         blocks++;
 
         float opk = 0;
@@ -196,6 +211,12 @@ void audio_run(void)
 void audio_set_process(audio_process_t fn) { process = fn; }
 uint32_t audio_blocks(void) { return blocks; }
 uint32_t audio_frames(void) { return frame_now; }
+int64_t audio_epoch_us(void)
+{
+    uint32_t q; int64_t e;
+    do { q = __atomic_load_n(&epoch_seq, __ATOMIC_ACQUIRE); e = epoch_pub; } while ((q & 1u) || q != __atomic_load_n(&epoch_seq, __ATOMIC_ACQUIRE));
+    return e;
+}
 int  audio_cpu_percent(void) { return cpu_pct; }
 int  audio_mic_slot(void)    { return mic_slot; }
 void audio_set_mic_gain_db(int db) { mic_db = db < 0 ? 0 : db > 36 ? 36 : db; }
@@ -211,6 +232,7 @@ void  audio_get_stats(audio_stats_t *s)
 void  audio_flash_hint(void) { flash_t = esp_timer_get_time(); }
 void  audio_set_mute(bool on) { mute_req = on; }
 bool  audio_silent(void)      { return mute_req && mute_g <= 0.0f; }
+void  audio_speaker(bool on) { speaker_on = on; audio_amp_enable(on && clock_good); }
 void  audio_amp_enable(bool on)
 {
 #if PIN_AMP_SD >= 0

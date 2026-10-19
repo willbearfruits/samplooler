@@ -16,7 +16,8 @@ Not yet run on hardware. Everything here was checked in the host simulator (`too
 5. Hold REC to record a phrase. Let go and it loops, then play over it.
 
 If it plays too easily or not at all, run BREATH SETUP (menu > BREATH): stay quiet for two seconds, then
-blow normally for three.
+blow normally for three. If the speaker keeps it sounding on its own, turn SYSTEM > SPEAKER off and use
+the line out or headphones.
 
 ## Controls
 
@@ -32,6 +33,13 @@ blow normally for three.
 | hold the knob | keep the current note while you move (the tilt is held); again to let go |
 | REC | hold: record or add to the loop; tap: stop or play it |
 
+## With other boards
+
+HUFF links to the other instruments of this library over the air (LINK in the menu, on by default). Boards in
+the same group share a key, a scale and a tempo: change KEY or SCALE here and the others follow, as theirs
+change HUFF's; the echo can repeat on the shared beat (SPACE > ECHO BEATS). HUFF's own scales (the
+pentatonics, Hijaz, blues, In Sen) stay as they are while the flock is on the scale their notes sit in.
+
 ## Sounds
 
 OCARINA, FLUTE, SHAKUHACHI, PAN PIPES, CLARINET, TIN WHISTLE, BOTTLE, CAVE (ocarina in a big echoing
@@ -46,7 +54,7 @@ BLUES REED (clarinet, blues scale). Eight more places for your own, under SOUND 
 | notes | the note you play, velocity from the breath |
 | CC 2 | breath |
 | pitch bend | the joystick's bend (full scale = BEND RANGE) |
-| CC 20 and up | every setting, when you change it |
+| CC 20 and up | every setting, when you change it (the link's switches excepted) |
 | program change | the sound |
 
 | In | |
@@ -62,7 +70,7 @@ HUFF plays incoming notes; the sustain pedal does.
 
 ## Building
 
-ESP-IDF v5.5.1, as for the Samplooler:
+ESP-IDF v5.5.1, as for the Samplooler (the core's files are copied in from `core/`, 2026-10-19):
 
 ```sh
 . ~/esp/esp-idf/export.sh

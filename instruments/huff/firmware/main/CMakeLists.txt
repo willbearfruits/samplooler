@@ -5,12 +5,12 @@
 set(INSTRUMENT_NAME   "HUFF")
 set(INSTRUMENT_PID    0x4022)
 set(INSTRUMENT_SERIAL "HF")
-set(INSTRUMENT_REQUIRES "")
+set(INSTRUMENT_REQUIRES esp_wifi esp_event)
 
 # the core, then instrument.c and any inst_*.c (or layer_*.c) next to it
 file(GLOB inst_extra "${CMAKE_CURRENT_LIST_DIR}/inst_*.c" "${CMAKE_CURRENT_LIST_DIR}/layer_*.c")
 set(srcs "shell.c" "front.c" "params.c" "looper.c" "calib.c" "ui.c" "audio.c" "imu.c" "oled.c" "input.c" "led.c"
-         "usb.c" "diag.c" "settings.c" "font_data.c" "instrument.c" "usb/usb_descriptors.c" ${inst_extra})
+         "usb.c" "diag.c" "settings.c" "font_data.c" "instrument.c" "usb/usb_descriptors.c" "link.c" "link_esp.c" ${inst_extra})
 set(reqs driver esp_driver_i2s esp_driver_i2c esp_driver_gpio esp_driver_pcnt esp_driver_rmt esp_adc esp_timer nvs_flash
          esp_app_format esp_system esp_hw_support usb xtensa ${INSTRUMENT_REQUIRES})
 file(GLOB inst_lf "${CMAKE_CURRENT_LIST_DIR}/*.lf")    # an instrument's linker fragments (code in IRAM)

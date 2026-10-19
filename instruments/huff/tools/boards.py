@@ -3,7 +3,7 @@ USB serials (two letters, then the last four bytes of the chip's MAC). A TWOFOLD
 its name is not on the list and nothing here writes to a port it did not find by name."""
 import glob, os, re
 
-FAMILY = ('KNOCK', 'HUFF', 'HOWL', 'SNIFF', 'CHIRP', 'ETHER', 'JAM', 'DEMO', 'Samplooler Family', 'Samplooler')
+FAMILY = ('KNOCK', 'HUFF', 'HOWL', 'SNIFF', 'CHIRP', 'ETHER', 'JAM', 'BAND', 'SING', 'WRECK', 'MANTRA', 'DEMO', 'Samplooler Family', 'Samplooler')
 NEVER = ('TWOFOLD',)
 
 def boards():
@@ -27,7 +27,7 @@ def find(name=None):
     bs = boards()
     if name: bs = [b for b in bs if b[0] == name] or bs
     if len(bs) == 1: return bs[0]
-    if not bs: raise SystemExit('no family board on USB (KNOCK, HUFF, HOWL, SNIFF, CHIRP, Samplooler)')
+    if not bs: raise SystemExit('no family board on USB (a Samplooler or one of the library firmwares)')
     raise SystemExit('more than one board: ' + ', '.join(f'{b[0]} {b[2]}' for b in bs) + ' (unplug the others or set BOARD=<serial>)')
 
 def mac_tail(serial):

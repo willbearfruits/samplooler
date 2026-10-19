@@ -15,6 +15,16 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// A big buffer only the UI task (or the radio's task) touches: in PSRAM when the build allows it
+// (CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY), so internal RAM stays for the sound's code and the radio. It must be
+// zero at start (no initializer). Never for anything the audio task reads per sample.
+#ifdef ESP_PLATFORM
+#include "esp_attr.h"
+#define UI_RAM EXT_RAM_BSS_ATTR
+#else
+#define UI_RAM
+#endif
+
 #define AUDIO_SR     32000
 #define AUDIO_BLOCK  64
 
@@ -44,6 +54,13 @@ typedef struct {
     bool     has_joy;
     float    jx, jy;
     bool     menu_open;        // the menu has the knob; motion, joystick and REC still come through
+    // The knob, only while the instrument holds it (knob_grab(true)): in play the core then leaves it alone
+    // (no sound change, no menu, no motion hold) and hands it over here.
+    int      knob;             // detents turned this tick, signed
+    bool     knob_tap;         // pressed and let go within 0.5 s without turning
+    bool     knob_hold;        // held 0.6 s without turning (fires once per press)
+    bool     knob_down;        // the knob is down now
+    bool     knob_turned;      // ... and has been turned since it went down (press and turn)
 } ctl_t;
 
 // ---------------------------------------------------------------- parameters
@@ -71,7 +88,7 @@ typedef struct {
     const char *help;          // one line shown while editing, <= 124 px in F_TINY
 } param_t;
 
-#define PARAMS_MAX 128
+#define PARAMS_MAX 256
 extern float pv[PARAMS_MAX];                           // the instrument's params first, then the core's
 void  param_set(int p, float v);                       // UI task only
 const char *param_text(int p, char *b, int n);         // the value as the menu shows it
@@ -106,6 +123,7 @@ typedef struct {
     const hint_t *hints;       int nhints;
     bool  burst;               // wants the 1 kHz accelerometer stream (ctl.burst)
     bool  looper;              // the core looper records what audio() plays: REC is its (hold = record/add, tap = stop/play)
+    bool  rec_button_off;      // SYSTEM > REC BUTTON starts OFF: the REC pin is ignored, BOOT and MIDI (CC 64) record
     const char *knob;          // tag of the param the knob turns in play (until the player edits another in the menu);
                                // NULL: the knob changes the sound
     bool  midi_notes;          // MIDI notes play the instrument: notes 60 and 64 go to midi_in(), not to REC / hold
@@ -119,11 +137,17 @@ typedef struct {
     void (*action)(int p);     // a PK_ACT param was run from the menu. May be NULL
     void (*midi_in)(uint8_t status, uint8_t d1, uint8_t d2);   // channel messages the core does not use. May be NULL
     void (*saver)(uint32_t frame);                       // screensaver frame; NULL: the core's
+    bool (*hold)(void);        // the knob held 0.6 s in play: true if the instrument used it (then the motion is not held).
+                               // May be NULL
 } instrument_t;
 extern const instrument_t INST;
 
 // ---------------------------------------------------------------- the platform (shell.c, tools/sim)
 void    *app_alloc(size_t n);  // zeroed, PSRAM when there is some; NULL when out of memory. In init()
+// zeroed, internal RAM first (PSRAM if there is none left): for what the audio reads all over, every sample (reverb
+// lines, grain rings). PSRAM goes through a 32 KB cache, and buffers 4 KB apart share its slots: several such lines
+// read and written per sample miss on nearly every access (measured: a reverb at 2 ms of every 2 ms block). In init()
+void    *app_alloc_fast(size_t n);
 void     app_free(void *p);
 uint32_t audio_frames(void);   // frames since boot at the start of the current (audio task) or last block
 void     midi_note(int note, int vel);           // on the MIDI channel set in SYSTEM; vel 0 = note off
@@ -136,3 +160,4 @@ void     toast(const char *text, int ms);           // a message box over the sc
 void     ui_awake(void);       // playing without touching the controls (knocking, blowing): keep the screen on
 void     menu_leave(void);     // close the menu (an action that needs the whole screen, e.g. a setup flow in draw())
 void     coach_pause(void);    // a full-screen flow of the instrument's is up: no hint over it (call every tick while it lasts)
+void     knob_grab(bool on);   // the instrument takes the knob in play (an editor of its own): ctl.knob*, no menu, no hints
