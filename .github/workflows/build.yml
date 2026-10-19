@@ -89,13 +89,6 @@ jobs:
           path: dist
       - name: The page with the list (library.json), each entry's firmware, README and manual
         run: python3 tools/library.py site --dist dist --out _site
-      - name: The showcase video, served next to the page (a file of the release named "media", not in git)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p _site/media
-          gh release download media -R "${{ github.repository }}" -p samplooler-showcase-full.mp4 -O _site/media/showcase.mp4 \
-            || echo "no media release yet: the page goes up without the video"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site

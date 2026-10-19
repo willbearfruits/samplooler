@@ -10,14 +10,11 @@ tape delay or a stutter.
 
 > PHOTO: the Stack in a hand, tipped forward, screen lit (media/photos/stack-hand.jpg)
 
-**[Flash it from the browser](https://willbearfruits.github.io/samplooler/)** ·
-[Manual](docs/MANUAL.md) · [Build one](docs/BUILD.md) ·
-[Video](https://github.com/willbearfruits/samplooler/releases/download/media/samplooler-showcase-full.mp4) ·
-[Get one](#get-one)
+**[Try it and flash it from the browser](https://willbearfruits.github.io/samplooler/)** ·
+[Manual](docs/MANUAL.md) · [Build one](docs/BUILD.md) · [Get one](#get-one)
 
-The loop is a tape between two reels, and a small operator runs on it, as fast as you tip the box. The
-video is rendered, not filmed: the sound is the firmware's own playback engine running on a computer, and
-the screen is the firmware's own drawing code.
+The loop is a tape between two reels, and a small operator runs on it, as fast as you tip the box. The screen
+above is the firmware's own drawing code, run on a computer.
 
 > VIDEO: someone playing a Stack, filmed, with its sound, about 60 s
 

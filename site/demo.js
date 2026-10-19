@@ -106,7 +106,7 @@ sensorBtn.addEventListener('click', async () => {
       setAngle(e.beta);
       tiltIn.value = Math.round(angle);
     });
-    sensorBtn.textContent = 'Tilt is on. Hold the phone flat, screen up.';
+    note.textContent = 'Tilt is on. Hold the phone flat, screen up.';
     sensorBtn.disabled = true;
   } catch { note.textContent = 'No tilt sensor access. Use the slider.'; }
 });
