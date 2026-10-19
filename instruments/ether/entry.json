@@ -12,6 +12,7 @@
   ],
   "hardware_note": "Without a joystick, BALANCE is in the menu.",
   "status": "board",
+  "listed": false,
   "status_note": "Runs on a board with both radios on: 44 % CPU, no dropouts (2026-10-14). Not played much yet.",
   "image": "images/play.gif",
   "more": [

@@ -3,7 +3,8 @@
 A wind instrument for the Samplooler boards. Blow at the mic and it plays; tilt the box to change the note.
 Seven models: ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle.
 
-Not yet run on hardware. Everything here was checked in the host simulator (`tools/sim`) only.
+Installed from the desktop app and run on a board on 2026-10-19; not played much yet. Everything was also checked in
+the host simulator (`tools/sim`, 104 checks).
 
 ![HUFF starting up](images/splash.gif) ![playing a tune](images/play.gif)
 

@@ -11,8 +11,8 @@
     "joystick",
     "wifi"
   ],
-  "status": "simulator",
-  "status_note": "Not tried on a board yet: everything was checked in the simulator.",
+  "status": "board",
+  "status_note": "Installed from the app and ran on a board on 2026-10-19. Not played much yet.",
   "image": "images/play.gif",
   "more": [
     "images/splash.gif",

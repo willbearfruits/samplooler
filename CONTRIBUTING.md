@@ -43,7 +43,7 @@ Then:
    checks. `tools/sim/run.sh` runs the core's checks on your instrument as well (every setting for clicks,
    levels, the menu) and writes the screens as GIFs and the sound as WAVs in `tools/sim/out/`.
 4. Put the GIFs you like in `images/`, write `README.md` for players (and `docs/MANUAL.md` if there are many
-   settings), and `entry.json`.
+   settings), and `entry.json`. The firmware takes its version from `entry.json`.
 
 ## entry.json
 
@@ -71,6 +71,7 @@ Then:
 | `summary` | one or two plain sentences, at most 200 characters |
 | `uses` | any of `mic`, `tilt`, `joystick`, `speaker`, `wifi`, `bluetooth` |
 | `status` | `simulator` (only checked on a computer), `board` (starts and keeps up on a board), `played` (played on a board) |
+| `listed` | optional; `false` keeps it in the repository but off the page and the app until it has run on a board |
 | `image`, `more` | GIFs or pictures in your folder, 2 MB each at most; the first is the one on the page |
 
 ## Rules
@@ -111,3 +112,4 @@ USB product IDs so far (all with Espressif's vendor ID 0x303A, picked here, not 
 | 0x4028 | BAND |
 | 0x4029 | SING |
 | 0x402A | WRECK |
+| 0x402B | MANTRA |

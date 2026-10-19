@@ -1,6 +1,7 @@
-# Builds the firmware on every push. On main it also publishes site/ with
-# the images to GitHub Pages (the browser flasher needs them on the same origin). A v* tag
-# attaches the images to a GitHub release.
+# Builds the Samplooler's firmware and every instrument on the list (tools/library.py ids --listed), and runs
+# their simulators, on every push. On main it also publishes the page: site/, the list (library.json, which the
+# desktop app in app/ reads too) and each one's firmware for the browser flasher and the app. A v* tag attaches
+# the Samplooler's image to a GitHub release.
 name: build
 
 on:
@@ -13,25 +14,62 @@ on:
 jobs:
   firmware:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target: [esp32s3]
     steps:
       - uses: actions/checkout@v7
       - uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5.1          # the release the firmware is developed on
-          target: ${{ matrix.target }}
+          target: esp32s3
           path: firmware
-          command: idf.py build && idf.py merge-bin -o samplooler-${{ matrix.target }}.bin
+          command: idf.py build && idf.py merge-bin -o samplooler-esp32s3.bin
+      - run: python3 tools/library.py collect samplooler dist
       - uses: actions/upload-artifact@v7
         with:
-          name: samplooler-${{ matrix.target }}
-          path: firmware/build/samplooler-${{ matrix.target }}.bin
+          name: samplooler-esp32s3
+          path: firmware/build/samplooler-esp32s3.bin
+      - uses: actions/upload-artifact@v7
+        with:
+          name: entry-samplooler
+          path: dist
+
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 tools/library.py check
+      - id: ids
+        run: echo "ids=$(python3 tools/library.py ids --listed)" >> "$GITHUB_OUTPUT"
+
+  instrument:
+    needs: list
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.ids) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.1
+          target: esp32s3
+          path: instruments/${{ matrix.id }}/firmware
+          command: idf.py build
+      - name: The simulator
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq python3-pil
+          instruments/${{ matrix.id }}/tools/sim/run.sh
+      - run: python3 tools/library.py collect ${{ matrix.id }} dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: entry-${{ matrix.id }}
+          path: dist
 
   pages:
     if: github.ref == 'refs/heads/main'
-    needs: firmware
+    needs: [firmware, instrument]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -42,21 +80,25 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0                   # the Samplooler's version is its latest v* tag
       - uses: actions/download-artifact@v8
         with:
-          pattern: samplooler-*
+          pattern: entry-*
           merge-multiple: true
-          path: site/firmware
+          path: dist
+      - name: The page with the list (library.json), each entry's firmware, README and manual
+        run: python3 tools/library.py site --dist dist --out _site
       - name: The showcase video, served next to the page (a file of the release named "media", not in git)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p site/media
-          gh release download media -R "${{ github.repository }}" -p samplooler-showcase-full.mp4 -O site/media/showcase.mp4 \
+          mkdir -p _site/media
+          gh release download media -R "${{ github.repository }}" -p samplooler-showcase-full.mp4 -O _site/media/showcase.mp4 \
             || echo "no media release yet: the page goes up without the video"
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: site
+          path: _site
       - id: deploy
         uses: actions/deploy-pages@v5
 
@@ -69,8 +111,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: samplooler-*
-          merge-multiple: true
+          name: samplooler-esp32s3
           path: dist
       - run: cd dist && sha256sum samplooler-*.bin > SHA256SUMS
       - uses: softprops/action-gh-release@v3

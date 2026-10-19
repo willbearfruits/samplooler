@@ -7,7 +7,7 @@ It sings by itself; tilt the box to open and close its mouth, roll it for the pi
 to walk the overtone up the harmonics, pump it for breath, knock on it to strike a singing bowl. Your own voice can
 go through the same mouth.
 
-Firmware for the Samplooler's ESP32-S3 boards (the Stack, the Mini, the breadboard kit).
+Firmware for the Samplooler Stack (ESP32-S3).
 
 ## Playing
 

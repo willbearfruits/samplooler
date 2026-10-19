@@ -10,8 +10,7 @@ plugin/build-configure.log
 # release images made by tools/release.sh
 dist/
 __pycache__/
-# the Pages job puts the images and the video next to the page
-site/firmware/*.bin
+# the video, next to the page for a local preview (the Pages job takes it from the release named media)
 site/media/
 # KiCad's per-user state, if you open the boards
 hardware/*/*.kicad_prl
@@ -30,3 +29,10 @@ instruments/*/tools/sim/sim
 instruments/*/tools/sim/out/
 tools/voicesim/out/
 tools/voicesim/voicesim
+
+# host builds of the test tools
+tools/flocksim/flocksim
+tools/soak/soak
+_site/
+# an old local copy of the merged image (the page now uses the library's parts)
+site/firmware/

@@ -12,6 +12,7 @@
     "wifi"
   ],
   "status": "board",
+  "listed": false,
   "status_note": "Runs on a board: about 45 % CPU idle, 55 % with drums, bass, keys and lead playing, no dropouts (2026-10-15). Not played much yet.",
   "image": "images/band-together.gif",
   "more": [

@@ -6,17 +6,11 @@ and flash the Samplooler back the same way. Anyone can add an instrument.
 <!-- list -->
 | | What | Status |
 | - | - | - |
-| [BAND](band) | Six players on one board: drums you knock or draw on a grid, bass, lead, keys, ocarina and tuned feedback, in one key and tempo. Syncs with a SING. | Runs on a board |
-| [CHIRP](chirp) | The Bluetooth devices around you, played as birds. Phones, earbuds and watches sing on three wires. | Simulator only |
-| [ETHER](ether) | SNIFF and CHIRP at once: the Wi-Fi on the ground, the Bluetooth in the air, in one key and one tempo. | Runs on a board |
-| [HOWL](howl) | Feedback in tune. Only the notes of a chord can build up into a howl. Tip the box to bring it in, lean to pick the note. | Simulator only |
-| [HUFF](huff) | Blow at the mic and tilt the box for the notes. Ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle; links to the other boards. | Simulator only |
-| [JAM](jam) | Drums, bass, breath and howl, looped on top of each other in one key and one tempo. Turn the knob to pick the one you play. | Runs on a board |
-| [KNOCK](knock) | Knock on the box to play drums. Each side is a different drum. Hold REC while you knock and it loops. | Simulator only |
+| [HUFF](huff) | Blow at the mic and tilt the box for the notes. Ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle; links to the other boards. | Runs on a board |
 | [MANTRA](mantra) | A formant voice and a seated Buddha who sings it: monks chanting OM, overtone singing, Daisy Bell, and a wall of amps behind him. Tilt for the vowels, turn it for the overtones. | Runs on a board |
-| [SING](sing) | Sing and it tunes you, sings harmonies and a choir with you, or turns you into a vocoder. Hold REC to loop it; tilt to play the loop faster or backwards. Syncs with a BAND. | Runs on a board |
-| [SNIFF](sniff) | The Wi-Fi around you as sound. Every device gets a note and plays it each time it sends something. HUNT finds one by ear. | Simulator only |
-| [WRECK](wreck) | A breakcore machine that turns into a doom machine: one knob from a chopped, rolled, crushed break at twice the tempo down to one chord held under a break slowed into thunder. | Simulator only |
+| [WRECK](wreck) | A breakcore machine that turns into a doom machine: one knob from a chopped, rolled, crushed break at twice the tempo down to one chord held under a break slowed into thunder. | Runs on a board |
+
+Also in this folder, still in progress and not on the list: [BAND](band), [CHIRP](chirp), [ETHER](ether), [HOWL](howl), [JAM](jam), [KNOCK](knock), [SING](sing), [SNIFF](sniff) ([ROADMAP.md](../ROADMAP.md)).
 <!-- /list -->
 
 "Runs on a board" means it has started and kept up on real hardware but has not been played much yet.

@@ -13,6 +13,7 @@
   ],
   "hardware_note": "Best with headphones or the line out: the board's speaker sits next to the mic.",
   "status": "board",
+  "listed": false,
   "status_note": "Runs on a board: 25-35 % CPU, no dropouts (2026-10-15). Not played much yet.",
   "image": "images/sing-voices.gif",
   "more": [

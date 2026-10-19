@@ -2,7 +2,7 @@
 """The library's one tool. No dependencies beyond Python 3.
 
   library.py check            check every entry (CI runs this on every pull request)
-  library.py ids              the entries as a JSON list (CI's build matrix)
+  library.py ids [--listed]   the entries as a JSON list (CI's build matrix); --listed: only those on the list
   library.py core             which entries carry the core in core/ unchanged, and what differs
   library.py core-copy ID...  copy core/ into those entries (after a core change)
   library.py collect ID D     after a build (and the simulator): copy what the page needs into D/ID/: the
@@ -64,6 +64,12 @@ def samplooler_version():
 
 def ids():
     return sorted(d for d in os.listdir(INST) if os.path.isfile(os.path.join(INST, d, "entry.json")))
+
+
+def listed(i):
+    """On the page, in the app and in instruments/README.md. An entry with "listed": false stays in the
+    repository, is checked and built, but is not offered for install until it has been tried on a board."""
+    return load(i).get("listed", True) is not False
 
 
 def load(i):
@@ -134,6 +140,8 @@ def check():
             err(f"uses: unknown {sorted(bad)}; known: {sorted(USES)}")
         if e.get("status") not in STATUS:
             err(f"status must be one of {sorted(STATUS)}")
+        if "listed" in e and not isinstance(e["listed"], bool):
+            err("listed: true or false")
         for img in [e.get("image")] + list(e.get("more", [])):
             if not img:
                 continue
@@ -305,7 +313,7 @@ def site(args):
         shutil.rmtree(out)
     shutil.copytree(os.path.join(ROOT, "site"), out)
     entries = []
-    for i in ["samplooler"] + ids():
+    for i in ["samplooler"] + [x for x in ids() if listed(x)]:
         e = dict(SAMPLOOLER, version=samplooler_version()) if i == "samplooler" else load(i)
         d = source_dir(i)
         os.makedirs(os.path.join(out, i), exist_ok=True)
@@ -376,9 +384,16 @@ def readme():
     p = os.path.join(INST, "README.md")
     s = open(p, encoding="utf-8").read()
     rows = ["| | What | Status |", "| - | - | - |"]
+    rest = []
     for i in ids():
         e = load(i)
+        if not listed(i):
+            rest.append(f"[{e['name']}]({i})")
+            continue
         rows.append(f"| [{e['name']}]({i}) | {e['summary']} | {STATUS[e['status']]} |")
+    if rest:
+        rows += ["", "Also in this folder, still in progress and not on the list: " + ", ".join(rest) +
+                 " ([ROADMAP.md](../ROADMAP.md))."]
     new = re.sub(r"(<!-- list -->\n).*?(\n<!-- /list -->)", lambda m: m.group(1) + "\n".join(rows) + m.group(2), s, flags=re.S)
     if new == s and "<!-- list -->" not in s:
         print("instruments/README.md has no <!-- list --> markers")
@@ -396,7 +411,7 @@ def main(argv):
     if c == "check":
         return check()
     if c == "ids":
-        print(json.dumps(ids()))
+        print(json.dumps([i for i in ids() if listed(i)] if "--listed" in rest else ids()))
         return 0
     if c == "core":
         return core_status()

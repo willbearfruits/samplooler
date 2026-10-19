@@ -10,6 +10,7 @@
     "tilt"
   ],
   "status": "simulator",
+  "listed": false,
   "status_note": "Not tried on a board yet.",
   "image": "images/chorus.gif",
   "more": [

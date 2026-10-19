@@ -2,11 +2,10 @@
 
 A breakcore machine that turns into a doom machine. Turn the knob: from a break chopped, rolled and crushed at
 twice the tempo, through hardcore and sludge, down to one chord held under a break slowed into thunder. It plays by
-itself; tilt, roll, the stick and knocks push it around. Next to a [BAND](../band) or a [SING](../sing) it stays on
-their beat.
+itself; tilt, roll, the stick and knocks push it around. Next to another board on the radio link (a
+[MANTRA](../mantra), a [HUFF](../huff), the Samplooler) it stays on the same beat.
 
-Firmware for the Samplooler's ESP32-S3 boards (the Stack, the Mini, the breadboard kit). Not run on a board yet
-(see Status).
+Firmware for the Samplooler Stack (ESP32-S3).
 
 ## Playing
 
@@ -58,7 +57,6 @@ cd firmware && idf.py build
 
 ## Status
 
-Built 2026-10-16, checked again 2026-10-18. Not run on a board yet and not heard on one: everything so far is the
-simulator (160 checks, among them a long run in each zone with sounds, takes and the tempo changing) and
-WAVs from it. In the simulator it needs less than half of what SING and BAND need at their busiest, so it should fit.
+Built 2026-10-16. An earlier build ran on a board from the 17th. The production sweep of the 18th has run only in
+the simulator so far (164 checks, among them a long run in each zone with sounds, takes and the tempo changing). In the simulator it needs less than half of what SING and BAND need at their busiest, so it should fit.
 A new built-in break takes a few seconds to print on the board.

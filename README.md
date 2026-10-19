@@ -34,12 +34,13 @@ the screen is the firmware's own drawing code.
 | Slots | 8 loops saved on the board, kept when you update it. |
 | Together | Over the radio with the other instruments: a take sets their tempo or lands on their beat; key and scale are shared. |
 | With a computer | USB MIDI and a USB sound card on one cable, and a VST3 plugin that shows and sets everything. |
-| Other instruments | Eleven more firmwares for the same box, from a singing voice processor to a drum machine you knock on. |
+| Other instruments | More firmwares for the same box: a breakcore-to-doom machine, a singing Buddha with a wall of amps, a flute you blow. |
 
-## Eleven more instruments
+## Other instruments
 
-The same Stack can be flashed with SING, BAND, WRECK, MANTRA, ETHER, JAM, KNOCK, HUFF, HOWL, SNIFF or CHIRP, and
-flashed back. The list, what each one does and how far it is tested: [instruments/](instruments/).
+The same Stack can be flashed with [WRECK](instruments/wreck), [MANTRA](instruments/mantra) or
+[HUFF](instruments/huff), and flashed back. Install them from the [page](https://willbearfruits.github.io/samplooler/#instruments)
+or with the desktop app in [app/](app/). More are in progress ([instruments/](instruments/), [ROADMAP.md](ROADMAP.md)).
 Anyone can add one ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Get one
@@ -55,14 +56,15 @@ Anyone can add one ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 Early. The current Stack is rev C: it has been made and runs the firmware (screen, microphone, tilt,
 line out and USB MIDI/audio work). The board files here are rev D, which is being tested now (October
-2026); rev C's files are at the git tag `checkpoint/boards-rev-c`. Of the ten other instruments, four
-have run on a board and six only in their simulators. Reports of builds, good or bad, are welcome in the
-issues.
+2026); rev C's files are at the git tag `checkpoint/boards-rev-c`. The three other instruments on the list have run
+on a board; eight more are in progress. What comes next is in [ROADMAP.md](ROADMAP.md). Reports of builds, good or
+bad, are welcome in the issues.
 
 ## What is where
 
 | Path | What |
 | - | - |
+| [ROADMAP.md](ROADMAP.md) | what is done and what comes next |
 | [docs/](docs/) | the manual and the build guide |
 | [firmware/](firmware/) | the Samplooler's ESP-IDF 5.5 project |
 | [instruments/](instruments/) | the other instruments, each a complete ESP-IDF project |

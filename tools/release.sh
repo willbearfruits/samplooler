@@ -6,15 +6,14 @@
 #   samplooler-esp32s3-boot.bin  bootloader + partition table alone, for 0x0 (ends before the NVS at 0x9000)
 #   samplooler-esp32s3-app.bin   the app alone, for 0x10000
 #                                boot + app, written as two parts, is the update that keeps both the slots and the
-#                                settings: `esptool.py write_flash 0x0 ...-boot.bin 0x10000 ...-app.bin`; the browser
-#                                flasher's manifest should list the same two parts (site/firmware/manifest.json).
+#                                settings: `esptool.py write_flash 0x0 ...-boot.bin 0x10000 ...-app.bin`. The page and the
+#                                app write the parts the same way (tools/library.py site makes their manifest).
 #   samplooler-esp32s3.elf       keep it with the release: it decodes the backtraces in crash reports
 #   SHA256SUMS
-# Also copies the merged image into site/firmware/ for a local preview of the browser flasher.
 set -e
 cd "$(dirname "$0")/.."
 . "${IDF_PATH:-$HOME/esp/esp-idf}/export.sh" >/dev/null 2>&1
-mkdir -p dist site/firmware
+mkdir -p dist
 t=esp32s3
 ( cd firmware
   [ -f build/CMakeCache.txt ] || idf.py set-target $t
@@ -25,6 +24,5 @@ cp firmware/build/samplooler-$t.bin dist/
 cp firmware/build/samplooler-$t-boot.bin dist/
 cp firmware/build/samplooler.bin dist/samplooler-$t-app.bin
 cp firmware/build/samplooler.elf dist/samplooler-$t.elf
-cp dist/samplooler-$t.bin site/firmware/
 ( cd dist && sha256sum samplooler-$t.bin samplooler-$t-boot.bin samplooler-$t-app.bin samplooler-$t.elf > SHA256SUMS && cat SHA256SUMS )
 echo "version: $(git describe --tags --match 'v*' --always --dirty)"

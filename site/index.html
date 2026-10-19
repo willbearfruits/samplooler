@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Samplooler</title>
-<meta name="description" content="A small open-source looper you play by tilting it. ESP32-S3 or ESP32-C3, a mic, a DAC and a tilt sensor. Flash it from the browser, build it from the guide.">
+<meta name="description" content="A small open-source looper you play by tilting it. Two boards around an ESP32-S3, with a mic, a DAC, a tilt sensor and a screen. Flash it from the browser, build it from the guide.">
 <meta property="og:title" content="Samplooler">
 <meta property="og:description" content="Hold to record. Let go and it loops. Tilt it to change speed and direction.">
-<meta property="og:image" content="img/c3-case.png">
+<meta property="og:image" content="img/showcase.jpg">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='5' width='12' height='7' rx='1.5' fill='%23c7412b' transform='rotate(-15 8 8)'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
@@ -99,12 +99,13 @@ esp-web-install-button button,.flashbox .btn{width:100%}
 video.tour{width:100%;max-width:816px;height:auto;display:block;margin:0 0 16px;border:6px solid #111;border-radius:3px;background:#0c0c0e}
 .gallery figcaption{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px}
 /* the library */
-.libgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:0 0 18px}
-.libgrid a{text-decoration:none;display:block}
+.libgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:0 0 18px}
+.libgrid > div{display:flex;flex-direction:column;gap:8px;border:1px solid var(--rule);background:var(--paper);padding:12px}
 .libgrid img{width:100%;aspect-ratio:2/1;image-rendering:pixelated;border:5px solid #111;border-radius:3px;background:var(--oled)}
-.libgrid b{display:block;font-family:var(--mono);font-size:14px;margin-top:6px;letter-spacing:.04em}
-.libgrid span{display:block;font-size:13px;color:var(--muted);line-height:1.35}
-.libgrid a:hover b{color:var(--red)}
+.libgrid b{font-family:var(--mono);font-size:15px;letter-spacing:.04em}
+.libgrid p{margin:0;font-size:14px;flex:1}
+.libgrid .st{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.libgrid .links{font-size:14px;display:flex;gap:12px}
 code,kbd{font-family:var(--mono);font-size:.9em}
 pre{font-family:var(--mono);font-size:13px;background:var(--paper);border:1px solid var(--soft);padding:12px;overflow-x:auto}
 footer{border-top:1px solid var(--rule);margin-top:64px;font-family:var(--mono);font-size:13px;color:var(--muted)}
@@ -118,7 +119,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   .steps > div:last-child,.cards > div:last-child{border-bottom:0}
   .demo{grid-template-columns:1fr;padding:14px}
   .gallery{grid-template-columns:1fr 1fr}
-  .libgrid{grid-template-columns:1fr 1fr}
+  .libgrid{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -129,12 +130,11 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   <nav>
     <a href="#video">Video</a>
     <a href="#try">Try it</a>
-    <a href="#versions">Versions</a>
     <a href="#get">Get one</a>
     <a href="#flash">Flash</a>
+    <a href="#instruments">Instruments</a>
     <a href="#build">Build</a>
-    <a href="manual.html">Manual</a>
-    <a href="../samplooler-library/">Library</a>
+    <a href="https://github.com/willbearfruits/samplooler/blob/main/docs/MANUAL.md">Manual</a>
     <a href="https://github.com/willbearfruits/samplooler">GitHub</a>
   </nav>
 </div></header>
@@ -145,14 +145,14 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   <div>
     <h1>SAMPLOOLER</h1>
     <p class="lead">A small looper you play by tilting it.</p>
-    <p class="small">Hold the button and make a sound. Let go and it loops. Tip the box forward and the loop runs faster; tip it back and it runs backwards. Open source, about $15 in parts, flashes from this page.</p>
+    <p class="small">Hold the button and make a sound. Let go and it loops. Tip the box forward and the loop runs faster; tip it back and it runs backwards. Open source, and it flashes from this page.</p>
     <div class="actions">
       <a class="btn solid" href="#try">Try it in the browser</a>
-      <a class="btn" href="#build">Build one</a>
+      <a class="btn" href="#get">Get one</a>
     </div>
   </div>
   <figure>
-    <img src="img/c3-case.png" alt="The Samplooler case, rendered: a small red box with a screen window and a microphone grille." width="900" height="650">
+    <img src="img/stack-3d.png" alt="The Stack, rendered: two boards one above the other, the screen, the encoder and the joystick on top, the modules underneath." width="1768" height="1176">
     <img class="screen" src="img/s3-delay.png" alt="The screen while a loop plays with the delay on: the tape between two reels, and three ghost runners trailing the stick-figure operator." width="408" height="216">
   </figure>
 </section>
@@ -162,7 +162,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   <video controls preload="none" playsinline poster="img/showcase.jpg" width="1280" height="720">
     <source src="media/showcase.mp4" type="video/mp4">
   </video>
-  <p>Rendered, not filmed: no Samplooler has been built yet. The sound is the firmware's own playback engine running on a computer, given the same moves the 3D model makes, and the screen is the firmware's own drawing code.</p>
+  <p>Rendered, not filmed. The sound is the firmware's own playback engine running on a computer, and the screen is the firmware's own drawing code.</p>
 </section>
 
 <section id="how">
@@ -174,7 +174,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     </div>
     <div>
       <svg class="tiltfig" viewBox="0 0 200 92" aria-hidden="true"><rect class="body" x="60" y="36" width="80" height="24" rx="4"/><path d="M40 48 a60 20 0 1 0 120 0" fill="none" stroke-width="2" stroke-dasharray="4 4"/><text x="100" y="86" text-anchor="middle">let go</text></svg>
-      <b>2. Let go</b>It loops what you recorded. Flat on the table it crawls forward very slowly, so the sound never stops.
+      <b>2. Let go</b>It loops what you recorded, from the first sound you made.
     </div>
     <div>
       <svg class="tiltfig" viewBox="0 0 200 92" aria-hidden="true"><g transform="rotate(20 60 50)"><rect class="body" x="30" y="40" width="60" height="18" rx="3"/></g><text x="60" y="86" text-anchor="middle">faster</text><g transform="rotate(-20 142 50)"><rect class="body" x="112" y="40" width="60" height="18" rx="3"/></g><text x="142" y="86" text-anchor="middle">backwards</text></svg>
@@ -207,22 +207,18 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   </div>
 </section>
 
-<section id="versions">
-  <h2>Two versions</h2>
-  <p>Both use the same microphone, audio output and tilt sensor. The S3 version is the full one. The C3 version is smaller and cheaper, with a shorter take.</p>
+<section id="what">
+  <h2>What it does</h2>
   <div class="table"><table>
-    <tr><th></th><th>Samplooler (ESP32-S3)</th><th>Samplooler mini (ESP32-C3)</th></tr>
-    <tr><td>Board</td><td>ESP32-S3 SuperMini</td><td>ESP32-C3 SuperMini with 0.42" screen</td></tr>
-    <tr><td>Take</td><td>20 s at 32 kHz</td><td>about 5 to 7 s at 16 kHz</td></tr>
-    <tr><td>Screen</td><td>0.96" 128x64 two-colour</td><td>0.42" 72x40, on the board</td></tr>
-    <tr><td>Controls</td><td>record button, encoder</td><td>button, optional encoder</td></tr>
-    <tr><td>Modes</td><td>TAPE (speed and pitch together) and GRAIN (pitch kept, freeze, scrub)</td><td>TAPE</td></tr>
-    <tr><td>Effects</td><td>delay and stutter on the roll axis</td><td>none</td></tr>
-    <tr><td>USB</td><td>MIDI port, USB sound card, plugin</td><td>power and flashing only</td></tr>
-    <tr><td>Sample slots</td><td>8, kept when off</td><td>8, kept when off</td></tr>
-    <tr><td>Parts, roughly</td><td>$15 to $25</td><td>$10 to $17</td></tr>
+    <tr><td>Record</td><td>Hold the button and make a sound, up to 20 s at 32 kHz. Let go and it loops.</td></tr>
+    <tr><td>Tilt</td><td>Forward plays faster, back plays backwards. Snap rounds the speed to octaves and fifths.</td></tr>
+    <tr><td>Roll</td><td>Left adds a tape delay, right a stutter.</td></tr>
+    <tr><td>Modes</td><td>TAPE: speed and pitch move together. GRAIN: they move apart.</td></tr>
+    <tr><td>Voice</td><td>Optional: 18 voices on the input before it records, from autotune and harmonies to a choir and a vocoder.</td></tr>
+    <tr><td>Slots</td><td>8 loops saved on the board, kept when you update it.</td></tr>
+    <tr><td>Together</td><td>Over the radio with the other instruments: a take sets their tempo or lands on their beat, and key and scale are shared.</td></tr>
+    <tr><td>Computer</td><td>USB MIDI and a USB sound card on one cable, and a VST3 plugin that shows and sets everything.</td></tr>
   </table></div>
-  <p style="font-size:14px;color:var(--muted)">The S3 version runs on a built <a href="https://github.com/willbearfruits/esp32-s3-supermini-kit">ESP32-S3 SuperMini kit</a> without rewiring.</p>
 </section>
 
 <section id="screens">
@@ -241,11 +237,8 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     <figure><img class="oled" src="img/s3-flung.png" alt="8x: the operator flung off its feet, tumbling" loading="lazy"><figcaption>all the way down: flung</figcaption></figure>
     <figure><img class="oled" src="img/s3-menu-save.png" alt="The menu: save the loop to slot 3" loading="lazy"><figcaption>menu, save to a slot</figcaption></figure>
     <figure><img class="oled" src="img/s3-asleep.png" alt="The screensaver: the operator asleep, Zs rising" loading="lazy"><figcaption>left alone: asleep</figcaption></figure>
-    <figure><img class="oled" src="img/c3-looping.png" alt="The mini's 72x40 screen while a loop plays" loading="lazy"><figcaption>mini, looping</figcaption></figure>
-    <figure><img class="oled" src="img/c3-ready.png" alt="The mini's 72x40 screen, ready" loading="lazy"><figcaption>mini, ready</figcaption></figure>
-    <figure><img src="img/c3-case-open.png" alt="The case with the lid lifted: DAC, tilt sensor and board in their cradles" loading="lazy"><figcaption>mini case, lid off</figcaption></figure>
   </div>
-  <p style="font-size:14px;color:var(--muted)">Screens are rendered from the firmware's own drawing code on a computer (<code>tools/uisim/tour.sh</code> makes the video). The case is a render; it has not been printed yet.</p>
+  <p style="font-size:14px;color:var(--muted)">Rendered from the firmware's own drawing code on a computer (<code>tools/uisim/tour.sh</code> makes the video).</p>
 </section>
 
 <section id="get">
@@ -254,25 +247,24 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     <div>
       <span class="soon">now</span>
       <h3>Prebuilt</h3>
-      <p>Assembled, flashed and tested, built by hand in Haifa. Write and ask about price and shipping.</p>
+      <p>Both boards, every module soldered on, flashed and tested. Built by hand in Haifa. Write and ask about price and shipping.</p>
       <a class="btn" href="mailto:Dogme84@gmail.com?subject=Samplooler">Email</a>
       <a class="btn" href="https://wa.me/972539263808">WhatsApp</a>
     </div>
     <div>
       <span class="soon">workshop</span>
       <h3>Build it with me</h3>
-      <p>The ESP32 workshop: 7 meetings at MEZO, Haifa, kit included. You leave with a board that runs Samplooler and <a href="https://willbearfruits.github.io/twofold/">TWOFOLD</a>.</p>
+      <p>The ESP32 workshop: 7 meetings at MEZO, Haifa, kit included.</p>
       <span class="price">2,200 ₪</span>
       <a class="btn" href="https://willbearfruits.github.io/serious-shit/workshop-esp32.html">The workshop</a>
     </div>
     <div>
       <span class="soon" style="color:var(--muted)">now</span>
-      <h3>Build from scratch</h3>
-      <p>Order the parts yourself, print the case, flash from this page. Everything you need is in the repository.</p>
+      <h3>Build it yourself</h3>
+      <p>Order the boards, solder the modules on, flash it from this page. Everything you need is in the repository.</p>
       <a class="btn" href="https://github.com/willbearfruits/samplooler/blob/main/docs/BUILD.md">Build guide</a>
     </div>
   </div>
-  <p style="font-size:14px;color:var(--muted)">One board, two instruments: the S3 version uses the same board and wiring as <a href="https://willbearfruits.github.io/twofold/">TWOFOLD</a>, a small USB sound card with an EQ, effects and a screen. Flash one, flash the other.</p>
 </section>
 
 <section id="flash">
@@ -281,59 +273,57 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     <div>
       <ol>
         <li>Use Chrome or Edge on a computer. Phones cannot do this.</li>
-        <li><b>S3:</b> hold the BOOT button on the board while you plug it in, then let go. The running firmware uses USB for MIDI and audio, so the browser only finds the board this way.<br><b>C3:</b> just plug it in.</li>
-        <li>Press the button on the right and pick the port. The page works out which chip it is.</li>
-        <li>When it says done, unplug and plug in again. On the S3 it may say the device was lost; that is normal.</li>
+        <li>Hold the BOOT button on the board while you plug it in, then let go. The running firmware uses USB for MIDI and audio, so the browser only finds the board this way.</li>
+        <li>Press the button on the right and pick the port.</li>
+        <li>When it says done, unplug it and plug it in again. It may say the device was lost; that is normal.</li>
       </ol>
     </div>
     <div class="flashbox">
-      <esp-web-install-button manifest="firmware/manifest.json">
+      <esp-web-install-button manifest="samplooler/manifest.json">
         <button slot="activate" class="btn solid">Connect and flash</button>
-        <span slot="unsupported">This browser cannot flash boards. Use Chrome or Edge on a computer, or flash the <a href="https://github.com/willbearfruits/samplooler/releases">release files</a> with esptool.</span>
+        <span slot="unsupported">This browser cannot flash boards. Use Chrome or Edge on a computer.</span>
         <span slot="not-allowed">Flashing needs a secure page (https).</span>
       </esp-web-install-button>
-      <p>Flashing erases the sample slots. The images are also on the <a href="https://github.com/willbearfruits/samplooler/releases">releases page</a>, one file per chip, written at offset 0x0.</p>
+      <p>It writes the program only: your loops and settings stay on the board, unless you tick Erase when it asks. From a shell, <code>tools/flash.sh</code> in the repository does the same without holding BOOT.</p>
     </div>
   </div>
+</section>
+
+<section id="instruments">
+  <h2>Other instruments</h2>
+  <p>The same board can be other instruments. Each one is its own firmware: install it from here the same way, play it, and put the Samplooler back the same way. Your loops stay on the board. These are the ones that have run on a board; more are in progress in the <a href="https://github.com/willbearfruits/samplooler/tree/main/instruments">repository</a>.</p>
+  <div class="libgrid" id="libgrid"></div>
+  <p style="font-size:14px;color:var(--muted)">Anyone can add an instrument: <a href="https://github.com/willbearfruits/samplooler/blob/main/CONTRIBUTING.md">how</a>.</p>
 </section>
 
 <section id="build">
   <h2>Build one</h2>
-  <p>Four small modules wired to the board: a microphone, an audio output, a tilt sensor, and on the S3 a screen, an encoder and a record button. Wired point to point it takes an evening if you have soldered before.</p>
-  <p>For the S3 there are also two circuit boards: a two-board stack, and a one-board Mini without the joystick. They pass their electrical and design-rule checks but have not been made yet; the files and what to check before ordering are in <a href="https://github.com/willbearfruits/samplooler/tree/main/hardware">hardware/</a>.</p>
+  <p>The Stack is two circuit boards, one above the other, with the usual modules soldered on. Both boards come as one panel from JLCPCB. It takes an evening of through-hole soldering and six small capacitors.</p>
   <div class="table"><table>
-    <tr><th>Part</th><th>What it does</th><th>Rough price</th></tr>
-    <tr><td>ESP32-S3 or C3 SuperMini</td><td>runs everything</td><td>$2 to $7</td></tr>
-    <tr><td>INMP441</td><td>microphone</td><td>$1.50 to $3</td></tr>
-    <tr><td>PCM5102A module</td><td>line out on a 3.5 mm jack</td><td>$2.50 to $5</td></tr>
-    <tr><td>MPU6050 (GY-521)</td><td>tilt</td><td>$1 to $2.50</td></tr>
-    <tr><td>S3 only</td><td>0.96" OLED, EC11 encoder, record button</td><td>about $4</td></tr>
+    <tr><th>Part</th><th>What it does</th></tr>
+    <tr><td>ESP32-S3 SuperMini</td><td>runs everything</td></tr>
+    <tr><td>INMP441</td><td>microphone</td></tr>
+    <tr><td>PCM5102A module</td><td>line out on a 3.5 mm jack</td></tr>
+    <tr><td>MPU-6050 (GY-521)</td><td>tilt</td></tr>
+    <tr><td>SSD1306 0.96" OLED</td><td>screen</td></tr>
+    <tr><td>EC11 encoder, thumb joystick</td><td>the controls</td></tr>
+    <tr><td>MAX98357A and a small speaker</td><td>optional speaker</td></tr>
   </table></div>
-  <p>The output is line level: use headphones through a small amp, powered speakers, or a mixer. The full parts list, wiring, case printing and a first-power-on check are in the <a href="https://github.com/willbearfruits/samplooler/blob/main/docs/BUILD.md">build guide</a>.</p>
+  <p>The output is line level: use headphones through a small amp, powered speakers, or a mixer. The current boards are rev C; the files in the repository are rev D, being tested now. The parts list, the order settings, what to check before powering up and the first power-on are in the <a href="https://github.com/willbearfruits/samplooler/blob/main/docs/BUILD.md">build guide</a>.</p>
 </section>
 
 <section id="computer">
-  <h2>With a computer (S3)</h2>
-  <p>Plugged into a computer, the S3 shows up as a MIDI port and a sound card. The loop goes straight into a DAW track, and anything the DAW plays can be recorded into the box. Every setting can be changed over MIDI. The plugin (VST3 and standalone) shows the tilt, the speed and the log, and has buttons for record, save and load.</p>
-</section>
-
-<section id="library">
-  <h2>Other instruments</h2>
-  <p>The same board can be other instruments: drums you play by knocking on the box, a flute you blow, feedback tuned to a chord, the Wi-Fi and Bluetooth around you as sound. Each one is its own firmware in the Samplooler library and flashes from its page the same way as this one. Your loops stay on the board. Anyone can add an instrument.</p>
-  <div class="libgrid" id="libgrid"></div>
-  <div class="actions">
-    <a class="btn solid" href="../samplooler-library/">Open the library</a>
-    <a class="btn" href="https://github.com/willbearfruits/samplooler-library/blob/main/CONTRIBUTING.md">Add yours</a>
-  </div>
+  <h2>With a computer</h2>
+  <p>Plugged into a computer, it shows up as a MIDI port and a sound card. The loop goes straight into a DAW track, and anything the DAW plays can be recorded into the box. Every setting can be changed over MIDI. The plugin (VST3 and standalone) shows the tilt, the speed and the log, and has buttons for record, save and load.</p>
 </section>
 
 <section id="source">
   <h2>Open source</h2>
   <div class="table"><table>
     <tr><th>Part</th><th>Licence</th></tr>
-    <tr><td>firmware, tools</td><td>GPL-3.0</td></tr>
+    <tr><td>firmware, instruments, tools</td><td>GPL-3.0</td></tr>
     <tr><td>plugin</td><td>AGPL-3.0 (JUCE)</td></tr>
-    <tr><td>case, circuit boards, docs, images</td><td>CC BY-SA 4.0</td></tr>
+    <tr><td>circuit boards, docs, images</td><td>CC BY-SA 4.0</td></tr>
   </table></div>
   <p>Fork it, change it, sell your own. Keep it open and say where it came from. Bugs, questions and builds go in <a href="https://github.com/willbearfruits/samplooler/issues">GitHub issues</a>.</p>
 </section>
@@ -347,23 +337,28 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
 
 <script src="demo.js"></script>
 <script>
-// The library's list, from its own page on the same site; without it the section keeps its text and buttons.
-(function () {
-  const base = new URL("../samplooler-library/", location.href);
-  fetch(new URL("library.json", base)).then(r => r.json()).then(lib => {
-    const grid = document.getElementById("libgrid");
-    for (const x of lib.entries) {
-      const a = document.createElement("a");
-      a.href = new URL("#" + x.id, base);
-      const img = document.createElement("img");
-      img.src = new URL(x.image, base); img.alt = x.name + " on the screen"; img.loading = "lazy"; img.width = 384; img.height = 192;
-      const b = document.createElement("b"); b.textContent = x.name;
-      const s = document.createElement("span"); s.textContent = x.summary.split(". ")[0].replace(/\.$/, "") + ".";
-      a.append(img, b, s);
-      grid.append(a);
+// The other instruments, from library.json next to this page (tools/library.py site writes it). Without it the
+// section keeps its text.
+fetch("library.json").then(r => r.json()).then(lib => {
+  const grid = document.getElementById("libgrid");
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+  for (const x of lib.entries) {
+    if (x.id === "samplooler") continue;
+    const card = el("div");
+    const img = el("img"); img.src = x.image; img.alt = x.name + " on the screen"; img.loading = "lazy"; img.width = 384; img.height = 192;
+    const links = el("span", "links");
+    const readme = el("a", null, "README"); readme.href = x.readme; links.append(readme);
+    if (x.manual) { const m = el("a", null, "Manual"); m.href = x.manual; links.append(m); }
+    card.append(img, el("b", null, x.name), el("p", null, x.summary), el("span", "st", x.status_label + (x.version ? " · " + x.version : "")), links);
+    if (x.manifest) {
+      const b = document.createElement("esp-web-install-button"); b.setAttribute("manifest", x.manifest);
+      const go = el("button", "btn solid", "Install " + x.name); go.slot = "activate"; b.append(go);
+      const no = el("span", null, "Installing needs Chrome or Edge on a computer."); no.slot = "unsupported"; b.append(no);
+      card.append(b);
     }
-  }).catch(() => {});
-})();
+    grid.append(card);
+  }
+}).catch(() => {});
 </script>
 </body>
 </html>

@@ -12,6 +12,7 @@
   ],
   "hardware_note": "The AIR sounds need the speaker; the others work on headphones.",
   "status": "simulator",
+  "listed": false,
   "status_note": "Not tried on a board yet.",
   "image": "images/howl.gif",
   "more": [

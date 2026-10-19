@@ -121,7 +121,7 @@ vocoder ones (TALKBOX was measured at 81 % on a board).
 
 ## With the other instruments
 
-Boards running the other firmwares (SING, BAND, WRECK, MANTRA, JAM) talk to each other over the radio: no router, no
+Boards running WRECK, MANTRA or HUFF (and SING, BAND and JAM) talk to each other over the radio: no router, no
 pairing, just the same Group. The Samplooler joins them. What is shared:
 
 | | |
@@ -265,6 +265,13 @@ cmake --build build
 `tools/sl_midi.py` does the same from a terminal on Linux (it reads ALSA's raw MIDI ports): `log`, `status`,
 `reboot`, `cc N V`, `note N`.
 
+### The desktop app
+
+`app/` installs the Samplooler and the other instruments onto a board with one click, and shows a running board's
+settings and log. Its BOARD view lists every setting in the menu's groups; change one there and the board follows,
+turn the encoder and the window follows. Save asks first. Linux for now, built from source: see
+[app/README.md](../app/README.md).
+
 ## Updating the firmware
 
 | Step | |
@@ -350,5 +357,6 @@ and runs this firmware. Rev D, the board files in [hardware/](../hardware/), is 
 
 ## Other instruments
 
-The same Stack can run other firmwares, SING among them, and be flashed back to the Samplooler. The list, what
-each one does and how far it is tested: [instruments/](../instruments/README.md).
+The same Stack can run other firmwares, WRECK, MANTRA and HUFF among them, and be flashed back to the Samplooler.
+Install them from the [page](https://willbearfruits.github.io/samplooler/#instruments) or the desktop app in
+[app/](../app/). The list, what each one does and how far it is tested: [instruments/](../instruments/README.md).
