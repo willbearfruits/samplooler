@@ -183,7 +183,20 @@ void sim_tick(void)
 
 void sim_run(float s) { int n = (int)(s * 100.0f + 0.5f); for (int i = 0; i < n; i++) sim_tick(); }
 void sim_turn(int d) { SI.enc = d; sim_tick(); }
-void sim_tap(void) { SI.pressed = true; sim_run(0.05f); SI.pressed = false; SI.tap = true; sim_tick(); }
+// A click in play opens the menu only once the double-click window has passed (front.c's DOUBLE_MS): wait it out,
+// so a test that clicks and then turns finds the menu open, as a player would after the same click.
+void sim_tap(void)
+{
+    bool opens = front_screen() == 1 && front_menu_level() == 0;
+    SI.pressed = true; sim_run(0.05f); SI.pressed = false; SI.tap = true; sim_tick();
+    if (opens) sim_run(0.35f);
+}
+void sim_double_tap(void)
+{
+    SI.pressed = true; sim_run(0.05f); SI.pressed = false; SI.tap = true; sim_tick();
+    sim_run(0.1f);
+    SI.pressed = true; sim_run(0.05f); SI.pressed = false; SI.tap = true; sim_tick();
+}
 void sim_hold_knob(void) { SI.pressed = true; sim_run(0.7f); SI.pressed = false; sim_tick(); }
 void sim_rec(float s) { SI.rec = true; sim_run(s); SI.rec = false; sim_tick(); }
 void sim_tilt(float lx, float ly)

@@ -26,6 +26,7 @@ STEPS picks which steps the two ends use (x2-x1/4, x1-x1/4, x2-x1/2, or STAY x1)
 | - | - |
 | turn the knob | the axis |
 | press the knob | the menu |
+| press the knob twice | the knob turns the volume, until it rests 3 s or you press it again |
 | hold the knob | the step grid (below) |
 | tip forward | chaos: more edits, more mess |
 | tip back | drag: the tape slows down; level again, it catches up and is back in time |

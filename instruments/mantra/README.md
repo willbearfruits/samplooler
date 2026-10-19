@@ -26,6 +26,7 @@ Firmware for the Samplooler Stack (ESP32-S3).
 | - | - |
 | turn the knob | from the chant to Daisy Bell |
 | press the knob | the menu |
+| press the knob twice | the knob turns the volume, until it rests 3 s or you press it again |
 | tip forward / back | the mouth: OO OH AH EH EE |
 | roll | the pitch |
 | turn it flat | the overtone |

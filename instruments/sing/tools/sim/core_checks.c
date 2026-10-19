@@ -6,6 +6,7 @@
 #include "calib.h"
 #include "oled.h"
 #include "ui.h"
+#include "dsp.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -449,6 +450,49 @@ static void clicks(void)
     check(bad == 0, "no click when any of %d params jumps from one end to the other (%d click)", tested, bad);
 }
 
+// Two clicks in play put the knob on VOLUME for every instrument; one click still opens the menu. The volume glides.
+static void knob_volume(void)
+{
+    section("the knob: a double click is VOLUME");
+    sim_menu_close();
+    sim_run(0.5f);
+    int vp = CP(CP_VOLUME);
+    float keep = pv[vp];
+    sim_double_tap();
+    sim_run(0.05f);
+    check(front_menu_level() == 0, "a double click does not open the menu");
+    sim_turn(-1);
+    sim_run(0.05f);
+    float v1 = pv[vp];
+    check(v1 < keep, "the turn after it lowers the volume (%.0f %% to %.0f %%)", (double)keep, (double)v1);
+    sim_run(3.2f);
+    sim_turn(1);
+    check(pv[vp] == v1, "3 s at rest, and the knob does what it did before");
+    sim_turn(-1);
+    sim_run(0.5f);
+    sim_tap();
+    check(front_menu_level() == 1, "one click still opens the menu");
+    sim_menu_close();
+    param_set(vp, keep);
+    sim_run(0.3f);
+
+    // the master stage alone: a step from 100 % to 50 % glides over tens of ms instead of one block
+    master_t m = { .vol_s = 1.0f, .g = 1.0f };
+    float buf[AUDIO_BLOCK], g_first = 0, g_30 = 0, g_300 = 0;
+    for (int b = 0, f = 0; b < (int)(0.3f * AUDIO_SR) / AUDIO_BLOCK; b++) {
+        float pk_in = 0, pk_out = 0;
+        for (int i = 0; i < AUDIO_BLOCK; i++, f++) { buf[i] = 0.25f * sinf(6.2831853f * 500.0f * (float)f / (float)AUDIO_SR); if (fabsf(buf[i]) > pk_in) pk_in = fabsf(buf[i]); }
+        master_process(&m, buf, AUDIO_BLOCK, 0.5f);
+        for (int i = 0; i < AUDIO_BLOCK; i++) if (fabsf(buf[i]) > pk_out) pk_out = fabsf(buf[i]);
+        float g = pk_out / pk_in;
+        if (b == 0) g_first = g;
+        if (b == (int)(0.03f * AUDIO_SR) / AUDIO_BLOCK) g_30 = g;
+        g_300 = g;
+    }
+    check(g_first > 0.95f && g_30 > 0.6f && g_30 < 0.9f && fabsf(g_300 - 0.5f) < 0.03f,
+          "a volume step glides: x%.2f after 2 ms, x%.2f after 30 ms, x%.2f after 300 ms", (double)g_first, (double)g_30, (double)g_300);
+}
+
 static void health(void)
 {
     section("audio health");
@@ -512,6 +556,7 @@ void core_checks(void)
     tilt_setup();
     looper_checks();
     clicks();
+    knob_volume();
     screens();
     factory_reset();
 }

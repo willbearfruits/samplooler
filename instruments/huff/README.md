@@ -31,6 +31,7 @@ the line out or headphones.
 | joystick up | more vibrato (PITCH > STICK UP/DN: or brightness, or octaves) |
 | turn the knob | next or previous sound |
 | press the knob | menu |
+| press the knob twice | the knob turns the volume, until it rests 3 s or you press it again |
 | hold the knob | keep the current note while you move (the tilt is held); again to let go |
 | REC | hold: record or add to the loop; tap: stop or play it |
 

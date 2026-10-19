@@ -50,7 +50,8 @@ hold it. The knob is the encoder.
 | Control | While playing | In the menu | Editing a setting |
 | - | - | - | - |
 | Stick, held down | record | record | record |
-| Encoder tap | open the menu | edit the setting, or run Save / Load | back to the list |
+| Encoder tap | open the menu (0.3 s later, in case a second tap comes) | edit the setting, or run Save / Load | back to the list |
+| Encoder, two taps | the encoder turns Volume until it rests 3 s or is tapped (a toast shows it); the same in every instrument | | |
 | Encoder turn | adjust the last setting (a toast shows it) | choose a setting | adjust it |
 | Encoder hold 0.5 s | freeze the tilt: speed, direction and the roll effects stay where they are, HOLD on the screen. Hold again to release. | leave the menu | leave the menu |
 

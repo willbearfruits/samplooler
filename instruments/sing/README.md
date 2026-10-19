@@ -56,6 +56,7 @@ Wi-Fi radio: no router, no pairing, a few milliseconds per packet.
 | - | - |
 | turn the knob | the next voice |
 | press the knob | the menu |
+| press the knob twice | the knob turns the volume, until it rests 3 s or you press it again |
 | hold the knob | leave the menu; outside it, hold the tilt where it is |
 | hold REC | record (or add to) the loop |
 | tap REC | stop / start the loop |

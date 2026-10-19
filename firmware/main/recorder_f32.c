@@ -27,6 +27,7 @@ static volatile float pitch_target = 1.0f;
 static volatile int   mode_req = REC_MODE_TAPE;
 static volatile int   grain_len = REC_SAMPLE_RATE / 20;   // 50 ms
 static volatile float volume = 1.0f;
+static float vol_s = 1.0f;                                  // the volume as it glides (audio task only)
 // audio -> UI
 static volatile int   state = REC_IDLE;
 static volatile int   mode_now = REC_MODE_TAPE;
@@ -301,6 +302,7 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
     if (state != REC_PLAYING) {
         memset(out, 0, n * sizeof(float));
         frames += (uint32_t)n;
+        vol_s = volume;
         return;
     }
 
@@ -322,7 +324,13 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
     const int   len = rec_len;
     const float st  = speed_target;
     const float pt  = pitch_target;
-    const float vol = volume;
+    // the volume glides (about 50 ms to settle 63 %), so the encoder's 5 % steps sound like a fader, not a staircase
+    const float vt = volume;
+    float vk = 1.0f - (float)n * (1.0f / 1600.0f); if (vk < 0.0f) vk = 0.0f;
+    float v1 = vt + (vol_s - vt) * vk;
+    if (fabsf(v1 - vt) < 1e-4f) v1 = vt;
+    const float vol = vol_s, dvol = (v1 - vol_s) / (float)n;
+    vol_s = v1;
     const int   mode = mode_req;
     mode_now = mode;
     int   ip = pos_i;
@@ -377,7 +385,7 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
                 G_->ph += pc;
             }
         }
-        out[i] = y * vol;
+        out[i] = y * (vol + dvol * (float)i);
 
         fp += sp + corr;
         if (fp >= 1.0f)      { int s = (int)fp; ip += s; fp -= (float)s; }

@@ -30,6 +30,7 @@ over USB (the board is a USB sound card), and hold REC.
 | - | - |
 | turn the knob | from breakcore to doom |
 | press the knob | the menu |
+| press the knob twice | the knob turns the volume, until it rests 3 s or you press it again |
 | hold the knob | the step grid |
 | tip forward / back | chaos / drag the tape |
 | roll left / right | reverse / stutter |

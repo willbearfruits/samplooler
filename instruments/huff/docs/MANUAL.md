@@ -18,7 +18,8 @@
 ## The menu
 
 Press the knob. Turn to choose a page, press to open it, press a setting to change it (turn), press again
-to go back. Hold the knob to go back to playing. After you change a setting, turning the knob while you
+to go back. Hold the knob to go back to playing. Press it twice quickly while you play and it turns the volume, until it
+rests 3 s or you press it again. After you change a setting, turning the knob while you
 play changes that setting; choose SOUND in the menu to make the knob change sounds again.
 
 ### SOUND

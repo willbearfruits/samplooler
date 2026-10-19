@@ -20,6 +20,8 @@
 #include <string.h>
 
 #define HOLD_MS     600         // the knob held this long: back to play, or freeze
+#define DOUBLE_MS   300         // two clicks this close in play: the knob sets the volume
+#define VOL_MS      3000        // ...until it has not turned for this long, or a click
 #define STRIP_Y     46          // the bottom strip: rows 46..63
 #define SOUND_ID_USER 100
 #define N_USER      8
@@ -51,6 +53,9 @@ static char   toast_s[48];  static int toast_ms;
 static char   note_s[40];   static int note_ms;
 static int    card_ms;                         // the sound card after a turn in play
 static int    quick_ms, quick_p = -1;          // a quick edit in play
+static int    click_ms;                        // a click in play, waiting for a second one (the menu opens after)
+static bool   click_menu;                      // ...and when none comes, the menu opens (not after a click that ended VOLUME)
+static int    vol_ms;                          // a double click: the knob sets the volume while this runs
 static int    hint_ms, hint_gap_ms = 1500, hint_i = -1;  // -1: the first hint shown is hints[0]
 static int    idle_ms, saver_idle_ms;
 static bool   saver;
@@ -539,7 +544,21 @@ void front_tick(const front_in_t *in)
                 if (INST.hold && INST.hold()) coach_done(LEARN_HOLD);
                 else { frozen = !frozen; toast(frozen ? "MOTION HELD" : "MOTION FREE", 1100); coach_done(LEARN_HOLD); }
             }
-            if (tap) menu_open();
+            // a click opens the menu once DOUBLE_MS has passed without a second one; two clicks put the knob on
+            // VOLUME until it rests for VOL_MS (or a click). In every instrument, the same.
+            if (tap) {
+                if (click_ms > 0) {
+                    click_ms = 0; vol_ms = VOL_MS; quick_p = CP(CP_VOLUME); quick_ms = VOL_MS; card_ms = 0;
+                } else {
+                    click_ms = DOUBLE_MS; click_menu = vol_ms <= 0;
+                    if (vol_ms > 0) { vol_ms = 0; quick_ms = 0; }
+                }
+            }
+            if (enc && vol_ms > 0) {
+                int vp = CP(CP_VOLUME);
+                set_param(vp, param_step(vp, pv[vp], det), true); quick_p = vp; quick_ms = VOL_MS; vol_ms = VOL_MS; card_ms = 0;
+                enc = 0;
+            }
             if (enc) {
                 int qp = meta.quick[0] ? param_by_tag(meta.quick) : INST.knob ? param_by_tag(INST.knob) : -1;
                 if (qp >= 0 && param(qp)->kind != PK_ACT) { set_param(qp, param_step(qp, pv[qp], det), true); quick_p = qp; quick_ms = 1500; card_ms = 0; }
@@ -600,6 +619,11 @@ void front_tick(const front_in_t *in)
     if (note_ms > 0) note_ms -= dtm;
     if (card_ms > 0) card_ms -= dtm;
     if (quick_ms > 0) quick_ms -= dtm;
+    if (vol_ms > 0) vol_ms -= dtm;
+    if (click_ms > 0 && (click_ms -= dtm) <= 0) {                // no second click: the first one opens the menu
+        click_ms = 0;
+        if (click_menu && scr == SCR_PLAY && mlev == 0 && !grab && !saver) menu_open();
+    }
     if (calib_msg_ms > 0) calib_msg_ms -= dtm;
     if (mlev == 3) edit_ms += dtm;
     // the coach: in play, idle, one unlearned hint at a time

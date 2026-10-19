@@ -95,6 +95,8 @@ static float blk_in[64], blk_out[64];
 static float gap_worst;                        // the loop's beat against the grid, worst lately (ms)
 static int   gap_n;
 
+static float tick_peak;                        // the loudest sample of the last tick's output
+
 static void tick(void)
 {
     // the air: what has landed, then every board's tick
@@ -116,6 +118,8 @@ static void tick(void)
     for (int b = 0; b < 5; b++) {
         for (int i = 0; i < 64; i++) { in_ph += 220.0f / SR; if (in_ph >= 1) in_ph -= 1; blk_in[i] = 0.3f * (1.0f - 2.0f * in_ph); }
         recorder_process(blk_in, blk_out, 64);
+        if (b == 0) tick_peak = 0;
+        for (int i = 0; i < 64; i++) if (fabsf(blk_out[i]) > tick_peak) tick_peak = fabsf(blk_out[i]);
     }
     int s = recorder_state();
     if (s != last_state) { if (s != REC_PLAYING) flock_loop_gone(); last_state = s; }
@@ -345,6 +349,22 @@ int main(int argc, char **argv)
         watch_gap(30000);
         check(gap_worst < 2.5f, "over 30 s the head stays within 2.5 ms of WRECK's beat (worst %.3f ms; the link alone is good for 1 ms here)", (double)gap_worst);
         loss = 0;
+    }
+
+    printf("== the volume glides (the encoder's steps)\n");
+    {
+        reset();
+        take(2.0); settle();
+        run_ms(500);
+        float p0 = 0; for (int i = 0; i < 20; i++) { tick(); if (tick_peak > p0) p0 = tick_peak; }
+        recorder_set_volume(0.5f);
+        tick();
+        float p1 = tick_peak;
+        run_ms(300);
+        float p2 = 0; for (int i = 0; i < 20; i++) { tick(); if (tick_peak > p2) p2 = tick_peak; }
+        recorder_set_volume(1.0f);
+        check(p0 > 0.1f && p1 > 0.8f * p0 && fabsf(p2 / p0 - 0.5f) < 0.05f,
+              "100 %% to 50 %%: x%.2f in the first 10 ms, x%.2f after 300 ms", (double)(p1 / p0), (double)(p2 / p0));
     }
 
     printf("\n%d checks, %d failed\n", run, failed);

@@ -5,8 +5,9 @@
 //
 // Controls:
 //   record button   hold to record
-//   encoder tap     play: open the menu; menu: dive into the setting (edit), or run Save/Load;
-//                   editing: back to the list
+//   encoder tap     play: open the menu (after 0.3 s, so a second tap can still come); menu: dive into the
+//                   setting (edit), or run Save/Load; editing: back to the list
+//   encoder 2 taps  play: the knob sets the Volume, until it rests 3 s or is tapped (as in every instrument)
 //   encoder turn    play: adjust the last setting (a toast shows it); menu: choose; editing: adjust
 //   encoder hold    leave the menu (0.5 s)
 // With HAS_JOY (a kit with the joystick): Y sets the speed when tilt is off, X the pitch in GRAIN.
@@ -464,6 +465,8 @@ void app_main(void)
     uint32_t loop_seen = 0xFFFFFFFFu;                     // the loop whose start the flock has been told of
     audio_stats_t last_stats = { 0 };
     bool held = false, menu = false, menu_edit = false;
+    int  click_ms = 0, vol_ms = 0;                         // a tap in play waiting for a second; the knob on Volume
+    bool click_menu = false;                               // no second tap: the menu opens (not after a tap that ended Volume)
     bool frozen = false;                                  // tilt latched: the angles stop following the sensor
     float roll = 0, pitch = 0, speed_cmd = 1.0f, pitch_ratio = 1.0f, joy_pitch_st = 0;
 #if HAS_CONTROLS
@@ -519,14 +522,25 @@ void app_main(void)
         // the encoder: tap opens the menu, dives into a setting, runs an action or climbs back out;
         // hold leaves the menu; turn chooses in the list, adjusts while editing or in play mode
         if (in.tap) {
-            if (!menu) { menu = true; menu_edit = false; ESP_LOGI(TAG, "menu"); }
+            if (!menu) {                                      // one tap opens the menu after 0.3 s; two put the knob on Volume
+                if (click_ms > 0) { click_ms = 0; vol_ms = 3000; toast = 3000; ESP_LOGI(TAG, "the knob: volume"); }
+                else { click_ms = 300; click_menu = vol_ms <= 0; if (vol_ms > 0) { vol_ms = 0; toast = 0; } }
+            }
             else if (menu_edit) menu_edit = false;
             else if (is_action(param)) param_adjust(param, +1);
             else menu_edit = true;
         }
         if (in.hold && menu) { menu = false; menu_edit = false; ESP_LOGI(TAG, "play"); }
         else if (in.hold) midi_freeze_req = true;             // held while playing: freeze or release the tilt
-        if (in.enc) {
+        if (click_ms > 0 && (click_ms -= 10) <= 0) {
+            click_ms = 0;
+            if (click_menu && !menu) { menu = true; menu_edit = false; ESP_LOGI(TAG, "menu"); }
+        }
+        if (vol_ms > 0) vol_ms -= 10;
+        if (in.enc && !menu && vol_ms > 0) {
+            param_adjust(P_VOL, in.enc); apply_settings(); vol_ms = 3000; toast = 3000;
+            ESP_LOGI(TAG, "volume %d%%", S.vol_pct);
+        } else if (in.enc) {
             if (menu && !menu_edit) param = ((param + in.enc) % P_N + P_N) % P_N;
             else if (!menu && is_action(param)) { }           // an action runs from the menu only, never from a turn in play
             else { param_adjust(param, in.enc); apply_settings(); if (!menu) toast = 1500; }
@@ -612,14 +626,15 @@ void app_main(void)
         if (result_ms > 0) result_ms -= 10;
 #if OLED_ENABLE
         if (tick % 5 == 0 && oled_present()) {
-            char pv[24]; param_text(param, pv, sizeof pv);
+            int shown = vol_ms > 0 && !menu ? P_VOL : param;   // the toast: Volume while the knob is on it
+            char pv[24]; param_text(shown, pv, sizeof pv);
             ui_t u = {
                 .state = s, .mode = S.mode, .speed_now = recorder_speed_now(), .speed_cmd = speed_cmd, .spd_max = S.spd_max,
                 .pitch_ratio = pitch_ratio, .tilt_pitch = TILT_USE_ROLL ? roll : pitch, .tilt_roll = TILT_USE_ROLL ? pitch : roll,
                 .has_imu = has_imu, .tilt_on = S.tilt, .frozen = frozen, .pos = recorder_position(), .rec_fill = recorder_record_fill(),
                 .loop_s = recorder_loop_seconds(), .max_s = recorder_max_seconds(), .meter_in = meter_in, .meter_out = meter_out,
                 .clip = clip_hold > 0, .cpu = audio_cpu_percent(), .menu = menu, .menu_edit = menu_edit, .param = param, .param_n = P_N,
-                .param_name = param_name[param], .param_val = pv, .param_frac = param_frac(param), .toast_ms = toast,
+                .param_name = param_name[shown], .param_val = pv, .param_frac = param_frac(shown), .toast_ms = toast,
                 .busy_text = job != JOB_NONE ? job_text : NULL, .busy_frac = slots_progress(),
                 .note = result_ms > 0 ? result_text : tick < 700 ? diag_note() : NULL,
                 .idle_ms = recorder_state() == REC_IDLE ? idle_ms : 0,

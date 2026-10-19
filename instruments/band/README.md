@@ -57,6 +57,7 @@ no router, no pairing, a few milliseconds per packet.
 | - | - |
 | turn the knob | pick the live layer; past HOWL, the mixer |
 | press the knob | the menu: SONG, each layer's two pages, MIX, FX, LOOPS, LINK, SOUND, SYSTEM |
+| press the knob twice | the knob turns the volume, until it rests 3 s or you press it again |
 | hold the knob | on DRUMS: the grid; on BASS: the line; elsewhere: freeze the tilt; in the menu: leave it |
 | hold REC | record the live layer's loop, or add to it |
 | tap REC | mute / unmute it (DRUMS: stop / start the drums, grid and loop) |

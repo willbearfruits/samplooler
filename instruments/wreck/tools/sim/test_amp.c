@@ -352,16 +352,22 @@ static void chord_change(void)
 static void dive_level(void)
 {
     section("amp: the dive and the level");
-    quiet(); plain(); set("adrn", 1); set("agan", 0); set("skey", 9); set("atun", 3); set("xaxs", ZD);
+    // one chord held (progression HOLD, chord I), so a bar line between the two measurements can't move the root
+    float keep_prg = get("sprg"), keep_hold = get("schd");
+    quiet(); plain(); set("sprg", 0); set("schd", 0); set("adrn", 1); set("agan", 0); set("skey", 9); set("atun", 3); set("xaxs", ZD);
     sim_run(2.0f);
+    // measured on the chord's fifth: the root is saws a few cents apart, and their beating can sink it below the
+    // finder's floor for the length of a window (the fifth is there either way)
     tap_on(1.2f); sim_run(1.0f); tap_off();
     float f0 = a_lowest(0.1f, 1.0f, 20.0f, 400.0f);
+    float q0 = f0 > 0 ? a_lowest(0.1f, 1.0f, f0 * 1.4f, f0 * 1.6f) : 0;
     SI.jy = -1.0f; sim_run(0.5f);
     float dv = perf.dive;
     tap_on(1.2f); sim_run(1.0f); tap_off();
-    float f1 = a_lowest(0.1f, 1.0f, 20.0f, 400.0f);
-    SI.jy = 0.0f; sim_run(0.5f);
-    check(f0 > 0 && fabsf(f1 / f0 - 0.5f) < 0.006f, "the stick down, full (dive %.2f): an octave lower (%.1f Hz -> %.1f Hz)", (double)dv, (double)f0, (double)f1);
+    float q1 = f0 > 0 ? a_lowest(0.1f, 1.0f, f0 * 0.7f, f0 * 0.8f) : 0;
+    SI.jy = 0.0f; set("sprg", keep_prg); set("schd", keep_hold); sim_run(0.5f);
+    check(q0 > 0 && fabsf(q1 / q0 - 0.5f) < 0.006f, "the stick down, full (dive %.2f): an octave lower (the root %.1f Hz; its fifth %.1f Hz -> %.1f Hz)",
+          (double)dv, (double)f0, (double)q0, (double)q1);
     // everything up: LEVEL 100, GAIN 100, the stick's drive, both voices, the sub, feedback, hum, the harpsichord, the wah
     set("alvl", 100); set("agan", 100); set("avoc", 2); set("asub", 100); set("afbk", 100); set("ahum", 100);
     set("ahrp", 100); set("aorg", 100); set("amod", 1); set("amdp", 100); set("adrn", 2); set("achg", 100); set("atrm", 50);

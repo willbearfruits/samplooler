@@ -40,7 +40,8 @@ void sim_tick_hook(void);                      // runs before every tick; weak, 
 void sim_tick(void);
 void sim_run(float seconds);
 void sim_turn(int detents);                    // one tick with the knob turned
-void sim_tap(void);                            // a short press: down 3 ticks, up
+void sim_tap(void);                            // a short press: down 3 ticks, up (in play: and the menu's wait)
+void sim_double_tap(void);                     // two short presses 0.1 s apart: the knob on VOLUME
 void sim_hold_knob(void);                      // 0.7 s: past the hold
 void sim_rec(float seconds);                   // REC down for that long, then up (runs the ticks)
 void sim_tilt(float lean_x_deg, float lean_y_deg);   // the box at rest at those angles (sets SI.acc)

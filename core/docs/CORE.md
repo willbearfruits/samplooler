@@ -36,7 +36,8 @@ it), WS2812 RGB LED on GPIO 48, native USB (MIDI + a 32 kHz sound card).
 | | In play | In the menu |
 | - | - | - |
 | turn | change the sound (or the setting named in `INST.knob`); once a setting has been edited in the menu, the knob turns that setting instead (a strip shows it) | choose, or change the value being edited |
-| tap the knob | open the menu | open a page, edit a setting, run an action; tap again to go back up |
+| tap the knob | open the menu, 0.3 s later (`DOUBLE_MS`: a second tap may still come) | open a page, edit a setting, run an action; tap again to go back up |
+| tap it twice | the knob turns SYSTEM > VOLUME (a strip shows it) until it rests 3 s (`VOL_MS`) or is tapped; not while the instrument holds the knob (`knob_grab`). The volume glides in `master_process` (about 50 ms), so the steps don't zipper | |
 | hold the knob 0.6 s | hold the motion (freeze): tilt and spin stay where they are, a padlock shows; again to let go (or the instrument's own use of it: `INST.hold`) | back to play |
 | REC (or BOOT) | the instrument's; with `INST.looper` the core's looper: hold = record (or add), tap = stop / play. SYSTEM > REC BUTTON OFF ignores the REC pin (BOOT and MIDI CC 64 still record); `INST.rec_button_off` starts it OFF | the same |
 | joystick | the instrument's (when one is fitted) | |

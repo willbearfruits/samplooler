@@ -146,6 +146,7 @@ Your own: change anything, then SOUND > SAVE AS (eight user sounds, the grid wit
 | - | - |
 | turn the knob | the live layer; past HOWL, the mixer |
 | press the knob | the menu: SONG, each layer's two pages, MIX, FX, LOOPS, LINK, SOUND, SYSTEM |
+| press the knob twice | the knob turns the volume, until it rests 3 s or you press it again |
 | hold the knob | on DRUMS the grid, on BASS the line, on MIX the mixer's knob; elsewhere freeze the tilt (a padlock shows); in the menu leave it |
 | hold REC | record the live layer's loop, or add to it; stopped (tapped) first: a new take in its place |
 | tap REC | mute / unmute the live layer's loop |
