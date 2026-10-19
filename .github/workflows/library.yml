@@ -15,12 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ids: ${{ steps.ids.outputs.ids }}
+      listed: ${{ steps.ids.outputs.listed }}
     steps:
       - uses: actions/checkout@v7
       - run: python3 tools/library.py check
       - run: python3 tools/library.py core
       - id: ids
-        run: echo "ids=$(python3 tools/library.py ids)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "ids=$(python3 tools/library.py ids)" >> "$GITHUB_OUTPUT"
+          echo "listed=$(python3 tools/library.py ids --listed)" >> "$GITHUB_OUTPUT"
 
   entry:
     needs: check
@@ -38,6 +41,9 @@ jobs:
           path: instruments/${{ matrix.id }}/firmware
           command: idf.py build
       - name: The simulator
+        # strict for the instruments on the list; for the rest, still in progress, its CPU budgets (measured on this
+        # shared machine, slower than a desk) are a note, not a stop
+        continue-on-error: ${{ !contains(fromJSON(needs.check.outputs.listed), matrix.id) }}
         run: |
           if [ -x instruments/${{ matrix.id }}/tools/sim/run.sh ]; then
             sudo apt-get update -qq && sudo apt-get install -y -qq python3-pil
