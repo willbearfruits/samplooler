@@ -1,4 +1,5 @@
-# Chip-specific settings live in sdkconfig.defaults.esp32s3.
+# The target (a fresh clone builds without set-target); chip-specific settings live in sdkconfig.defaults.esp32s3.
+CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
@@ -20,3 +21,26 @@ CONFIG_FATFS_LFN_HEAP=y
 CONFIG_I2S_ISR_IRAM_SAFE=y
 CONFIG_ESP_TASK_WDT_PANIC=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=12288
+
+# The flock (ESP-NOW on the Wi-Fi radio, link_esp.c, as the instruments set it): ten small packets a second, so the
+# radio gets the least memory it can work with. Its buffers go to PSRAM where they can; no aggregation; its code
+# stays in flash (IRAM is for the sound's code); no access point, no WPA3, no enterprise; nothing kept in NVS.
+CONFIG_ESP_WIFI_NVS_ENABLED=n
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_EXTRA_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
+CONFIG_ESP_WIFI_ENABLE_WPA3_SAE=n
+CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA=n
+CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
+CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM=0
+CONFIG_LWIP_IRAM_OPTIMIZATION=n
+
+# Buffers only the UI task and the radio touch (UI_RAM in core.h: the link's state) live in PSRAM.
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y

@@ -22,6 +22,7 @@ static const field_t fields[] = {
     F("smax", T_F1000, spd_max), F("smin", T_F1000, spd_min), F("snap", T_BOOL, snap), F("grn ", T_INT, grain_ms),
     F("vol ", T_INT, vol_pct),  F("inpt", T_INT, input),    F("slot", T_INT, slot),     F("spkr", T_BOOL, speaker),
     F("voic", T_INT, voice),    F("key ", T_INT, key),      F("scal", T_INT, scale),    F("mont", T_BOOL, monitor),
+    F("rbtn", T_BOOL, rec_button), F("nlnk", T_BOOL, link),  F("ngrp", T_INT, group),    F("npow", T_INT, range),
 };
 #define NF (sizeof fields / sizeof fields[0])
 

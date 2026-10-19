@@ -32,6 +32,7 @@ the screen is the firmware's own drawing code.
 | Voice | Optional: SING's 18 voices on the input before it records (autotune, harmonies, choir, vocoder, echo). |
 | Speaker | Can be switched off, so only the line out plays, when the speaker feeds back into the mic. |
 | Slots | 8 loops saved on the board, kept when you update it. |
+| Together | Over the radio with the other instruments: a take sets their tempo or lands on their beat; key and scale are shared. |
 | With a computer | USB MIDI and a USB sound card on one cable, and a VST3 plugin that shows and sets everything. |
 | Other instruments | Eleven more firmwares for the same box, from a singing voice processor to a drum machine you knock on. |
 
@@ -68,6 +69,7 @@ issues.
 | [core/](core/) | the code the instruments share |
 | [hardware/](hardware/) | the Stack's schematics, boards and JLCPCB order files |
 | [plugin/](plugin/) | the VST3 and standalone plugin (JUCE) |
+| [app/](app/) | the desktop app: the library, one-click install of any instrument on a board, and the Samplooler back |
 | [media/](media/) | pictures and screen grabs |
 | [site/](site/) | the project page and the browser flasher |
 | [tools/](tools/) | `flash.sh`, `sl_midi.py` (log and MIDI from a shell), `release.sh`, `library.py` |

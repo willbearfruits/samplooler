@@ -166,7 +166,8 @@ void usb_midi_poll(usb_midi_handler_t h)
             if (b & 0x80) { st = b; nd = 0; continue; }
             if (st == 0) continue;
             uint8_t type = st & 0xF0;
-            if (type == 0xC0 || type == 0xD0) continue;            // one data byte, unused
+            if (type == 0xC0) { h(type, b, 0); continue; }         // program change: one data byte
+            if (type == 0xD0) continue;                            // channel pressure: one data byte, unused
             d[nd++] = b;
             if (nd == 2) { nd = 0; if (type == 0x90 || type == 0x80 || type == 0xB0) h(type, d[0], d[1]); }
         }

@@ -6,6 +6,8 @@
 void audio_i2s_init(void);    // claims the I2S port and its DMA memory; do this before recorder_init
 void audio_run(void);         // starts the audio task
 int  audio_cpu_percent(void); // share of the block budget used, smoothed
+uint32_t audio_frames(void);  // frames handled before the current block (the recorder's recorder_frames() is the same count)
+int64_t  audio_epoch_us(void); // esp_timer's time at frame 0, from the blocks' start times (the link maps frames between boards with it)
 int  audio_mic_slot(void);    // 0 = mic data in the left slot, 1 = right (its L/R pin)
 void  audio_set_mic_gain_db(int db);   // 0..36 dB
 int   audio_mic_gain_db(void);

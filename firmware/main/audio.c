@@ -26,6 +26,13 @@ static const char *TAG = "audio";
 #define MIC_GAIN_DB_DEFAULT 12      // x4. The INMP441 hits full scale around 120 dB SPL; x8 clipped a close voice.
 
 static i2s_chan_handle_t tx, rx;
+static volatile uint32_t frame_now;                     // frames handled before the current block (the recorder counts the same)
+// When frame 0 began on the microsecond clock: each block's start time minus its frames, the lowest seen lately
+// (a block is never handled early, only sometimes late). The link maps frames between boards with it (link_esp.c).
+static uint64_t frames64;
+static int64_t  epoch_us = INT64_MAX;
+static volatile uint32_t epoch_seq;
+static volatile int64_t  epoch_pub;
 static volatile int cpu_pct;
 static volatile int mic_slot;
 static int          slot_vote;
@@ -136,6 +143,13 @@ static void IRAM_ATTR audio_task(void *arg)
         } else if (good_blocks < AMP_GOOD_BLOCKS && ++good_blocks == AMP_GOOD_BLOCKS) { clock_good = true; audio_amp_enable(speaker_on); }
         blocks++;
         int frames = (int)(got / (2 * sizeof(int32_t)));
+        {
+            int64_t e = esp_timer_get_time() - (int64_t)(frames64 * 125u / 4u);
+            if (e < epoch_us) epoch_us = e; else epoch_us += (e - epoch_us) / 1024;   // follows a slow drift upwards
+            __atomic_add_fetch(&epoch_seq, 1, __ATOMIC_ACQ_REL);
+            epoch_pub = epoch_us;
+            __atomic_add_fetch(&epoch_seq, 1, __ATOMIC_ACQ_REL);
+        }
         uint32_t c0 = esp_cpu_get_cycle_count();
         // the output mute: one step per block towards the request
         float mg = mute_g, mt = mute_req ? 0.0f : 1.0f;
@@ -181,10 +195,15 @@ static void IRAM_ATTR audio_task(void *arg)
         if (monitor_on && recorder_state() != REC_RECORDING)       // Monitor: the voice live over the loop
             for (int f = 0; f < frames; f++) out[f] += in[f];
         fx_process(out, frames);
+        frame_now += (uint32_t)frames;
+        frames64 += (uint64_t)frames;
         float opk = 0;
         static int16_t usb_out[FRAMES];
         for (int f = 0; f < frames; f++) {
-            float o = out[f]; float a = fabsf(o); if (a > opk) opk = a;
+            float o = out[f];
+            uint32_t bits; memcpy(&bits, &o, 4);
+            if ((bits & 0x7f800000u) == 0x7f800000u) o = 0.0f;   // NaN or inf (fast-math hides x != x): silence, not a scream
+            float a = fabsf(o); if (a > opk) opk = a;
             float c = softclip(o) * 0.9f * mg;
             int32_t v = (int32_t)(c * 2147483000.0f);
             raw[2 * f] = v; raw[2 * f + 1] = v;
@@ -212,6 +231,13 @@ void audio_run(void)
     xTaskCreatePinnedToCore(audio_task, "audio", 8192, NULL, 6, NULL, 1);
 }
 
+uint32_t audio_frames(void) { return frame_now; }
+int64_t audio_epoch_us(void)
+{
+    uint32_t q; int64_t e;
+    do { q = __atomic_load_n(&epoch_seq, __ATOMIC_ACQUIRE); e = epoch_pub; } while ((q & 1u) || q != __atomic_load_n(&epoch_seq, __ATOMIC_ACQUIRE));
+    return e;
+}
 int audio_cpu_percent(void) { return cpu_pct; }
 int audio_mic_slot(void)    { return mic_slot; }
 void  audio_set_mic_gain_db(int db) { mic_db = db < 0 ? 0 : db > 36 ? 36 : db; }

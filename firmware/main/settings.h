@@ -25,6 +25,10 @@ typedef struct {
     int   key;           // 0..11, C = 0: the key the voice tunes to
     int   scale;         // 0..5: MAJOR, MINOR, DORIAN, MIXOLYDIAN, PHRYGIAN, HARM MINOR
     bool  monitor;       // hear the input (the voice) all the time, not only while recording
+    bool  rec_button;    // the REC pin counts (off: BOOT and MIDI note 60 still record)
+    bool  link;          // the flock (flock.h): the radio
+    int   group;         // 1..8: boards in the same group sync
+    int   range;         // 0 NEAR, 1 ROOM, 2 FAR: the radio's power
 } settings_t;
 
 #define SETTINGS_DEBOUNCE_MS   3000

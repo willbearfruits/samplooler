@@ -183,12 +183,25 @@ static void tape_motion(const ui_t *u)
     run_ph += fabsf(v) * 0.5f; if (run_ph >= 4) run_ph -= 4;
 }
 
+// The link's glyph: a dot with two arcs over it, 7 px wide; the arcs fill in on the beat.
+static void link_glyph(int x, int y, int flash)
+{
+    oled_disc(x + 3, y + 7, 1, true);
+    if (flash > 0) {
+        oled_line(x + 1, y + 4, x + 5, y + 4, true); oled_pixel(x + 1, y + 5, true); oled_pixel(x + 5, y + 5, true);
+        oled_line(x, y + 1, x + 6, y + 1, true); oled_pixel(x, y + 2, true); oled_pixel(x + 6, y + 2, true);
+    } else {
+        oled_pixel(x + 2, y + 4, true); oled_pixel(x + 3, y + 4, true); oled_pixel(x + 4, y + 4, true); oled_pixel(x + 1, y + 5, true); oled_pixel(x + 5, y + 5, true);
+        oled_pixel(x + 1, y + 1, true); oled_pixel(x + 5, y + 1, true); oled_pixel(x, y + 2, true); oled_pixel(x + 6, y + 2, true);
+    }
+}
+
 static void header(const ui_t *u)
 {
     char b[24];
     int x = 2;
     if (u->state == REC_RECORDING) {
-        x += oled_pill(F_MED, x, 2, "REC", true) + 3;
+        x += oled_pill(F_MED, x, 2, u->closing ? "BEAT" : "REC", true) + 3;   // closing: recording on to the beat
         if ((fr / 4) & 1) oled_disc(x + 3, 8, 3, true); else oled_circle(x + 3, 8, 3, true);
         snprintf(b, sizeof b, "%ds", (int)(u->rec_fill * (float)u->max_s));
         oled_ftext(F_SMALL, x + 9, 5, b);
@@ -199,7 +212,9 @@ static void header(const ui_t *u)
     } else {
         oled_pill(F_MED, x, 2, "READY", false);
     }
-    if (u->voice && u->state == REC_IDLE) oled_ftext_r(F_TINY, 89, 6, u->voice, 1);   // the voice on the input (else below)
+    int right = 89;
+    if (u->peers > 0) { link_glyph(82, 4, u->beat_flash); right = 80; }           // boards heard on the link
+    if (u->voice && u->state == REC_IDLE) oled_ftext_r(F_TINY, right, 6, u->voice, 1);   // the voice on the input (else below)
     meter(92, 4, 36, 9, u->meter_in, &peak_hold, u->clip);
 }
 

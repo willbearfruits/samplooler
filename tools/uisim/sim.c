@@ -15,7 +15,7 @@ static void frames(ui_t *u, int n) { for (int i = 0; i < n; i++) ui_draw(u); }
 int main(void) {
     oled_init(NULL);
     ui_t u = { .state = REC_IDLE, .mode = REC_MODE_TAPE, .spd_max = 8, .pitch_ratio = 1, .has_imu = true, .tilt_on = true, .has_joy = true,
-               .max_s = 20, .meter_in = 0.55f, .meter_out = 0.4f, .cpu = 9, .param_n = 13, .param = 4, .param_name = "Speed max", .param_val = "8.00x", .param_frac = 1.0f };
+               .max_s = 20, .meter_in = 0.55f, .meter_out = 0.4f, .cpu = 9, .param_n = 23, .param = 4, .param_name = "Speed max", .param_val = "8.00x", .param_frac = 1.0f };
     frames(&u, 12); dump("01_splash_walk");
     frames(&u, 13); dump("02_splash_trip");
     frames(&u, 16); dump("03_splash_title");
@@ -23,10 +23,12 @@ int main(void) {
     frames(&u, 2);  dump("05_idle_gag");
     u.state = REC_RECORDING; u.rec_fill = 0.35f; u.meter_in = 0.8f;
     frames(&u, 1); dump("06_rec_flash"); frames(&u, 5); dump("07_recording");
+    u.closing = true; u.peers = 1; frames(&u, 2); dump("07b_rec_to_the_beat"); u.closing = false; u.peers = 0;
     u.rec_fill = 0.92f; u.clip = true; frames(&u, 4); dump("08_rec_full_clip"); u.clip = false;
     u.state = REC_PLAYING; u.loop_s = 7.3f; u.pos = 0.42f; u.speed_now = 1.0f; u.speed_cmd = 1.0f; u.tilt_pitch = 8; u.tilt_roll = 0; u.meter_in = 0.5f;
     frames(&u, 12); dump("09_play_forward");
     u.voice = "NATURAL TUNE"; frames(&u, 2); dump("09b_play_voice"); u.voice = NULL;
+    u.peers = 2; u.beat_flash = 3; frames(&u, 1); dump("09c_play_linked_beat"); u.beat_flash = 0; frames(&u, 2); dump("09d_play_linked"); u.peers = 0;
     u.speed_now = -1.6f; u.speed_cmd = -1.6f; u.tilt_pitch = -25; frames(&u, 14); dump("10_play_reverse");
     u.speed_now = 2.3f; u.speed_cmd = 2.4f; u.tilt_pitch = 18; u.tilt_roll = -30; u.fx_delay = true; frames(&u, 10); dump("11_delay_ghosts");
     u.fx_delay = false; u.tilt_roll = 35; u.fx_stutter = true; frames(&u, 5); dump("12_stutter");

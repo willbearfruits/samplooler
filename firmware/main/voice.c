@@ -5,7 +5,7 @@
 // key's first chord; the echo's time is a beat of the loop (a loop taken as one bar), or of 100 BPM without one.
 // Audio per block, in place: the input stage (gate, compressor, de-esser, the speaker guard), the voices (the tuned
 // lead, harmonies, choir), the vocoder, mixed as SING mixes them, then the echo and the reverb. OFF skips it all;
-// moving between OFF and a voice crossfades over 30 ms.
+// moving between OFF and a voice crossfades over about 8 ms.
 #include "voice.h"
 #include "voice_engines.h"
 #include <stdarg.h>
@@ -114,6 +114,8 @@ static float P[V_NP];
 static int   cur = 0, key = 0, scale = 0;
 static float beat_frames = 19200.0f;             // a beat of the loop (100 BPM without one)
 static volatile int   on_v;                       // the audio side: a voice is selected
+static volatile int   need_voice;                 // the voice engine (pitch tracker, PSOLA) has work: a tuned lead, harmonies,
+                                                  // a choir, or a vocoder carrier that plays the sung note. Else it is skipped.
 static volatile float t_dry = 1.0f, t_voc;        // levels for the mix
 static bool  ready;
 
@@ -219,6 +221,9 @@ static void apply(void)
     bp.shimmer = P[V_SHIM] * 0.01f;
     vfx_set_bus(&bp);
     t_dry = P[V_DRY] * 0.01f; t_voc = P[V_VOC] * 0.01f;
+    bool harm = hm != 0 && (vp.harm_gain[0] > 0.0f || vp.harm_gain[1] > 0.0f || vp.harm_gain[2] > 0.0f);
+    bool voc_note = t_voc > 0.0f && (car == 1 || car == 2);
+    need_voice = vp.lead_gain > 0.0f || harm || vp.choir > 0.0f || voc_note;
 }
 
 void vox_init(void)
@@ -258,8 +263,10 @@ float vox_note(void) { if (!on_v) return 0.0f; voice_state_t vs; voice_state(&vs
 
 // ---------------------------------------------------------------- the audio side
 static float g_on, g_dry = 1.0f, g_voc, lim_env;
+static bool  voice_ran;                                            // the voice engine ran last block (it is skipped when idle)
 #define LIM_CEIL 0.89f                                             // -1 dBFS: harmonies and shimmer can stack up past it
 #define LIM_REL  0.99961f                                          // 80 ms release
+#define G_ON_K   (1.0f / 240.0f)                                   // 7.5 ms between OFF and the voice (a fade, not a cut)
 void IRAM_ATTR vox_run(float *io, int n, float out_env)
 {
     static float x[AUDIO_BLOCK], lead[AUDIO_BLOCK], extra[AUDIO_BLOCK], voc[AUDIO_BLOCK], v[AUDIO_BLOCK];
@@ -268,7 +275,16 @@ void IRAM_ATTR vox_run(float *io, int n, float out_env)
     if (want == 0.0f && g_on == 0.0f) return;                      // OFF: the input as it is
     memcpy(x, io, (size_t)n * sizeof(float));
     vfx_input(x, n, out_env);
-    voice_process(x, lead, extra, n);
+    // the voice engine only when the sound needs it (CLEAN, VOCODER, WHISPER and the echo and reverb voices do not:
+    // its pitch tracker and grains would run for nothing); it keeps running for a moment so a voice fades out
+    bool need = need_voice != 0;
+    if (need || voice_ran) voice_process(x, lead, extra, n);
+    else { memset(lead, 0, (size_t)n * sizeof(float)); memset(extra, 0, (size_t)n * sizeof(float)); }
+    if (!need && voice_ran) {                                      // off once what it still sounds is gone
+        float pk = 0;
+        for (int i = 0; i < n; i++) { float a = fabsf(lead[i]) + fabsf(extra[i]); if (a > pk) pk = a; }
+        if (pk < 1e-4f) voice_ran = false;
+    } else voice_ran = need;
     const float td = t_dry, tv = t_voc;
     if (tv > 0.0f || g_voc > 1e-4f) vocoder_process(x, voc, n);
     else memset(voc, 0, (size_t)n * sizeof(float));
@@ -282,7 +298,7 @@ void IRAM_ATTR vox_run(float *io, int n, float out_env)
         float a = fabsf(v[i]);                                     // 30 ms between OFF and the voice
         lim_env = a > lim_env ? a : lim_env * LIM_REL;
         if (lim_env > LIM_CEIL) v[i] *= LIM_CEIL / lim_env;
-        g_on += (want - g_on) * (1.0f / 960.0f) * 4.0f;
+        g_on += (want - g_on) * G_ON_K;
         if (want == 0.0f && g_on < 1e-4f) g_on = 0.0f;
         io[i] = io[i] + (v[i] - io[i]) * g_on;
     }

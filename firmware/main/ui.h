@@ -30,6 +30,9 @@ typedef struct {
     const char *note;                // NULL for none
     int   idle_ms;                   // since the last touch of any control; the screensaver after 3 min idle
     const char *voice;               // the Voice's name, NULL when it is OFF
+    int   peers;                     // boards heard on the link (flock.h): a glyph in the header
+    int   beat_flash;                // > 0 just after a beat of the flock's grid (3 on the bar): the glyph pulses
+    bool  closing;                   // REC let go, the take records on to the beat
 } ui_t;
 
 void ui_draw(const ui_t *u);         // draws one frame and flushes; call at 20 fps

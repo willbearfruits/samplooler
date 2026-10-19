@@ -33,6 +33,7 @@ Everything it can do:
 | Freeze | Hold the encoder and the speed, direction and effects stay where they are while you move the box. |
 | Slots | Eight loops saved on the board itself. They survive power cycles and firmware updates. |
 | USB | To a computer it is a MIDI device and a stereo sound card at once. Every setting is a MIDI CC, so a DAW or the plugin can automate it, and the loop comes out as audio. |
+| With the other instruments | Over the radio, with no setup: a take sets the tempo for WRECK and MANTRA, or lands on the beat they already play; the voice's key and scale are shared. See With the other instruments below. |
 | Screen | A tape between two reels with the loop's shape on it, and the operator running on top. |
 
 ## Playing it
@@ -116,20 +117,36 @@ plays it all the time, so you can sing through the voice over the loop. The spea
 Monitor ALWAYS, use headphones or the line out, or turn Speaker off.
 
 The voice takes CPU (the menu's bottom strip shows it): about a third of it more for most voices, more with the
-vocoder ones. Not yet measured on a board.
+vocoder ones (TALKBOX was measured at 81 % on a board).
+
+## With the other instruments
+
+Boards running the other firmwares (SING, BAND, WRECK, MANTRA, JAM) talk to each other over the radio: no router, no
+pairing, just the same Group. The Samplooler joins them. What is shared:
+
+| | |
+| - | - |
+| The tempo | Alone, or when nobody has set a tempo and nobody has a loop, your take sets it: the loop is counted as 1, 2, 4, 8 or 16 beats, whichever puts the tempo between 60 and 180 BPM (4 or 8 beats when they fit), trimmed to whole beats, and its start is beat 0. WRECK's beat and MANTRA's echo follow it. |
+| The beat | When a tempo is already playing (a board set one, or a loop plays somewhere), your take lands on it: it closes on whole beats (the nearest, at least one; let go early and it records on to the beat, the screen says BEAT), and it plays with its start on the beat you began on. The tempo and the beat stay where they were. |
+| The head | While boards are around and the speed sits on 1x, 2x, 4x, 8x, half or a quarter (either way), the loop is kept on the beat. With Snap on, a loop you scrubbed away comes back to the beat when the speed settles on one of those. At other speeds the loop drifts against the beat: that is the instrument. |
+| Key and scale | The voice's Key and Scale are the flock's: change them here and the others follow; change them there and they change here. |
+
+A small radio glyph in the header shows boards are heard; it pulses on the beat. Link, Group and Range are in the
+menu; Who is there names the boards. Alone, nothing changes: the Samplooler plays as it always did. A new take
+frees the tempo for whoever sets it next.
 
 ## The menu and the settings
 
 Tap the encoder to open the menu, turn to choose, tap to edit, turn to adjust, tap to go back, hold half a second to
-leave. Outside the menu a turn adjusts whatever you chose last, with a toast on the screen. If that was Save or
-Load, a turn to the right runs it again.
+leave. Outside the menu a turn adjusts whatever you chose last, with a toast on the screen. Save, Load and Who is
+there run only from the menu (tap); a turn outside it does nothing for them.
 
 | Setting | Range | Step | Default | What it does |
 | - | - | - | - | - |
 | Mic gain | 0 to 36 dB | 1 dB | 12 dB | Input level. A block at the right end of the input meter means it clipped: turn it down. |
 | Mode | TAPE, GRAIN | | TAPE | TAPE: pitch follows speed. GRAIN: speed and pitch are independent. |
 | Pitch | -24 to +24 | 1 | 0 | Semitones, GRAIN only. In TAPE it reads "= speed". |
-| Tilt | on, off | | on | Off: plays forward at Speed max, whatever the angle. |
+| Tilt | on, off | | on | Off: plays forward at 1x, whatever the angle. |
 | Speed max | 0.25x to 8x | 0.25x | 2x | The speed at 45 degrees. Above 2x the recording aliases audibly, which may be what you want. |
 | Speed min | 0 to 1x | 0.05x | 0.05x | The crawl when flat. 0 freezes the tape. |
 | Snap | on, off | | off | Speeds rounded to octaves and fifths between 0.25x and 8x: a tuned instrument. |
@@ -144,6 +161,11 @@ Load, a turn to the right runs it again.
 | Save | | | | Writes the loop to the slot. The sound fades out, a bar runs under SAVING, then SAVED, and the loop fades back in. A few seconds, more for a long loop. |
 | Load | | | | Reads the slot back. Same fade. Recording is ignored while a save or load runs. |
 | Speaker | on, off | | on | Off silences the speaker amp; the line out and USB keep playing. For when the speaker feeds back into the mic. Not on MIDI. |
+| Rec button | on, off | | on | Off ignores the stick's button (for a board whose REC pin is stuck); BOOT and MIDI note 60 still record. Not on MIDI. |
+| Link | on, off | | on | The radio to the other instruments (see With the other instruments). Not on MIDI. |
+| Group | 1 to 8 | | 1 | Boards in the same group play together. |
+| Range | NEAR, ROOM, FAR | | ROOM | The radio's power: 2, 8 or 14 dBm. Lower is kinder to the supply. |
+| Who is there | | | | Names the boards heard right now. |
 
 Settings stay on the board. A change is written 3 seconds after the last one when no loop is playing, and 30
 seconds after it while a loop plays. Never while recording.
@@ -154,7 +176,7 @@ It cannot be bricked, and it can always be put back to how it came.
 
 | | |
 | - | - |
-| Factory reset | Hold the stick down while plugging in and keep it down. The screen counts "RESET? hold REC" 3, 2, 1, then restores the default settings. Let go earlier and nothing happens. The saved loops stay. |
+| Factory reset | Hold the stick down while plugging in and keep it down. The screen counts "RESET? keep holding REC" 3, 2, 1, then asks you to let go: let go and the default settings are restored. Let go earlier and nothing happens. A button still down 6 s after power-on is taken as stuck: no reset, the screen says REC IS STUCK, BOOT records until the button has been up for a moment. Not with Rec button off. The saved loops stay. |
 | Safe mode | Three crashes in a row and the next boot starts from the default settings and keeps them, so a bad value can never lock you out. Ten seconds of normal running clears the count, and so does unplugging it. |
 | Recovery | Whatever the firmware does, the chip's own download mode is reachable: hold BOOT, tap RST (or plug in with BOOT held), release BOOT. The flasher then sees the board. |
 | Console mode | Hold the encoder down while plugging in and the board keeps its plain serial console. USB MIDI and the sound card stay off; the looper and the line out still work. That is for developers. If the computer sees no Samplooler port, plug in again without touching anything. |
@@ -215,7 +237,7 @@ Channel 1. The CCs are sent when they change.
 | - | - |
 | CC 1 | Pitch angle, 64 is flat |
 | CC 2 | Roll angle, 64 is flat |
-| CC 3 | Speed, 64 is stopped |
+| CC 3 | Speed, 64 is stopped, 127 is +8x |
 | CC 4 | Loop position |
 | CC 5, 6 | Joystick X and Y. They stay at 64: the firmware does not read the stick's axes. |
 | CC 7 | Input level |
@@ -254,13 +276,20 @@ cmake --build build
 > PHOTO: a toothpick on BOOT through the top board's hole while the USB cable goes in
 
 Updating keeps your loops. Say no to "erase" and the eight slots survive. The settings go back to their defaults,
-because the update image also covers the place where they are kept. Say yes to "erase" only for a fresh board or to
+because the merged image also covers the place where they are kept. Say yes to "erase" only for a fresh board or to
 wipe everything.
 
 Other ways:
 
-- The release image, from the [releases page](https://github.com/willbearfruits/samplooler/releases), written at
-  offset 0 with esptool, in download mode as above. Like the browser, it keeps the slots and resets the settings.
+- The release images, from the [releases page](https://github.com/willbearfruits/samplooler/releases), with esptool
+  in download mode as above. The two-part way keeps both the slots and the settings:
+
+  ```sh
+  esptool.py --chip esp32s3 write_flash 0x0 samplooler-esp32s3-boot.bin 0x10000 samplooler-esp32s3-app.bin
+  ```
+
+  The merged image, written at offset 0, is for a fresh board; on a board in use it keeps the slots and resets the
+  settings, like the browser:
 
   ```sh
   esptool.py --chip esp32s3 write_flash 0x0 samplooler-esp32s3.bin
@@ -280,7 +309,8 @@ After a restart that was not a clean one, the screen says why for a few seconds 
 | SAFE MODE: 3 crashes | Three crashes in a row. It is running on the default settings. | The same. |
 | BROWNOUT | The supply dipped. | Try another USB port or cable. A speaker amp must draw from 5 V, not from the 3.3 V pin. |
 | NO PSRAM | The SuperMini is not the FH4R2 variant. The firmware needs its PSRAM for the take. | Fit an ESP32-S3FH4R2 SuperMini. |
-| RESET? hold REC | The stick was held down at power-on: the factory reset is counting. | Let go to cancel. |
+| RESET? keep holding REC | The stick was held down at power-on: the factory reset is counting. | Let go to cancel. |
+| REC IS STUCK | The stick's button was still down 6 s after power-on. | Nothing to do if it was you. If it was not, the button or its pin (GPIO 3) is shorted: BOOT records meanwhile, or set Rec button off. |
 
 | Symptom | What to try |
 | - | - |
@@ -309,6 +339,7 @@ device logs them once a minute.
 | Sensor | MPU-6050, pitch and roll, 50 readings a second |
 | Storage | 8 slots as mono 16-bit WAV on a 2.4 MB wear-levelled flash partition |
 | USB | USB-C, USB 2.0 full speed. MIDI 1.0 and USB Audio Class 2, stereo 16-bit 32 kHz both ways. No driver. |
+| Radio | ESP-NOW between the instruments on Wi-Fi channel 1, 2 to 14 dBm; no network, no pairing. |
 | Screen | SSD1306 128 x 64 OLED, 20 frames per second |
 | Power | 5 V over USB-C, about 150 mA; more with a speaker amp |
 | Size | Two 94 x 46 mm boards, 11 mm apart; about 25 mm tall to the top of the knob, plus the stick |

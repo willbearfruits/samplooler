@@ -19,7 +19,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SamploolerProcessor::layout(
     p.push_back (std::make_unique<AudioParameterChoice>(ParameterID { ids[pMode], 1 },   "Mode", StringArray { "Tape", "Grain" }, 0));
     p.push_back (std::make_unique<AudioParameterInt>   (ParameterID { ids[pPitch], 1 },  "Pitch (semitones, grain)", -24, 24, 0));
     p.push_back (std::make_unique<AudioParameterBool>  (ParameterID { ids[pTilt], 1 },   "Tilt controls speed", true));
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { ids[pSpdMax], 1 }, "Speed max", NormalisableRange<float> (0.25f, 4.0f, 0.25f), 2.0f));
+    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { ids[pSpdMax], 1 }, "Speed max", NormalisableRange<float> (0.25f, 8.0f, 0.25f), 2.0f));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { ids[pSpdMin], 1 }, "Speed min (flat)", NormalisableRange<float> (0.0f, 1.0f, 0.05f), 0.05f));
     p.push_back (std::make_unique<AudioParameterBool>  (ParameterID { ids[pSnap], 1 },   "Snap speed to intervals", false));
     p.push_back (std::make_unique<AudioParameterInt>   (ParameterID { ids[pGrain], 1 },  "Grain (ms)", 20, 200, 50));
@@ -65,7 +65,8 @@ void SamploolerProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::M
     midi.clear();
 }
 
-// ---- value scaling, matching main.c on the device ----
+// ---- value scaling, matching setting_to_127 / setting_from_127 in main.c on the device ----
+// (the settings after Slot: Speaker, Rec button, Link, Group, Range, are the device's own and not on MIDI)
 int SamploolerProcessor::valueTo127 (int p, float v) const
 {
     switch (p)
@@ -74,7 +75,7 @@ int SamploolerProcessor::valueTo127 (int p, float v) const
         case pMode:   return v >= 0.5f ? 127 : 0;
         case pPitch:  return 64 + juce::roundToInt (v) * 2;
         case pTilt:   return v >= 0.5f ? 127 : 0;
-        case pSpdMax: return juce::roundToInt ((v - 0.25f) / 3.75f * 127.0f);
+        case pSpdMax: return juce::roundToInt ((v - 0.25f) / 7.75f * 127.0f);   // the device: 0.25x to 8x (REC_SPEED_LIMIT)
         case pSpdMin: return juce::roundToInt (v * 127.0f);
         case pSnap:   return v >= 0.5f ? 127 : 0;
         case pGrain:  return juce::roundToInt ((v - 20.0f) * 127.0f / 180.0f);
@@ -97,7 +98,7 @@ float SamploolerProcessor::value127To (int p, int v) const
         case pMode:   return v >= 64 ? 1.0f : 0.0f;
         case pPitch:  return (float) ((v - 64) / 2);
         case pTilt:   return v >= 64 ? 1.0f : 0.0f;
-        case pSpdMax: return 0.25f + 3.75f * v / 127.0f;
+        case pSpdMax: return 0.25f + 7.75f * v / 127.0f;
         case pSpdMin: return v / 127.0f;
         case pSnap:   return v >= 64 ? 1.0f : 0.0f;
         case pGrain:  return 20.0f + v * 180.0f / 127.0f;
@@ -156,7 +157,7 @@ void SamploolerProcessor::handleIncomingMidiMessage (juce::MidiInput*, const juc
         {
             case 1: live.pitch = (v - 64) * 90.0f / 64.0f; break;
             case 2: live.roll  = (v - 64) * 90.0f / 64.0f; break;
-            case 3: live.speed = (v - 64) * 4.0f / 63.0f; break;
+            case 3: live.speed = (v - 64) * 8.0f / 63.0f; break;       // CC 3: 64 is stopped, 127 is +8x (REC_SPEED_LIMIT)
             case 4: live.pos   = v / 127.0f; break;
             case 5: live.joyX  = (v - 64) / 63.0f; break;
             case 6: live.joyY  = (v - 64) / 63.0f; break;

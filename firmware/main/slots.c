@@ -12,6 +12,7 @@
 static const char *TAG = "slots";
 static wl_handle_t wl = WL_INVALID_HANDLE;
 static bool ready;
+static int  len_cache[SLOT_N];                        // each slot's length once read, -1 unknown: the menu asks every frame
 
 #define CHUNK 8192                                    // samples per step: 16 KB, four sectors
 
@@ -43,6 +44,7 @@ bool slots_init(void)
     esp_vfs_fat_info("/storage", &total, &freeb);
     ESP_LOGI(TAG, "slots on /storage, %u KB free of %u", (unsigned)(freeb / 1024), (unsigned)(total / 1024));
     unlink("/storage/slot.tmp");                      // a save that lost power
+    for (int i = 0; i < SLOT_N; i++) len_cache[i] = -1;
     return true;
 }
 
@@ -51,13 +53,14 @@ static void path(int slot, char *b, size_t n) { snprintf(b, n, "/storage/slot%d.
 int slots_length(int slot)
 {
     if (!ready || slot < 0 || slot >= SLOT_N) return 0;
+    if (len_cache[slot] >= 0) return len_cache[slot];
     char p[40]; path(slot, p, sizeof p);
     FILE *f = fopen(p, "rb");
-    if (!f) return 0;
+    if (!f) return len_cache[slot] = 0;
     wav_hdr_t h; int n = 0;
     if (fread(&h, sizeof h, 1, f) == 1 && memcmp(h.riff, "RIFF", 4) == 0 && h.ch == 1 && h.bits == 16) n = (int)(h.data_len / 2);
     fclose(f);
-    return n;
+    return len_cache[slot] = n;
 }
 
 static void finish(bool ok)
@@ -66,6 +69,7 @@ static void finish(bool ok)
     if (job == J_SAVE) {
         if (ok) { unlink(jpath); ok = rename(jtmp, jpath) == 0; }
         if (!ok) unlink(jtmp);
+        len_cache[jslot] = ok ? jn : -1;
         ESP_LOGI(TAG, "%s slot %d: %.2f s", ok ? "saved" : "FAILED to save", jslot + 1, (double)jn / REC_SAMPLE_RATE);
     } else {
         jloaded = ok ? jdone : 0;

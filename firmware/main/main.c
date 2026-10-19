@@ -31,6 +31,7 @@
 #include "fx.h"
 #include "diag.h"
 #include "voice.h"
+#include "flock.h"
 #include "settings.h"
 #if HAS_CONTROLS
 #include "input.h"
@@ -50,18 +51,25 @@ static const char *TAG = "main";
 static void apply_settings(void);
 #define SETTINGS_DEFAULTS { .mic_db = 12, .mode = REC_MODE_TAPE, .pitch_st = 0, .tilt = true, \
                             .spd_max = 2.0f, .spd_min = 0.05f, .snap = false, .grain_ms = 50, .vol_pct = 100, \
-                            .input = AUDIO_IN_MIC, .slot = 0, .speaker = true, .voice = 0, .key = 0, .scale = 0, .monitor = false }
+                            .input = AUDIO_IN_MIC, .slot = 0, .speaker = true, .voice = 0, .key = 0, .scale = 0, .monitor = false, \
+                            .rec_button = true, .link = true, .group = 1, .range = 1 }
 static settings_t S = SETTINGS_DEFAULTS;
 static const settings_t S_DEFAULTS = SETTINGS_DEFAULTS;
 
+// The settings before P_SAVE are on MIDI (CC 20 + index); the rest are the device's own.
 enum { P_MIC, P_MODE, P_PITCH, P_TILT, P_SPDMAX, P_SPDMIN, P_SNAP, P_GRAIN, P_VOL, P_INPUT, P_VOICE, P_KEY, P_SCALE, P_MONITOR,
-       P_SLOT, P_SAVE, P_LOAD, P_SPEAKER, P_N };
+       P_SLOT, P_SAVE, P_LOAD, P_SPEAKER, P_RECBTN, P_LINK, P_GROUP, P_RANGE, P_PEERS, P_N };
 static const char *param_name[P_N] = { "Mic gain", "Mode", "Pitch", "Tilt", "Speed max", "Speed min", "Snap", "Grain", "Volume", "Input",
-                                       "Voice", "Key", "Scale", "Monitor", "Slot", "Save", "Load", "Speaker" };
+                                       "Voice", "Key", "Scale", "Monitor", "Slot", "Save", "Load", "Speaker", "Rec button",
+                                       "Link", "Group", "Range", "Who is there" };
+static bool is_action(int p) { return p == P_SAVE || p == P_LOAD || p == P_PEERS; }
+static const char *const range_names[3] = { "NEAR", "ROOM", "FAR" };
 static void slot_save(void);
 static void slot_load(void);
+static void who_is_there(void);
 static void midi_send_setting(int p);
 static void setting_changed(void) { settings_changed(); }
+static void link_apply(void) { flock_enable(S.link, S.group, S.range); }
 
 #if HAS_CONTROLS
 static void param_adjust(int p, int d)
@@ -78,13 +86,18 @@ static void param_adjust(int p, int d)
     case P_VOL:    S.vol_pct += 5 * d; if (S.vol_pct < 0) S.vol_pct = 0; if (S.vol_pct > 150) S.vol_pct = 150; break;
     case P_INPUT:  S.input = d > 0 ? AUDIO_IN_USB : AUDIO_IN_MIC; break;
     case P_VOICE:  S.voice = ((S.voice + d) % VOICE_N + VOICE_N) % VOICE_N; break;
-    case P_KEY:    S.key = ((S.key + d) % VOICE_KEYS + VOICE_KEYS) % VOICE_KEYS; break;
-    case P_SCALE:  S.scale += d; if (S.scale < 0) S.scale = 0; if (S.scale >= VOICE_SCALES) S.scale = VOICE_SCALES - 1; break;
+    case P_KEY:    S.key = ((S.key + d) % VOICE_KEYS + VOICE_KEYS) % VOICE_KEYS; flock_harm_set(S.key, S.scale); break;
+    case P_SCALE:  S.scale += d; if (S.scale < 0) S.scale = 0; if (S.scale >= VOICE_SCALES) S.scale = VOICE_SCALES - 1; flock_harm_set(S.key, S.scale); break;
     case P_MONITOR: S.monitor = d > 0; break;
     case P_SLOT:   S.slot += d; if (S.slot < 0) S.slot = 0; if (S.slot >= SLOT_N) S.slot = SLOT_N - 1; break;
     case P_SAVE:   if (d > 0) slot_save(); return;
     case P_LOAD:   if (d > 0) slot_load(); return;
     case P_SPEAKER: S.speaker = d > 0; audio_speaker(S.speaker); break;
+    case P_RECBTN: S.rec_button = d > 0; break;
+    case P_LINK:   S.link = d > 0; link_apply(); break;
+    case P_GROUP:  S.group += d; if (S.group < 1) S.group = 1; if (S.group > 8) S.group = 8; link_apply(); break;
+    case P_RANGE:  S.range += d; if (S.range < 0) S.range = 0; if (S.range > 2) S.range = 2; link_apply(); break;
+    case P_PEERS:  if (d > 0) who_is_there(); return;
     }
     setting_changed();
     midi_send_setting(p);
@@ -112,6 +125,11 @@ static void param_text(int p, char *b, size_t n)
     case P_SAVE:   snprintf(b, n, "-> slot %d", S.slot + 1); break;
     case P_LOAD:   snprintf(b, n, "<- slot %d", S.slot + 1); break;
     case P_SPEAKER: snprintf(b, n, "%s", S.speaker ? "ON" : "OFF (line out)"); break;
+    case P_RECBTN: snprintf(b, n, "%s", S.rec_button ? "ON" : "OFF (BOOT)"); break;
+    case P_LINK:   snprintf(b, n, "%s", S.link ? "ON" : "OFF"); break;
+    case P_GROUP:  snprintf(b, n, "%d", S.group); break;
+    case P_RANGE:  snprintf(b, n, "%s", range_names[S.range < 0 ? 0 : S.range > 2 ? 2 : S.range]); break;
+    case P_PEERS:  { int np = flock_peers(); if (!S.link) snprintf(b, n, "link off"); else if (np) snprintf(b, n, "%d board%s", np, np == 1 ? "" : "s"); else snprintf(b, n, "alone"); } break;
     }
 }
 
@@ -137,6 +155,7 @@ static void slot_load(void)
     job = JOB_LOAD; job_wait = 0; snprintf(job_text, sizeof job_text, "LOADING %d", S.slot + 1);
     audio_set_mute(true);
 }
+static void who_is_there(void) { flock_who(result_text, sizeof result_text); result_ms = 2500; }
 static void job_poll(void)
 {
     if (job == JOB_NONE) return;
@@ -144,13 +163,16 @@ static void job_poll(void)
         if (!audio_silent() && ++job_wait < 20) return;              // the fade takes 20 ms; 200 ms at most
         bool started = false;
         if (job == JOB_SAVE) { int n = 0; const int16_t *t = recorder_take(&n); started = slots_save_begin(S.slot, t, n); }
-        else { int max = 0; int16_t *b = recorder_load_begin(&max); started = b && slots_load_begin(S.slot, b, max); }
+        else { int max = 0; int16_t *b = recorder_load_begin(&max); if (b) flock_loop_gone(); started = b && slots_load_begin(S.slot, b, max); }
         if (!started) { snprintf(result_text, sizeof result_text, "%s FAILED", job == JOB_SAVE ? "SAVE" : "LOAD"); result_ms = 2000; job = JOB_NONE; audio_set_mute(false); }
         return;
     }
     if (slots_step()) return;
     bool ok = slots_result_ok();
-    if (job == JOB_LOAD) recorder_load_end(ok ? slots_loaded() : 0);
+    if (job == JOB_LOAD) {                                           // with boards around: whole beats of their tempo, on the beat
+        int n = ok ? slots_loaded() : 0, le = flock_snap_len(n);
+        recorder_load_end(n, le, le > 0);
+    }
     snprintf(result_text, sizeof result_text, "%s %d%s", job == JOB_SAVE ? "SAVED" : "LOADED", S.slot + 1, ok ? "" : " FAILED");
     result_ms = 1500; job = JOB_NONE;
     audio_set_mute(false);
@@ -175,7 +197,7 @@ static int setting_to_127(int p)
     case P_MODE:   return S.mode == REC_MODE_GRAIN ? 127 : 0;
     case P_PITCH:  return 64 + S.pitch_st * 2;
     case P_TILT:   return S.tilt ? 127 : 0;
-    case P_SPDMAX: return (int)(S.spd_max / REC_SPEED_LIMIT * 127.0f);
+    case P_SPDMAX: return (int)((S.spd_max - 0.25f) / (REC_SPEED_LIMIT - 0.25f) * 127.0f + 0.5f);
     case P_SPDMIN: return (int)(S.spd_min * 127.0f);
     case P_SNAP:   return S.snap ? 127 : 0;
     case P_GRAIN:  return (S.grain_ms - 20) * 127 / 180;
@@ -186,6 +208,11 @@ static int setting_to_127(int p)
     case P_SCALE:  return S.scale * 127 / (VOICE_SCALES - 1);
     case P_MONITOR: return S.monitor ? 127 : 0;
     case P_SLOT:   return S.slot * 16;
+    case P_SPEAKER: return S.speaker ? 127 : 0;          // these are not on MIDI: the slider on the screen only
+    case P_RECBTN: return S.rec_button ? 127 : 0;
+    case P_LINK:   return S.link ? 127 : 0;
+    case P_GROUP:  return (S.group - 1) * 127 / 7;
+    case P_RANGE:  return S.range * 127 / 2;
     default:       return 0;
     }
 }
@@ -203,8 +230,8 @@ static void setting_from_127(int p, int v)
     case P_VOL:    S.vol_pct = v * 150 / 127; break;
     case P_INPUT:  S.input = v >= 64 ? AUDIO_IN_USB : AUDIO_IN_MIC; break;
     case P_VOICE:  S.voice = (v * (VOICE_N - 1) + 63) / 127; break;
-    case P_KEY:    S.key = (v * (VOICE_KEYS - 1) + 63) / 127; break;
-    case P_SCALE:  S.scale = (v * (VOICE_SCALES - 1) + 63) / 127; break;
+    case P_KEY:    S.key = (v * (VOICE_KEYS - 1) + 63) / 127; flock_harm_set(S.key, S.scale); break;
+    case P_SCALE:  S.scale = (v * (VOICE_SCALES - 1) + 63) / 127; flock_harm_set(S.key, S.scale); break;
     case P_MONITOR: S.monitor = v >= 64; break;
     case P_SLOT:   S.slot = v / 16; if (S.slot >= SLOT_N) S.slot = SLOT_N - 1; break;
     default: break;
@@ -246,6 +273,8 @@ static void clamp_settings(void)
     S.voice    = clampi(S.voice, 0, VOICE_N - 1);
     S.key      = clampi(S.key, 0, VOICE_KEYS - 1);
     S.scale    = clampi(S.scale, 0, VOICE_SCALES - 1);
+    S.group    = clampi(S.group, 1, 8);
+    S.range    = clampi(S.range, 0, 2);
 }
 static void apply_settings(void)
 {
@@ -323,7 +352,7 @@ static const char *state_name(int s)
 static float meter_in, meter_out;                    // decaying peak meters for the screen and MIDI
 static int   clip_hold;
 #if OLED_ENABLE
-static float param_frac(int p) { return p >= P_SAVE ? -1.0f : setting_to_127(p) / 127.0f; }
+static float param_frac(int p) { return is_action(p) ? -1.0f : setting_to_127(p) / 127.0f; }
 #endif
 
 void app_main(void)
@@ -366,19 +395,35 @@ void app_main(void)
         ESP_LOGW(TAG, "safe mode: %d crashes in a row, settings reset to defaults", diag_crash_streak());
         S = S_DEFAULTS; setting_changed();
     }
+    bool rec_stuck = false;                 // REC down since power-on: a stuck button or a short on its pin
 #if HAS_CONTROLS && PIN_REC >= 0
-    // Factory reset: the record button held from power-on and kept down for 3 s. Letting go earlier
-    // does nothing. The slots stay.
-    if (gpio_get_level(PIN_REC) == 0) {
+    // Factory reset: the record button held from power-on, kept down for 3 s, then let go. Letting go earlier
+    // does nothing. A REC still down after 6 s is not a hand (a stuck button, a shorted pin): no reset, and REC is
+    // ignored until it has been up for 0.1 s; BOOT records meanwhile. Not with Rec button OFF. The slots stay.
+    if (S.rec_button && gpio_get_level(PIN_REC) == 0) {
         int held_ms = 0;
         for (; held_ms < 3000 && gpio_get_level(PIN_REC) == 0; held_ms += 100) {
-            char l2[24]; snprintf(l2, sizeof l2, "hold REC  %d", 3 - held_ms / 1000);
+            char l2[24]; snprintf(l2, sizeof l2, "keep holding REC  %d", 3 - held_ms / 1000);
 #if OLED_ENABLE
             if (oled_present()) ui_fault("RESET?", l2);
 #endif
             vTaskDelay(pdMS_TO_TICKS(100));
         }
-        if (held_ms >= 3000) {
+        int wait_ms = 0;
+        for (; held_ms >= 3000 && wait_ms < 3000 && gpio_get_level(PIN_REC) == 0; wait_ms += 100) {
+#if OLED_ENABLE
+            if (oled_present()) ui_fault("RESET?", "let go of REC to reset");
+#endif
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (wait_ms >= 3000) {
+            ESP_LOGW(TAG, "REC (GPIO %d) stays down from power-on: no reset; REC is ignored until it lets go, BOOT records", PIN_REC);
+#if OLED_ENABLE
+            if (oled_present()) ui_fault("REC IS STUCK", "BOOT records for now");
+#endif
+            vTaskDelay(pdMS_TO_TICKS(1500));
+            rec_stuck = true;
+        } else if (held_ms >= 3000) {
             ESP_LOGW(TAG, "factory reset: record button held 3 s at boot");
             settings_erase(); S = S_DEFAULTS;
 #if OLED_ENABLE
@@ -391,14 +436,17 @@ void app_main(void)
     slots_init();
     apply_settings();
     audio_run();
+    flock_init(S.key, S.scale);             // the flock (flock.h): the radio comes up after USB, below
     bool keep_console = false;
 #if HAS_CONTROLS
     keep_console = gpio_get_level(PIN_ENC_SW) == 0;      // encoder held at power-on: stay on the Serial/JTAG console
 #endif
     if (keep_console) ESP_LOGW(TAG, "encoder held at boot: USB MIDI/audio off, console kept");
     else { vTaskDelay(pdMS_TO_TICKS(200)); ESP_LOGI(TAG, "switching the USB port to MIDI + audio + CDC console"); usb_start(); }
+    link_apply();
 
     int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0, idle_ms = 0;
+    uint32_t loop_seen = 0xFFFFFFFFu;                     // the loop whose start the flock has been told of
     audio_stats_t last_stats = { 0 };
     bool held = false, menu = false, menu_edit = false;
     bool frozen = false;                                  // tilt latched: the angles stop following the sensor
@@ -421,10 +469,25 @@ void app_main(void)
         job_poll();
         settings_poll(&S);
         vox_tick(recorder_state() == REC_PLAYING ? recorder_loop_seconds() : 0.0f);
+        flock_tick(0.01f, S.snap);
+        {   // the flock: a key or scale from another board; a board that came or went
+            int k, sc;
+            if (flock_harm_news(&k, &sc) && (k != S.key || sc != S.scale)) {
+                S.key = k; S.scale = clampi(sc, 0, VOICE_SCALES - 1);
+                apply_settings(); setting_changed(); midi_send_setting(P_KEY); midi_send_setting(P_SCALE);
+            }
+            const char *nw = flock_news();
+            if (nw) { snprintf(result_text, sizeof result_text, "%s", nw); result_ms = 1500; }
+        }
         bool down = gpio_get_level(PIN_BOOT) == 0 || midi_rec_hold;
 #if HAS_CONTROLS
         input_poll(&in);
-        down = down || in.rec;
+        if (rec_stuck) {                                     // REC down since power-on counts for nothing until it has been up 0.1 s
+            static int rec_up_ms;
+            rec_up_ms = in.rec ? 0 : rec_up_ms + 10;
+            if (rec_up_ms >= 100) { rec_stuck = false; ESP_LOGI(TAG, "REC let go: it records again"); }
+        }
+        down = down || (in.rec && S.rec_button && !rec_stuck);
 #endif
         if (job != JOB_NONE) down = false;                    // a slot job owns the take
         idle_ms += 10;
@@ -442,13 +505,14 @@ void app_main(void)
         if (in.tap) {
             if (!menu) { menu = true; menu_edit = false; ESP_LOGI(TAG, "menu"); }
             else if (menu_edit) menu_edit = false;
-            else if (param == P_SAVE || param == P_LOAD) param_adjust(param, +1);
+            else if (is_action(param)) param_adjust(param, +1);
             else menu_edit = true;
         }
         if (in.hold && menu) { menu = false; menu_edit = false; ESP_LOGI(TAG, "play"); }
         else if (in.hold) midi_freeze_req = true;             // held while playing: freeze or release the tilt
         if (in.enc) {
             if (menu && !menu_edit) param = ((param + in.enc) % P_N + P_N) % P_N;
+            else if (!menu && is_action(param)) { }           // an action runs from the menu only, never from a turn in play
             else { param_adjust(param, in.enc); apply_settings(); if (!menu) toast = 1500; }
             char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%d/%d %s %s", param + 1, P_N, param_name[param], v);
         }
@@ -463,13 +527,12 @@ void app_main(void)
         }
         if (tick % 2 == 0) {                                 // 50 Hz control rate
             if (has_imu && !frozen) imu_poll(&roll, &pitch);   // frozen: speed, direction and effects stay where they were
-            float u;
-            if (S.tilt && has_imu) u = (TILT_USE_ROLL ? roll : pitch) * TILT_SIGN / TILT_FULL_DEG;
+            // the speed: the tilt; or the joystick's Y; or plain 1x (Tilt off, or no sensor)
+            if (S.tilt && has_imu) speed_cmd = control_to_speed((TILT_USE_ROLL ? roll : pitch) * TILT_SIGN / TILT_FULL_DEG);
 #if HAS_JOY
-            else if (in.has_joy && !menu) u = in.jy;
+            else if (in.has_joy && !menu) speed_cmd = control_to_speed(in.jy);
 #endif
-            else u = 1.0f;
-            speed_cmd = (!S.tilt && !has_imu) ? 1.0f : control_to_speed(u);
+            else speed_cmd = 1.0f;
             {   // roll: left of the dead zone feeds the delay, right of it grabs a stutter
                 float r = has_imu ? roll * ROLL_SIGN : 0.0f;
                 float a = fabsf(r) < ROLL_DEAD_DEG ? 0.0f : (fabsf(r) - ROLL_DEAD_DEG) / (ROLL_FULL_DEG - ROLL_DEAD_DEG);
@@ -510,9 +573,15 @@ void app_main(void)
             else if (last_state == REC_RECORDING) usb_midi_send_note(60, 0, false);
             if (s == REC_PLAYING) usb_midi_send_note(62, 100, true);
             else if (last_state == REC_PLAYING) usb_midi_send_note(62, 0, false);
+            if (s != REC_PLAYING) flock_loop_gone();          // a new take, or a tap: the flock's tempo is free again
             last_state = s;
             if (s == REC_PLAYING) ESP_LOGI(TAG, "%s  loop %.2f s", state_name(s), (double)recorder_loop_seconds());
             else ESP_LOGI(TAG, "%s", state_name(s));
+        }
+        if (s == REC_PLAYING && recorder_loop_start() != loop_seen) {   // a loop has begun: the flock's tempo, or its beats
+            loop_seen = recorder_loop_start();
+            flock_loop_made(recorder_loop_frames(), loop_seen);
+            ESP_LOGI(TAG, "loop %.2f s: %s, %.0f BPM", (double)recorder_loop_seconds(), flock_snapping() ? "on the flock's beats" : "sets the tempo", (double)flock_bpm());
         }
         int slot = audio_mic_slot();
         if (slot != last_slot) { last_slot = slot; ESP_LOGI(TAG, "mic data in the %s slot", slot ? "RIGHT" : "LEFT"); }
@@ -539,6 +608,7 @@ void app_main(void)
                 .note = result_ms > 0 ? result_text : tick < 700 ? diag_note() : NULL,
                 .idle_ms = recorder_state() == REC_IDLE ? idle_ms : 0,
                 .voice = vox_on() ? vox_name(S.voice) : NULL,
+                .peers = S.link ? flock_peers() : 0, .beat_flash = flock_beat_flash(), .closing = recorder_closing(),
             };
 #if HAS_JOY
             u.has_joy = in.has_joy;

@@ -126,11 +126,18 @@ The things that cost an evening on the first board. Each one is a few seconds to
 
 ### With esptool
 
-The release image from the [releases page](https://github.com/willbearfruits/samplooler/releases), written at
-offset 0, with the board in download mode as above:
+The release images from the [releases page](https://github.com/willbearfruits/samplooler/releases), with the board
+in download mode as above. A fresh board takes the merged image at offset 0:
 
 ```sh
 esptool.py --chip esp32s3 write_flash 0x0 samplooler-esp32s3.bin
+```
+
+A board in use is updated in two parts, which keeps its slots and its settings (the merged image keeps the slots
+but covers the settings):
+
+```sh
+esptool.py --chip esp32s3 write_flash 0x0 samplooler-esp32s3-boot.bin 0x10000 samplooler-esp32s3-app.bin
 ```
 
 ### From source
@@ -140,8 +147,7 @@ ESP-IDF 5.5.1 at `~/esp/esp-idf`:
 ```sh
 . ~/esp/esp-idf/export.sh
 cd firmware
-idf.py set-target esp32s3     # once
-idf.py build
+idf.py build                  # the target is in sdkconfig.defaults; a stale sdkconfig: delete it and build again
 idf.py flash                  # in download mode, as above
 ```
 
