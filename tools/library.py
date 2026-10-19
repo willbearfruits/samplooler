@@ -7,11 +7,13 @@
   library.py core-copy ID...  copy core/ into those entries (after a core change)
   library.py collect ID D     after a build (and the simulator): copy what the page needs into D/ID/: the
                               files named in firmware/build/flash_args, flash_args itself, and the
-                              simulator's results.json
+                              simulator's results.json. ID "samplooler" is the Samplooler's own firmware/
   library.py site [--dist D] [--local] [--out O]
-                              build the web page into O (default _site): the list, the images, and per entry
-                              a flasher manifest with its files. --dist takes what `collect` put in D (CI);
-                              --local takes each entry's own build/ and tools/sim/out/.
+                              build the web page into O (default _site): the list (library.json, which the
+                              app in app/ reads too), the images, README and manual, and per entry a flasher
+                              manifest with its files. The Samplooler itself is the first entry, so a board
+                              can be flashed back from the page or the app. --dist takes what `collect` put
+                              in D (CI); --local takes each entry's own build/ and tools/sim/out/.
   library.py readme           rewrite the list in instruments/README.md from the entries
 """
 import json, os, re, shutil, sys, hashlib, datetime
@@ -27,6 +29,37 @@ LICENCES = {"GPL-3.0", "GPL-3.0-or-later"}          # the core is GPL-3.0, so ev
 IMG_EXT = (".gif", ".png", ".jpg", ".jpeg", ".webp")
 IMG_MAX = 2 * 1024 * 1024
 SAMPLOOLER_PID = 0x4020
+
+# The Samplooler as an entry of the list, so the page can put it back on a board. Its firmware is firmware/,
+# its pictures media/, its manual docs/MANUAL.md; the version is the latest v* tag.
+SAMPLOOLER = {
+    "name": "Samplooler",
+    "summary": "The looper the Stack comes with. Hold the button and make a sound; let go and it loops. Tip it "
+               "forward and it runs faster, back and it runs backwards. Its input can go through SING's voices.",
+    "author": "willbearfruits",
+    "licence": "GPL-3.0",
+    "chip": "esp32s3",
+    "uses": ["mic", "tilt", "speaker"],
+    "status": "played",
+    "status_note": "What a bought Stack comes loaded with.",
+    "image": "media/tour.gif",
+    "more": ["media/screens/recording.png", "media/screens/reverse.png", "media/screens/grain.png"],
+}
+
+
+def source_dir(i):
+    """Where an entry's files are: instruments/<id>/, or the repository's root for the Samplooler."""
+    return ROOT if i == "samplooler" else os.path.join(INST, i)
+
+
+def samplooler_version():
+    try:
+        import subprocess
+        v = subprocess.run(["git", "describe", "--tags", "--match", "v*", "--abbrev=0"], cwd=ROOT,
+                           capture_output=True, text=True).stdout.strip()
+    except OSError:
+        v = ""
+    return v[1:] if v.startswith("v") else (v or "0.1.0")
 
 
 def ids():
@@ -208,7 +241,7 @@ def flash_parts(build):
 
 
 def collect(i, dest):
-    d = os.path.join(INST, i)
+    d = source_dir(i)
     build = os.path.join(d, "firmware", "build")
     parts = flash_parts(build)
     if not parts:
@@ -228,6 +261,32 @@ def collect(i, dest):
 
 
 # ------------------------------------------------------------------ site
+MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
+
+
+def copy_docs(src, dst):
+    """Copy README.md and docs/MANUAL.md, and the pictures they show from inside src, to dst (the app shows
+    them). Returns {"readme_md": path, "manual_md": path} relative to dst, for those that exist."""
+    found = {}
+    for key, rel in (("readme_md", "README.md"), ("manual_md", os.path.join("docs", "MANUAL.md"))):
+        p = os.path.join(src, rel)
+        if not os.path.isfile(p):
+            continue
+        os.makedirs(os.path.dirname(os.path.join(dst, rel)) or dst, exist_ok=True)
+        shutil.copy2(p, os.path.join(dst, rel))
+        found[key] = rel.replace(os.sep, "/")
+        for link in MD_IMAGE.findall(open(p, encoding="utf-8").read()):
+            if "://" in link or link.startswith("/"):
+                continue
+            img = os.path.normpath(os.path.join(os.path.dirname(p), link))
+            if not img.startswith(os.path.abspath(src) + os.sep) or not os.path.isfile(img):
+                continue
+            out = os.path.join(dst, os.path.relpath(img, src))
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            shutil.copy2(img, out)
+    return found
+
+
 def site(args):
     out = os.path.join(ROOT, "_site")
     dist, local = None, False
@@ -246,9 +305,9 @@ def site(args):
         shutil.rmtree(out)
     shutil.copytree(os.path.join(ROOT, "site"), out)
     entries = []
-    for i in ids():
-        e = load(i)
-        d = os.path.join(INST, i)
+    for i in ["samplooler"] + ids():
+        e = dict(SAMPLOOLER, version=samplooler_version()) if i == "samplooler" else load(i)
+        d = source_dir(i)
         os.makedirs(os.path.join(out, i), exist_ok=True)
         imgs = []
         for img in [e["image"]] + list(e.get("more", [])):
@@ -264,14 +323,18 @@ def site(args):
             build = os.path.join(d, "firmware", "build")
             src_res = os.path.join(d, "tools", "sim", "out", "results.json")
         parts = flash_parts(build) if build else None
-        manifest = None
+        manifest = firmware = None
         if parts and all(os.path.isfile(os.path.join(build, rel)) for _, rel in parts):
             fw = os.path.join(out, i, "firmware")
             os.makedirs(fw, exist_ok=True)
-            mparts = []
+            mparts, fparts = [], []
             for off, rel in parts:
-                shutil.copy2(os.path.join(build, rel), os.path.join(fw, os.path.basename(rel)))
+                src = os.path.join(build, rel)
+                shutil.copy2(src, os.path.join(fw, os.path.basename(rel)))
                 mparts.append({"path": f"firmware/{os.path.basename(rel)}", "offset": off})
+                fparts.append({"path": f"firmware/{os.path.basename(rel)}", "offset": off,
+                               "size": os.path.getsize(src), "sha256": digest(src)})   # the app checks what it downloads
+            firmware = {"chip": "esp32s3", "parts": fparts}
             with open(os.path.join(out, i, "manifest.json"), "w") as f:
                 json.dump({"name": e["name"], "version": e["version"], "new_install_prompt_erase": True,
                            "builds": [{"chipFamily": "ESP32-S3", "parts": mparts}]}, f, indent=2)
@@ -286,19 +349,22 @@ def site(args):
                     checks = r.get("checks")
             except ValueError:
                 pass
-        tree = f"{REPO}/tree/main/instruments/{i}"
-        blob = f"{REPO}/blob/main/instruments/{i}"
+        docs = {k: f"{i}/{v}" for k, v in copy_docs(d, os.path.join(out, i)).items()}
+        where = "" if i == "samplooler" else f"/instruments/{i}"
+        tree = f"{REPO}/tree/main{where}"
+        blob = f"{REPO}/blob/main{where}"
         entries.append({
             "id": i, "name": e["name"], "summary": e["summary"], "author": e["author"],
             "licence": e["licence"], "version": e["version"], "uses": e.get("uses", []),
             "hardware_note": e.get("hardware_note"), "status": e["status"], "status_label": STATUS[e["status"]],
             "status_note": e.get("status_note"), "image": imgs[0], "more": imgs[1:], "manifest": manifest,
-            "checks": checks, "source": tree, "readme": f"{blob}/README.md",
+            "firmware": firmware, "checks": checks, "source": tree, "readme": f"{blob}/README.md",
             "manual": f"{blob}/docs/MANUAL.md" if os.path.isfile(os.path.join(d, "docs", "MANUAL.md")) else None,
+            "readme_md": docs.get("readme_md"), "manual_md": docs.get("manual_md"),
             "added": e.get("added"),
         })
     rank = {"played": 0, "board": 1, "simulator": 2}
-    entries.sort(key=lambda x: (rank[x["status"]], x["name"]))
+    entries.sort(key=lambda x: (x["id"] != "samplooler", rank[x["status"]], x["name"]))
     with open(os.path.join(out, "library.json"), "w") as f:
         json.dump({"updated": datetime.date.today().isoformat(), "repo": REPO, "entries": entries}, f, indent=1, ensure_ascii=False)
     print(f"site: {len(entries)} entries in {out}")

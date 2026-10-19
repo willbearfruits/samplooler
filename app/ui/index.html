@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Samplooler Library</title>
+<link rel="stylesheet" href="app.css">
+<script src="fonts.js"></script>
+<script src="px.js"></script>
+<script src="vendor/marked.js"></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<div class="strip all"></div>
+<header class="top">
+  <a class="brand" href="#/"><img src="icon.png" alt=""><span class="px" data-f="med" data-s="3">SAMPLOOLER LIBRARY</span></a>
+  <nav class="nav" aria-label="Views">
+    <a href="#/" data-nav="library"><span class="px" data-f="small" data-s="2">INSTRUMENTS</span></a>
+    <a href="#/board" data-nav="board"><span class="px" data-f="small" data-s="2">BOARD</span></a>
+    <a href="#/build" data-nav="build"><span class="px" data-f="small" data-s="2">YOUR BUILD</span></a>
+    <a href="#/settings" data-nav="settings"><span class="px" data-f="small" data-s="2">SETTINGS</span></a>
+  </nav>
+</header>
+<div id="boardbar" class="boardbar wrap" aria-live="polite"></div>
+<main id="view" class="wrap"></main>
+<dialog id="job"></dialog>
+</body>
+</html>
