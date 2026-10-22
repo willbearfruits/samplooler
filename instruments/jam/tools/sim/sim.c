@@ -22,6 +22,7 @@ uint8_t sim_led[3];
 
 // ---------------------------------------------------------------- the platform, on the host
 void *app_alloc(size_t n) { return calloc(1, n); }
+void *app_alloc_fast(size_t n) { return calloc(1, n); }
 void app_free(void *p) { free(p); }
 uint32_t audio_frames(void) { return frames_now; }
 void app_log(const char *fmt, ...) { va_list ap; va_start(ap, fmt); printf("        [log] "); vprintf(fmt, ap); printf("\n"); va_end(ap); }
@@ -29,10 +30,29 @@ void plat_midi3(uint8_t st, uint8_t d1, uint8_t d2) { if (midi_n < 65536) midi_l
 void plat_led(uint8_t r, uint8_t g, uint8_t b) { sim_led[0] = r; sim_led[1] = g; sim_led[2] = b; }
 int  sim_mic_db = 12;
 void plat_mic_gain(int db) { sim_mic_db = db; }
+bool sim_speaker = true;
+void plat_speaker(bool on) { sim_speaker = on; }
+bool sim_rec_button = true;
+void plat_rec_button(bool on) { sim_rec_button = on; }
 static uint8_t users[8][2048]; static int user_n[8];
 bool plat_save_user(int k, const uint8_t *b, int n) { if (k < 0 || k > 7 || n > 2048) return false; memcpy(users[k], b, (size_t)n); user_n[k] = n; return true; }
 int  plat_load_user(int k, uint8_t *b, int cap_) { if (k < 0 || k > 7 || user_n[k] > cap_) return 0; memcpy(b, users[k], (size_t)user_n[k]); return user_n[k]; }
 void plat_factory_reset(void) { memset(user_n, 0, sizeof user_n); }
+char sim_sysex[256][720]; int sim_sysex_n;      // the app's line: what went out, as text after F0 7D (the letter first)
+bool sim_sysex_off;                             // the host stops reading
+bool plat_sysex(const uint8_t *m, int n)
+{
+    if (sim_sysex_off) return false;
+    if (n < 3 || m[0] != 0xF0 || m[n - 1] != 0xF7) return false;
+    char *t = sim_sysex[sim_sysex_n % 256];
+    int k = 0;
+    for (int i = 2; i < n - 1 && k < 719; i++) t[k++] = (char)m[i];
+    t[k] = 0;
+    sim_sysex_n++;
+    return true;
+}
+const char *plat_version(void) { return "0.1.0-sim"; }
+const char *plat_serial(void) { return "SM-00000000"; }
 int  plat_about(char l[][32], int max)
 {
     int n = 0;
@@ -131,8 +151,11 @@ void sim_wav(const char *suffix, float t0, float t1)
 static vec3_t imu_axes(vec3_t s) { return (vec3_t){ s.x, -s.y, s.z }; }
 static vec3_t burst_raw[64];
 
+__attribute__((weak)) void sim_tick_hook(void) { }
+
 void sim_tick(void)
 {
+    sim_tick_hook();
     for (int i = 0; i < SI.nburst && i < 64; i++) burst_raw[i] = imu_axes(SI.burst[i]);
     float in[AUDIO_BLOCK], out[AUDIO_BLOCK];
     for (int b = 0; b < TICK_FRAMES / AUDIO_BLOCK; b++) {
@@ -160,7 +183,20 @@ void sim_tick(void)
 
 void sim_run(float s) { int n = (int)(s * 100.0f + 0.5f); for (int i = 0; i < n; i++) sim_tick(); }
 void sim_turn(int d) { SI.enc = d; sim_tick(); }
-void sim_tap(void) { SI.pressed = true; sim_run(0.05f); SI.pressed = false; SI.tap = true; sim_tick(); }
+// A click in play opens the menu only once the double-click window has passed (front.c's DOUBLE_MS): wait it out,
+// so a test that clicks and then turns finds the menu open, as a player would after the same click.
+void sim_tap(void)
+{
+    bool opens = front_screen() == 1 && front_menu_level() == 0;
+    SI.pressed = true; sim_run(0.05f); SI.pressed = false; SI.tap = true; sim_tick();
+    if (opens) sim_run(0.35f);
+}
+void sim_double_tap(void)
+{
+    SI.pressed = true; sim_run(0.05f); SI.pressed = false; SI.tap = true; sim_tick();
+    sim_run(0.1f);
+    SI.pressed = true; sim_run(0.05f); SI.pressed = false; SI.tap = true; sim_tick();
+}
 void sim_hold_knob(void) { SI.pressed = true; sim_run(0.7f); SI.pressed = false; sim_tick(); }
 void sim_rec(float s) { SI.rec = true; sim_run(s); SI.rec = false; sim_tick(); }
 void sim_tilt(float lx, float ly)

@@ -34,7 +34,7 @@ int settings_load(bool with_params)
 {
     nvs_handle_t h;
     if (!ok || nvs_open(ns, NVS_READONLY, &h) != ESP_OK) { ESP_LOGI(TAG, "first run: defaults"); return 0; }
-    static uint8_t buf[PARAMS_MAX * 8];
+    static UI_RAM uint8_t buf[PARAMS_MAX * 8];
     size_t n = sizeof buf;
     int got = 0;
     if (with_params && nvs_get_blob(h, "cur", buf, &n) == ESP_OK) got = params_unpack(buf, (int)n, false);
@@ -50,7 +50,7 @@ void settings_save(void)
 {
     nvs_handle_t h;
     if (!ok || nvs_open(ns, NVS_READWRITE, &h) != ESP_OK) return;
-    static uint8_t buf[PARAMS_MAX * 8];
+    static UI_RAM uint8_t buf[PARAMS_MAX * 8];
     int n = params_pack(buf, sizeof buf, false);
     diag_crumb("settings save");
     audio_flash_hint();

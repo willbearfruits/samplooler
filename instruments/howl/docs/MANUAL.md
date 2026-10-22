@@ -30,7 +30,7 @@ is the looper.
 
 ## The menu
 
-Press the knob for the menu, turn to choose, press to open or edit, press again to go back. Hold the knob
+The menu is a strip along the bottom of the screen; the instrument keeps playing while you are in it. Press the knob for the menu, turn to choose, press to open or edit, press again to go back. Hold the knob
 to go back to playing. The setting you edited last is what the knob turns while you play (a strip shows
 it); choose SOUND in the menu to make the knob change sounds again.
 

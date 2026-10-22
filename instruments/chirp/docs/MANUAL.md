@@ -34,6 +34,8 @@ REC held from power-on for 3 s: everything back to new (the tilt setup stays).
 
 ## The menu
 
+The menu is a strip along the bottom of the screen; the instrument keeps playing while you are in it.
+
 ### SOUND
 - **SOUND**: choose a sound; the knob plays them as you turn.
 - **SAVE AS**: keep the current settings as USER 1-8 (named after the sound they started from).

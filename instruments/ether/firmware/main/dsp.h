@@ -205,8 +205,12 @@ static inline float soft_knee(float x)
 static inline void master_process(master_t *m, float *io, int n, float volume)
 {
     const float ceil_ = 0.891f, rel = 0.00039f, dc = 0.998f;
-    float v0 = m->vol_s, dv = (volume - v0) / (float)n, pk = 0, gmin = 1.0f;
-    m->vol_s = volume;
+    // the volume glides (about 50 ms to settle 63 %), so an encoder's steps sound like a fader, not a staircase
+    float k = 1.0f - (float)n * (1.0f / 1600.0f); if (k < 0.0f) k = 0.0f;
+    float v1 = volume + (m->vol_s - volume) * k;
+    if (fabsf(v1 - volume) < 1e-4f) v1 = volume;
+    float v0 = m->vol_s, dv = (v1 - v0) / (float)n, pk = 0, gmin = 1.0f;
+    m->vol_s = v1;
     if (m->g <= 0.0f || m->g > 1.0f) m->g = 1.0f;
     for (int i = 0; i < n; i++) {
         float x = io[i] * (v0 + dv * (float)i);

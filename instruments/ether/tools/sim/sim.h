@@ -35,11 +35,13 @@ extern int    sim_n;
 extern float  sim_t;                           // seconds since boot
 extern const char *sim_name;                   // lower-case instrument name: out/<name>...
 
-void sim_boot(bool show_splash);               // a fresh device: defaults, tilt set, first-run screens skipped unless asked
+void sim_boot(bool show_splash);
+void sim_tick_hook(void);                      // runs before every tick; weak, for stand-ins that need time (link_sim.c)               // a fresh device: defaults, tilt set, first-run screens skipped unless asked
 void sim_tick(void);
 void sim_run(float seconds);
 void sim_turn(int detents);                    // one tick with the knob turned
-void sim_tap(void);                            // a short press: down 3 ticks, up
+void sim_tap(void);                            // a short press: down 3 ticks, up (in play: and the menu's wait)
+void sim_double_tap(void);                     // two short presses 0.1 s apart: the knob on VOLUME
 void sim_hold_knob(void);                      // 0.7 s: past the hold
 void sim_rec(float seconds);                   // REC down for that long, then up (runs the ticks)
 void sim_tilt(float lean_x_deg, float lean_y_deg);   // the box at rest at those angles (sets SI.acc)
@@ -59,6 +61,11 @@ float m_click(float t_change, float *spike, float *ctx);   // a discontinuity at
 float hz_to_midi(float f);
 float sim_noise(void);                         // -1..1
 
+// the app's line (front_sysex): each SysEx message the device sent, as text from its letter on
+extern char sim_sysex[256][720];
+extern int  sim_sysex_n;
+extern bool sim_sysex_off;
+
 // checks: printed, counted, and written to out/results.json with the section they ran in
 extern int checks_run, checks_failed;
 void section(const char *name);
@@ -76,3 +83,11 @@ extern uint8_t sim_led[3];
 void inst_tests(void);                         // its scenarios and checks
 void inst_excite(void);                        // make it sound steadily (for the click checks): set SI.mic etc.
 extern const char *const inst_click_skip[];    // param tags the click check leaves out (NULL-terminated), with a reason in the test file
+
+// the link's pretend room (link_sim.c, for instruments that use link.c)
+int    sim_peer_add(const char *name, int prio, double ppm, double off_us);   // a pretend board; its index
+void   sim_peer_use(int k);                    // link_* calls now act as board k (-1: the board under test)
+void   sim_peer_power(int k, bool on);         // its radio
+double sim_peer_beats(int k);                  // where board k is in the session's beats now
+float  sim_peer_gap_ms(int k);                 // board k's beat against the board under test's, ms
+extern double sim_link_loss;

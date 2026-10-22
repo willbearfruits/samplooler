@@ -152,11 +152,30 @@ static void reboot_to_download(void)
     esp_restart();
 }
 
+static usb_sysex_handler_t sysex_h;
+void usb_midi_on_sysex(usb_sysex_handler_t h) { sysex_h = h; }
+
+// The whole message under the lock, waiting (at most 4 ticks) for TinyUSB to drain its FIFO, so a log line
+// from another task never lands inside it. A host that does not read gets nothing more (false).
+bool usb_midi_send_sysex(const uint8_t *m, int n)
+{
+    if (!midi_lock || !tud_midi_mounted()) return false;
+    if (xSemaphoreTake(midi_lock, pdMS_TO_TICKS(5)) != pdTRUE) return false;
+    int off = 0;
+    for (int tries = 0; off < n && tries <= 4; tries++) {
+        off += (int)tud_midi_stream_write(0, m + off, (uint32_t)(n - off));
+        if (off < n) vTaskDelay(1);
+    }
+    if (off < n && off > 0) { static const uint8_t end = 0xF7; tud_midi_stream_write(0, &end, 1); }   // close what went
+    xSemaphoreGive(midi_lock);
+    return off == n;
+}
+
 // Byte-stream parser: channel messages to the handler, our SysEx commands here.
 void usb_midi_poll(usb_midi_handler_t h)
 {
     static uint8_t st, d[2], nd;
-    static bool in_sysex; static uint8_t sx[16]; static int sxn;
+    static bool in_sysex; static uint8_t sx[72]; static int sxn;
     uint8_t buf[64];
     uint32_t n;
     while ((n = tud_midi_stream_read(buf, sizeof buf)) > 0) {
@@ -167,6 +186,7 @@ void usb_midi_poll(usb_midi_handler_t h)
                 in_sysex = false;
                 if (sxn >= 2 && sx[0] == 0x7D && sx[1] == 'R') { ESP_LOGW(TAG, "reboot to download mode"); vTaskDelay(pdMS_TO_TICKS(50)); reboot_to_download(); }
                 else if (sxn >= 2 && sx[0] == 0x7D && sx[1] == 'S') diag_log_status();
+                else if (sxn >= 2 && sx[0] == 0x7D && sysex_h) sysex_h(sx[1], sx + 2, sxn - 2);
                 continue;
             }
             if (in_sysex) { if (sxn < (int)sizeof sx) sx[sxn++] = b; continue; }

@@ -1,6 +1,6 @@
-// See front.h. The screens, top to bottom of front_draw(): screensaver, splash, tilt setup, ABOUT, the menu
-// list; otherwise the instrument's scene with the core's strips over its bottom 18 rows (an edit, the sound
-// card, a hint, a boot note) and a toast on top.
+// See front.h. The screens, top to bottom of front_draw(): screensaver, splash, tilt setup, ABOUT; otherwise the
+// instrument's scene with the core's strips over its bottom 18 rows (the menu's pages, a page's settings, an edit,
+// the sound card, a hint, a boot note) and a toast on top. The menu never covers the scene: diving is part of playing.
 #include "front.h"
 #include "params.h"
 #include "looper.h"
@@ -61,7 +61,6 @@ static int    idle_ms, saver_idle_ms;
 static bool   saver;
 static int    strip_kind, strip_anim;          // which strip is up and how far it has slid in (frames)
 static uint32_t frame;
-static float  sel_y_anim = -1;
 static void   remote_tick(int dtm);             // the app's line, below front_midi()
 
 void toast(const char *s, int ms) { snprintf(toast_s, sizeof toast_s, "%s", s); toast_ms = ms; }
@@ -233,7 +232,7 @@ enum { SND_SOUND = -10, SND_SAVE = -11, SND_REVERT = -12, ITEM_BACK = -20 };
 #define G_SOUND (-1)
 static int groups[40], ngroups;                 // level 1: G_SOUND, instrument groups, GROUP_LOOP, GROUP_SYSTEM
 static int items[PARAMS_MAX + 4], nitems;      // level 2: ITEM_BACK, then params or SND_*
-static int mlev, sel1, sel2, top1, top2;       // level: 0 closed, 1 pages, 2 items, 3 editing
+static int mlev, sel1, sel2, top1;             // level: 0 closed, 1 pages, 2 items, 3 editing; top1: the first page shown
 static int pick_k;                              // SAVE AS: the user slot being chosen
 static int edit_ms;
 
@@ -290,7 +289,7 @@ static const char *item_value(int it, char *b, int n)
     }
 }
 
-static void menu_open(void) { mlev = 1; sel_y_anim = -1; build_groups(); if (sel1 >= ngroups + 1) sel1 = 0; coach_done(LEARN_MENU); }
+static void menu_open(void) { mlev = 1; build_groups(); if (sel1 >= ngroups + 1) sel1 = 0; coach_done(LEARN_MENU); }
 static void menu_close(void) { mlev = 0; edit_ms = 0; }
 void menu_leave(void) { menu_close(); }
 static int coach_pause_ms;
@@ -340,12 +339,12 @@ static void menu_tap(void)
 {
     if (mlev == 1) {
         if (sel1 == 0) { menu_close(); return; }
-        build_items(groups[sel1 - 1]); sel2 = nitems > 1 ? 1 : 0; top2 = 0; mlev = 2; sel_y_anim = -1;
+        build_items(groups[sel1 - 1]); sel2 = nitems > 1 ? 1 : 0; mlev = 2;
         return;
     }
     if (mlev == 2) {
         int it = items[sel2];
-        if (it == ITEM_BACK) { mlev = 1; sel_y_anim = -1; return; }
+        if (it == ITEM_BACK) { mlev = 1; return; }
         if (it == SND_REVERT) { if (load_sound(meta.sound, true)) toast("BACK TO THE SAVED SOUND", 1300); return; }
         if (it == SND_SAVE) { pick_k = meta.sound >= SOUND_ID_USER ? meta.sound - SOUND_ID_USER : 0; mlev = 3; edit_ms = 0; return; }
         if (it == SND_SOUND) { mlev = 3; edit_ms = 0; return; }
@@ -885,55 +884,44 @@ static void draw_hint(int y)
     else { oled_ftext_ex(F_SMALL, 12, y + 3, l[0], 1); ui_text_fit(F_SMALL, 12, y + 11, OLED_W - 14, l[1]); }
 }
 
-static void draw_list(void)
+// The menu lives in the bottom strip, over the scene, so diving into it is part of playing (as the Samplooler's own
+// menu strip). Level 1: the pages side by side, the chosen one a filled pill, scrolled to keep it in view. Level 2:
+// the page's name small, then one setting at a time in an outlined pill with its value. Level 3: draw_param_strip.
+static void draw_pages_strip(int y)
+{
+    strip_bg(y);
+    int n = ngroups + 1, w[41], x = 2;
+    for (int i = 0; i < n; i++) w[i] = oled_pill_w(F_SMALL, i == 0 ? S_LEFT " PLAY" : group_name(groups[i - 1])) + 3;
+    if (sel1 < top1) top1 = sel1;
+    for (;;) {                                                     // slide the window until the chosen pill fits
+        int xe = 2; for (int i = top1; i <= sel1; i++) xe += w[i];
+        if (xe <= OLED_W - 2 || top1 >= sel1) break;
+        top1++;
+    }
+    for (int i = top1; i < n && x < OLED_W - 4; i++) {
+        const char *nm = i == 0 ? S_LEFT " PLAY" : group_name(groups[i - 1]);
+        if (x + w[i] - 3 > OLED_W - 1) { oled_ftext_ex(F_SMALL, x, y + 4, S_RIGHT, 1); break; }
+        oled_pill(F_SMALL, x, y + 2, nm, i == sel1);
+        x += w[i];
+    }
+    if (top1 > 0) { oled_rect(0, y + 1, 1, 10, true); }
+    if (sel1 > 0 && groups[sel1 - 1] == G_SOUND) ui_text_fit(F_TINY, 3, y + 12, OLED_W - 6, sound_name(meta.sound));
+    else oled_ftext_c(F_TINY, OLED_W / 2, y + 12, sel1 == 0 ? "PRESS: BACK TO PLAYING" : "TURN: PAGE   PRESS: OPEN", 1);
+}
+
+static void draw_items_strip(int y)
 {
     char v[32];
-    int sel, n, *top;
-    if (mlev == 1) {
-        n = ngroups + 1; sel = sel1; top = &top1;
-        oled_pill(F_SMALL, 0, 2, "MENU", true);
-        oled_ftext_r(F_SMALL, OLED_W - 1, 5, INST.name, 1);
-    } else {
-        n = nitems; sel = sel2; top = &top2;
-        int gx = oled_pill(F_SMALL, 0, 2, group_name(groups[sel1 - 1]), true);
-        (void)gx;
-        snprintf(v, sizeof v, "%d/%d", sel, n - 1);
-        if (sel > 0) oled_ftext_r(F_SMALL, OLED_W - 1, 5, v, 1);
-    }
-    const int rows = 4, rh = 12, y0 = 16;
-    if (sel < *top) *top = sel;
-    if (sel > *top + rows - 1) *top = sel - rows + 1;
-    float want = (float)(y0 + (sel - *top) * rh);
-    sel_y_anim = sel_y_anim < 0 ? want : sel_y_anim + 0.65f * (want - sel_y_anim);
-    for (int r = 0; r < rows && *top + r < n; r++) {
-        int i = *top + r, y = y0 + r * rh;
-        const char *name, *val = "";
-        if (mlev == 1) {
-            if (i == 0) name = S_LEFT " PLAY";
-            else {
-                name = group_name(groups[i - 1]);
-                val = groups[i - 1] == G_SOUND ? sound_name(meta.sound) : S_RIGHT;
-            }
-        } else {
-            name = item_name(items[i]);
-            val = item_value(items[i], v, sizeof v);
-        }
-        int nx = oled_ftext_ex(F_SMALL, 4, y + 3, name, 1);
-        if (val && *val) {
-            int room = OLED_W - 8 - nx - 6;
-            if (oled_ftext_w(F_SMALL, val, 1) <= room) oled_ftext_r(F_SMALL, OLED_W - 7, y + 3, val, 1);
-            else ui_text_fit(F_SMALL, nx + 6, y + 3, room, val);
-        }
-    }
-    int sy = (int)lroundf(sel_y_anim);
-    oled_invert(1, sy, OLED_W - 6, rh - 1);
-    // scroll bar
-    if (n > rows) {
-        int th = 47 * rows / n; if (th < 4) th = 4;
-        int ty = 16 + (47 - th) * *top / (n - rows);
-        oled_hline_pat(OLED_W - 2, 16, 1, 1, true);
-        for (int y = 16; y < 63; y += 2) oled_pixel(OLED_W - 2, y, true);
-        oled_rect(OLED_W - 3, ty, 3, th, true);
+    strip_bg(y);
+    int it = items[sel2];
+    oled_ftext_ex(F_TINY, 3, y + 2, group_name(groups[sel1 - 1]), 1);
+    if (sel2 > 0) { snprintf(v, sizeof v, "%d/%d", sel2, nitems - 1); oled_ftext_r(F_TINY, OLED_W - 3, y + 2, v, 1); }
+    int x = oled_pill(F_SMALL, 1, y + 9, item_name(it), false);
+    const char *val = item_value(it, v, sizeof v);
+    if (val && *val) {
+        int room = OLED_W - 3 - x - 4;
+        if (oled_ftext_w(F_SMALL, val, 1) <= room) oled_ftext_r(F_SMALL, OLED_W - 3, y + 11, val, 1);
+        else ui_text_fit(F_SMALL, x + 4, y + 11, room, val);
     }
 }
 
@@ -1018,11 +1006,11 @@ void front_draw(void)
     }
     if (scr == SCR_CALIB) { draw_calib(); return; }
     if (scr == SCR_ABOUT) { draw_about(); return; }
-    if (mlev == 1 || mlev == 2) { draw_list(); if (toast_ms > 0) ui_box(40, toast_s); return; }
-
-    // the bottom strip: one at a time, sliding in
+    // the bottom strip: one at a time, sliding in (the menu's three levels are strips too: the scene plays on)
     int kind = 0;
-    if (mlev == 3) kind = 1;
+    if (mlev == 1) kind = 6;
+    else if (mlev == 2) kind = 7;
+    else if (mlev == 3) kind = 1;
     else if (card_ms > 0) kind = 2;
     else if (quick_ms > 0 && quick_p >= 0) kind = 3;
     else if (note_ms > 0) kind = 4;
@@ -1053,6 +1041,8 @@ void front_draw(void)
     case 3: draw_param_strip(y, quick_p); break;
     case 4: strip_bg(y); oled_pill(F_SMALL, 2, y + 5, note_s, true); break;
     case 5: draw_hint(y); break;
+    case 6: draw_pages_strip(y); break;
+    case 7: draw_items_strip(y); break;
     }
     if (toast_ms > 0) ui_box(34, toast_s);
 }

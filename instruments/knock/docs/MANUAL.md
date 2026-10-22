@@ -37,7 +37,7 @@ hit, or, with a loop, the loop's five lanes (one per side) and its playhead.
 
 ## The menu
 
-Press the knob for the menu. Turn to choose, press to open or edit, press again to go back up; hold the
+The menu is a strip along the bottom of the screen; the instrument keeps playing while you are in it. Press the knob for the menu. Turn to choose, press to open or edit, press again to go back up; hold the
 knob to go back to playing. While you edit, the box keeps playing so you hear the change. After you edit
 a setting, turning the knob outside the menu changes that setting (choose SOUND in the menu to make the
 knob change sounds again).

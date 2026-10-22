@@ -1,6 +1,6 @@
-// See front.h. The screens, top to bottom of front_draw(): screensaver, splash, tilt setup, ABOUT, the menu
-// list; otherwise the instrument's scene with the core's strips over its bottom 18 rows (an edit, the sound
-// card, a hint, a boot note) and a toast on top.
+// See front.h. The screens, top to bottom of front_draw(): screensaver, splash, tilt setup, ABOUT; otherwise the
+// instrument's scene with the core's strips over its bottom 18 rows (the menu's pages, a page's settings, an edit,
+// the sound card, a hint, a boot note) and a toast on top. The menu never covers the scene: diving is part of playing.
 #include "front.h"
 #include "params.h"
 #include "looper.h"
@@ -16,14 +16,18 @@
 #define IRAM_ATTR
 #endif
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define HOLD_MS     600         // the knob held this long: back to play, or freeze
+#define DOUBLE_MS   300         // two clicks this close in play: the knob sets the volume
+#define VOL_MS      3000        // ...until it has not turned for this long, or a click
 #define STRIP_Y     46          // the bottom strip: rows 46..63
 #define SOUND_ID_USER 100
 #define N_USER      8
 #define NAME_LEN    12          // a user sound's blob starts with its name
 #define BLOB_MAX    (NAME_LEN + PARAMS_MAX * 8)
+#define SOUND_LIST_MAX (1 + 64 + N_USER)   // MY EDIT, the factory sounds (64 at most are listed), the user sounds
 
 front_meta_t meta = { .axis = { 1, -2, 3 } };      // a right-handed IMU, x right and z out of the screen: its y points up
 static front_status_t status;
@@ -49,12 +53,15 @@ static char   toast_s[48];  static int toast_ms;
 static char   note_s[40];   static int note_ms;
 static int    card_ms;                         // the sound card after a turn in play
 static int    quick_ms, quick_p = -1;          // a quick edit in play
+static int    click_ms;                        // a click in play, waiting for a second one (the menu opens after)
+static bool   click_menu;                      // ...and when none comes, the menu opens (not after a click that ended VOLUME)
+static int    vol_ms;                          // a double click: the knob sets the volume while this runs
 static int    hint_ms, hint_gap_ms = 1500, hint_i = -1;  // -1: the first hint shown is hints[0]
 static int    idle_ms, saver_idle_ms;
 static bool   saver;
 static int    strip_kind, strip_anim;          // which strip is up and how far it has slid in (frames)
 static uint32_t frame;
-static float  sel_y_anim = -1;
+static void   remote_tick(int dtm);             // the app's line, below front_midi()
 
 void toast(const char *s, int ms) { snprintf(toast_s, sizeof toast_s, "%s", s); toast_ms = ms; }
 void ui_awake(void) { saver_idle_ms = 0; }
@@ -66,7 +73,7 @@ void coach_done(int learn)
     uint32_t b = 1u << learn;
     if (meta.learned & b) return;
     meta.learned |= b; dirty = true;
-    if (hint_ms > 0 && hint_i < INST.nhints && INST.hints[hint_i].learn == learn) { hint_ms = 0; hint_gap_ms = 2500; }
+    if (hint_ms > 0 && hint_i >= 0 && hint_i < INST.nhints && INST.hints[hint_i].learn == learn) { hint_ms = 0; hint_gap_ms = 2500; }
 }
 
 // ---------------------------------------------------------------- LED and MIDI for the instruments
@@ -104,6 +111,8 @@ void midi_cc(int cc, int val)
 static void on_param(int p, float old)
 {
     if (p == CP(CP_MIC)) plat_mic_gain((int)pv[p]);
+    if (p == CP(CP_SPEAKER)) plat_speaker(pv[p] >= 1.0f);
+    if (p == CP(CP_REC_BTN)) plat_rec_button(pv[p] >= 1.0f);
     if (p == CP(CP_HINTS) && pv[p] >= 1.0f && old < 1.0f) { meta.learned = 0; hint_gap_ms = 800; }
     if (p == CP(CP_LED)) led_apply();
 }
@@ -123,15 +132,15 @@ static void set_param(int p, float v, bool echo)
 void param_set(int p, float v) { set_param(p, v, true); }
 
 // ---------------------------------------------------------------- sounds
-static float stash[PARAMS_MAX];
+static UI_RAM float stash[PARAMS_MAX];
 static bool  stash_ok;
-static char  user_name[N_USER][NAME_LEN + 1];
+static UI_RAM char  user_name[N_USER][NAME_LEN + 1];
 
-static int sound_list(int16_t *ids)
+static int sound_list(int16_t *ids)                 // ids[SOUND_LIST_MAX]
 {
     int n = 0;
     if (stash_ok) ids[n++] = -1;
-    for (int i = 0; i < INST.npresets; i++) ids[n++] = (int16_t)i;
+    for (int i = 0; i < INST.npresets && i < 64; i++) ids[n++] = (int16_t)i;
     for (int k = 0; k < N_USER; k++) if (meta.user_mask & (1u << k)) ids[n++] = (int16_t)(SOUND_ID_USER + k);
     return n;
 }
@@ -157,7 +166,7 @@ static bool load_sound(int16_t id, bool announce)
         if (!stash_ok) return false;
         for (int p = 0; p < NI; p++) if (param_in_sound(p)) pv[p] = stash[p];
     } else if (id >= SOUND_ID_USER) {
-        static uint8_t blob[BLOB_MAX];
+        static UI_RAM uint8_t blob[BLOB_MAX];
         int k = id - SOUND_ID_USER, n = plat_load_user(k, blob, sizeof blob);
         if (n <= NAME_LEN) { meta.user_mask &= (uint8_t)~(1u << k); dirty = true; return false; }
         params_defaults(true);
@@ -180,7 +189,7 @@ static void browse(int d)
         stash_ok = true;
         if (meta.sound == -1) params_snapshot();
     }
-    int16_t ids[2 + 64 + N_USER];
+    int16_t ids[SOUND_LIST_MAX];
     int n = sound_list(ids), i = sound_pos(ids, n, meta.sound), j = i + d;
     if (j < 0) j = 0;
     if (j > n - 1) j = n - 1;
@@ -189,7 +198,7 @@ static void browse(int d)
 
 static void save_user(int k)
 {
-    static uint8_t blob[BLOB_MAX];
+    static UI_RAM uint8_t blob[BLOB_MAX];
     char nm[NAME_LEN + 1];
     const char *base = sound_name(meta.sound);
     if (meta.sound >= SOUND_ID_USER || meta.sound == -1) base = meta.sound == -1 ? "EDIT" : base + 3;
@@ -209,7 +218,7 @@ static void save_user(int k)
 
 static void load_user_names(void)
 {
-    static uint8_t blob[BLOB_MAX];
+    static UI_RAM uint8_t blob[BLOB_MAX];
     for (int k = 0; k < N_USER; k++) {
         if (!(meta.user_mask & (1u << k))) continue;
         int n = plat_load_user(k, blob, sizeof blob);
@@ -223,7 +232,7 @@ enum { SND_SOUND = -10, SND_SAVE = -11, SND_REVERT = -12, ITEM_BACK = -20 };
 #define G_SOUND (-1)
 static int groups[40], ngroups;                 // level 1: G_SOUND, instrument groups, GROUP_LOOP, GROUP_SYSTEM
 static int items[PARAMS_MAX + 4], nitems;      // level 2: ITEM_BACK, then params or SND_*
-static int mlev, sel1, sel2, top1, top2;       // level: 0 closed, 1 pages, 2 items, 3 editing
+static int mlev, sel1, sel2, top1;             // level: 0 closed, 1 pages, 2 items, 3 editing; top1: the first page shown
 static int pick_k;                              // SAVE AS: the user slot being chosen
 static int edit_ms;
 
@@ -280,11 +289,13 @@ static const char *item_value(int it, char *b, int n)
     }
 }
 
-static void menu_open(void) { mlev = 1; sel_y_anim = -1; build_groups(); if (sel1 >= ngroups + 1) sel1 = 0; coach_done(LEARN_MENU); }
+static void menu_open(void) { mlev = 1; build_groups(); if (sel1 >= ngroups + 1) sel1 = 0; coach_done(LEARN_MENU); }
 static void menu_close(void) { mlev = 0; edit_ms = 0; }
 void menu_leave(void) { menu_close(); }
 static int coach_pause_ms;
 void coach_pause(void) { coach_pause_ms = 100; hint_ms = 0; }
+static bool grab, grab_turned;                  // knob_grab(): the instrument has the knob in play
+void knob_grab(bool on) { grab = on; grab_turned = false; if (on) { hint_ms = 0; card_ms = 0; quick_ms = 0; } }
 
 enum { SCR_SPLASH, SCR_PLAY, SCR_CALIB, SCR_ABOUT };
 static int scr = SCR_SPLASH, splash_f, calib_step, calib_msg_ms;
@@ -317,6 +328,8 @@ static void factory_reset(void)
     params_defaults(false);
     load_sound(0, false);
     plat_mic_gain((int)pv[CP(CP_MIC)]);
+    plat_speaker(pv[CP(CP_SPEAKER)] >= 1.0f);
+    plat_rec_button(pv[CP(CP_REC_BTN)] >= 1.0f);
     led_apply();
     dirty = true;
     toast("FACTORY RESET DONE", 1800);
@@ -326,12 +339,12 @@ static void menu_tap(void)
 {
     if (mlev == 1) {
         if (sel1 == 0) { menu_close(); return; }
-        build_items(groups[sel1 - 1]); sel2 = nitems > 1 ? 1 : 0; top2 = 0; mlev = 2; sel_y_anim = -1;
+        build_items(groups[sel1 - 1]); sel2 = nitems > 1 ? 1 : 0; mlev = 2;
         return;
     }
     if (mlev == 2) {
         int it = items[sel2];
-        if (it == ITEM_BACK) { mlev = 1; sel_y_anim = -1; return; }
+        if (it == ITEM_BACK) { mlev = 1; return; }
         if (it == SND_REVERT) { if (load_sound(meta.sound, true)) toast("BACK TO THE SAVED SOUND", 1300); return; }
         if (it == SND_SAVE) { pick_k = meta.sound >= SOUND_ID_USER ? meta.sound - SOUND_ID_USER : 0; mlev = 3; edit_ms = 0; return; }
         if (it == SND_SOUND) { mlev = 3; edit_ms = 0; return; }
@@ -381,7 +394,7 @@ void front_init(bool has_imu, bool safe_mode, bool from_flash)
     if (INST.looper && !looper_init()) app_log("looper: not enough memory");
     if (INST.init) INST.init();                         // before anything can call changed()
     // What the flash held is the current state; the snapshot is what the sound itself sets, for the '*'.
-    static float cur[PARAMS_MAX];
+    static UI_RAM float cur[PARAMS_MAX];
     memcpy(cur, pv, sizeof cur);
     int16_t id = safe_mode ? 0 : meta.sound;            // safe mode: the first factory sound
     if (id == -1) {                                     // the last edit: it is MY EDIT again
@@ -395,6 +408,8 @@ void front_init(bool has_imu, bool safe_mode, bool from_flash)
         if (from_flash && !safe_mode) memcpy(pv, cur, sizeof cur);   // a fresh device starts on the sound itself
     }
     plat_mic_gain((int)pv[CP(CP_MIC)]);
+    plat_speaker(pv[CP(CP_SPEAKER)] >= 1.0f);
+    plat_rec_button(pv[CP(CP_REC_BTN)] >= 1.0f);
     if (INST.changed) INST.changed(-1);
     pv[CP(CP_RESET)] = 0;
     led_apply();
@@ -463,6 +478,7 @@ void front_tick(const front_in_t *in)
     ticks++;
     t_now += in->dt;
     int dtm = (int)(in->dt * 1000.0f + 0.5f);
+    remote_tick(dtm);
 
     // the meters (the audio task keeps maxima; read and restart them)
     float op = master.peak; master.peak = 0;
@@ -512,10 +528,36 @@ void front_tick(const front_in_t *in)
     }
     if (screen_had_rec) rec = false;                            // REC on a full screen only closes it
 
+    // the knob for an instrument that holds it: turns, taps and holds are its own; a press with a turn is neither
+    int g_enc = 0; bool g_tap = false, g_hold = false;
+    if (grab && scr == SCR_PLAY && mlev == 0) {
+        if (in->pressed && enc) grab_turned = true;
+        g_enc = enc; g_tap = tap && !grab_turned; g_hold = hold && !grab_turned;
+        if (!in->pressed) grab_turned = false;
+        enc = 0; tap = hold = false;
+        coach_pause();
+    }
     if (scr == SCR_PLAY) {
         if (mlev == 0) {
-            if (hold) { frozen = !frozen; toast(frozen ? "MOTION HELD" : "MOTION FREE", 1100); coach_done(LEARN_HOLD); }
-            if (tap) menu_open();
+            if (hold) {
+                if (INST.hold && INST.hold()) coach_done(LEARN_HOLD);
+                else { frozen = !frozen; toast(frozen ? "MOTION HELD" : "MOTION FREE", 1100); coach_done(LEARN_HOLD); }
+            }
+            // a click opens the menu once DOUBLE_MS has passed without a second one; two clicks put the knob on
+            // VOLUME until it rests for VOL_MS (or a click). In every instrument, the same.
+            if (tap) {
+                if (click_ms > 0) {
+                    click_ms = 0; vol_ms = VOL_MS; quick_p = CP(CP_VOLUME); quick_ms = VOL_MS; card_ms = 0;
+                } else {
+                    click_ms = DOUBLE_MS; click_menu = vol_ms <= 0;
+                    if (vol_ms > 0) { vol_ms = 0; quick_ms = 0; }
+                }
+            }
+            if (enc && vol_ms > 0) {
+                int vp = CP(CP_VOLUME);
+                set_param(vp, param_step(vp, pv[vp], det), true); quick_p = vp; quick_ms = VOL_MS; vol_ms = VOL_MS; card_ms = 0;
+                enc = 0;
+            }
             if (enc) {
                 int qp = meta.quick[0] ? param_by_tag(meta.quick) : INST.knob ? param_by_tag(INST.knob) : -1;
                 if (qp >= 0 && param(qp)->kind != PK_ACT) { set_param(qp, param_step(qp, pv[qp], det), true); quick_p = qp; quick_ms = 1500; card_ms = 0; }
@@ -554,6 +596,7 @@ void front_tick(const front_in_t *in)
         .has_imu = motion, .frozen = frozen, .acc = acc_s, .gyro = frozen ? (vec3_t){ 0, 0, 0 } : gyro_s,
         .lean_x = lean_x, .lean_y = lean_y, .burst = burst_s, .nburst = nb,
         .has_joy = in->joy_ok && pv[CP(CP_JOY)] >= 1.0f, .menu_open = mlev > 0,
+        .knob = g_enc, .knob_tap = g_tap, .knob_hold = g_hold, .knob_down = grab && in->pressed, .knob_turned = grab && grab_turned,
     };
     ctl.gyro_mag = sqrtf(ctl.gyro.x * ctl.gyro.x + ctl.gyro.y * ctl.gyro.y + ctl.gyro.z * ctl.gyro.z);
     if (ctl.has_joy) {
@@ -575,6 +618,11 @@ void front_tick(const front_in_t *in)
     if (note_ms > 0) note_ms -= dtm;
     if (card_ms > 0) card_ms -= dtm;
     if (quick_ms > 0) quick_ms -= dtm;
+    if (vol_ms > 0) vol_ms -= dtm;
+    if (click_ms > 0 && (click_ms -= dtm) <= 0) {                // no second click: the first one opens the menu
+        click_ms = 0;
+        if (click_menu && scr == SCR_PLAY && mlev == 0 && !grab && !saver) menu_open();
+    }
     if (calib_msg_ms > 0) calib_msg_ms -= dtm;
     if (mlev == 3) edit_ms += dtm;
     // the coach: in play, idle, one unlearned hint at a time
@@ -614,7 +662,7 @@ void front_midi(uint8_t st, uint8_t d1, uint8_t d2)
         if (p >= 0) { set_param(p, param_from_cc(p, d2), false); return; }
         if (d1 == 64) { midi_rec = d2 >= 64; return; }                 // the sustain pedal is REC
     } else if (k == 0xC0) {
-        int16_t ids[2 + 64 + N_USER];
+        int16_t ids[SOUND_LIST_MAX];
         int n = sound_list(ids), want = d1 < INST.npresets ? d1 : SOUND_ID_USER + (d1 - INST.npresets);
         for (int i = 0; i < n; i++) if (ids[i] == want) { load_sound(ids[i], false); card_ms = 1500; }
         return;
@@ -625,6 +673,150 @@ void front_midi(uint8_t st, uint8_t d1, uint8_t d2)
         return;
     }
     if (INST.midi_in) INST.midi_in(st, d1, d2);
+}
+
+// ---------------------------------------------------------------- the app's line (app/ on a computer)
+// SysEx F0 7D <letter> <text> F7, the text 7-bit ASCII, one key=value per line (protocol 1):
+//   in  'I'         who are you: answered 'I' name= version= serial= proto= params=
+//   in  'D'         describe the settings: a 'D' per setting (i= tag= name= group= kind= min= max= step= unit=
+//                   flags= cc= labels= help= value= text=) and then 'D' end=<count>, two a tick
+//   in  'P' TAG=v   set one by its 4-character tag (an action runs at v >= 1); answered by 'V'
+//   out 'V'         tag= value= text=: a setting changed (the knob, MIDI, a sound), once the app has the
+//                   description and while it keeps talking (it says 'I' every 2 s while it shows the board).
+//                   After REMOTE_QUIET_MS of silence, or a message that could not go out, nothing goes out
+//                   until the app speaks again; then the changes it missed follow.
+// RESET ALL, ABOUT and TILT SETUP stay on the device: they need its screen.
+#define REMOTE_QUIET_MS 5000
+static int   rm_desc = -1, rm_count;          // the next setting to describe (-1: none pending), described so far
+static int   rm_quiet_ms = -1;                // ms since the app last spoke; -1: no app, or it stopped reading
+static bool  rm_ready;                        // the app has the whole description: changes go out
+static UI_RAM float rm_seen[PARAMS_MAX];      // the values the app has
+
+static bool rm_shown(int p)
+{
+    const param_t *d = param(p);
+    if (p == CP(CP_RESET) || p == CP(CP_ABOUT) || p == CP(CP_TILT_SETUP)) return false;
+    if (d->group == GROUP_LOOP && !INST.looper) return false;
+    return true;
+}
+
+static int addf(char *b, int cap, int k, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+static int addf(char *b, int cap, int k, const char *fmt, ...)
+{
+    if (k >= cap - 1) return k;
+    va_list ap;
+    va_start(ap, fmt);
+    int w = vsnprintf(b + k, (size_t)(cap - k), fmt, ap);
+    va_end(ap);
+    return w < 0 ? k : (k + w > cap - 1 ? cap - 1 : k + w);
+}
+
+static bool rm_send(char letter, const char *text)
+{
+    static UI_RAM uint8_t m[720];
+    int k = 0;
+    m[k++] = 0xF0; m[k++] = 0x7D; m[k++] = (uint8_t)letter;
+    for (const char *s = text; *s && k < (int)sizeof m - 1; s++) {
+        uint8_t c = (uint8_t)*s;
+        if (c == '\n' || (c >= 0x20 && c < 0x7F)) m[k++] = c;    // the screen's own symbols stay home
+    }
+    m[k++] = 0xF7;
+    if (plat_sysex(m, k)) return true;
+    rm_quiet_ms = -1; rm_desc = -1;               // nobody reads: quiet until the app speaks again
+    return false;
+}
+
+static void rm_value(int p)
+{
+    char b[96], v[32];
+    const param_t *d = param(p);
+    int k = addf(b, sizeof b, 0, "tag=%.4s\nvalue=%.7g", d->tag, (double)pv[p]);
+    if (d->kind != PK_ACT) k = addf(b, sizeof b, k, "\ntext=%s", param_text(p, v, sizeof v));
+    if (rm_send('V', b)) rm_seen[p] = pv[p];      // one that did not go out goes again later
+}
+
+static void rm_describe(int p)
+{
+    static UI_RAM char b[640];
+    char v[32];
+    const param_t *d = param(p);
+    static const char *const kinds[] = { "num", "enum", "act" };
+    int k = addf(b, sizeof b, 0, "i=%d\ntag=%.4s\nname=%s\ngroup=%s\nkind=%s", p, d->tag, d->name,
+                 d->group == GROUP_LOOP ? "LOOP" : d->group == GROUP_SYSTEM ? "SYSTEM" : d->group < INST.ngroups ? INST.groups[d->group] : "",
+                 kinds[d->kind < 3 ? d->kind : 0]);
+    if (d->kind != PK_ACT) {
+        k = addf(b, sizeof b, k, "\nmin=%.7g\nmax=%.7g\nstep=%.7g\nunit=%s", (double)d->min, (double)d->max, (double)d->step, d->unit ? d->unit : "");
+        k = addf(b, sizeof b, k, "\nvalue=%.7g\ntext=%s", (double)pv[p], param_text(p, v, sizeof v));
+    }
+    static const char *const fl[] = { "int", "log", "nocc", "signed", "sys", "hide" };
+    k = addf(b, sizeof b, k, "\nflags=");
+    for (int i = 0, n = 0; i < 6; i++) if (d->flags & (1 << i)) k = addf(b, sizeof b, k, "%s%s", n++ ? "," : "", fl[i]);
+    k = addf(b, sizeof b, k, "\ncc=%d", param_cc_number(p));
+    if (d->kind == PK_ENUM && d->labels) {
+        k = addf(b, sizeof b, k, "\nlabels=");
+        for (int i = 0; i <= (int)(d->max - d->min); i++) k = addf(b, sizeof b, k, "%s%s", i ? "|" : "", d->labels[i]);
+    }
+    if (d->help) k = addf(b, sizeof b, k, "\nhelp=%s", d->help);
+    rm_seen[p] = pv[p];
+    rm_send('D', b);
+}
+
+static void rm_set(const char *t)
+{
+    const char *eq = strchr(t, '=');
+    if (!eq || eq == t || eq - t > 4) return;
+    char tag[5] = "    ";
+    memcpy(tag, t, (size_t)(eq - t));             // "mot" is "mot ": tags are four characters
+    int p = param_by_tag(tag);
+    if (p < 0 || !rm_shown(p)) return;
+    float v = strtof(eq + 1, NULL);
+    if (param(p)->kind == PK_ACT) { if (v >= 1.0f) run_action(p); return; }
+    set_param(p, v, true);
+    rm_value(p);                                  // also when it did not move: the app shows what the board has
+}
+
+void front_sysex(uint8_t cmd, const uint8_t *body, int n)
+{
+    char t[64];
+    if (n > (int)sizeof t - 1) n = (int)sizeof t - 1;
+    for (int i = 0; i < n; i++) t[i] = (char)body[i];
+    t[n < 0 ? 0 : n] = 0;
+    rm_quiet_ms = 0;
+    if (cmd == 'I') {
+        int shown = 0;
+        for (int p = 0; p < NP; p++) shown += rm_shown(p);
+        char b[160];
+        addf(b, sizeof b, 0, "name=%s\nversion=%s\nserial=%s\nproto=1\nparams=%d", INST.name, plat_version(), plat_serial(), shown);
+        rm_send('I', b);
+    } else if (cmd == 'D') {
+        rm_desc = 0; rm_count = 0; rm_ready = false;
+    } else if (cmd == 'P') {
+        rm_set(t);
+    }
+}
+
+static void remote_tick(int dtm)
+{
+    if (rm_quiet_ms < 0) return;
+    rm_quiet_ms += dtm;
+    if (rm_quiet_ms > REMOTE_QUIET_MS) { rm_quiet_ms = -1; rm_desc = -1; return; }   // the app has gone
+    for (int sent = 0; rm_desc >= 0 && sent < 2; ) {
+        if (rm_desc >= NP) {
+            char b[24];
+            snprintf(b, sizeof b, "end=%d", rm_count);
+            rm_desc = -1;
+            rm_ready = rm_send('D', b);           // not sent: the app asks again
+            break;
+        }
+        int p = rm_desc++;
+        if (!rm_shown(p)) continue;
+        rm_describe(p);
+        rm_count++;
+        sent++;
+    }
+    if (!rm_ready) return;
+    for (int p = 0, n = 0; p < NP && n < 4 && rm_quiet_ms >= 0; p++)
+        if (rm_shown(p) && param(p)->kind != PK_ACT && pv[p] != rm_seen[p]) { rm_value(p); n++; }
 }
 
 // ---------------------------------------------------------------- drawing
@@ -668,7 +860,7 @@ static void draw_param_strip(int y, int p)
 static void draw_sound_card(int y)
 {
     strip_bg(y);
-    int16_t ids[2 + 64 + N_USER];
+    int16_t ids[SOUND_LIST_MAX];
     int n = sound_list(ids), i = sound_pos(ids, n, meta.sound);
     char b[24]; snprintf(b, sizeof b, "SOUND %d/%d", i + 1, n);
     oled_ftext_ex(F_TINY, 3, y + 3, b, 1);
@@ -692,55 +884,44 @@ static void draw_hint(int y)
     else { oled_ftext_ex(F_SMALL, 12, y + 3, l[0], 1); ui_text_fit(F_SMALL, 12, y + 11, OLED_W - 14, l[1]); }
 }
 
-static void draw_list(void)
+// The menu lives in the bottom strip, over the scene, so diving into it is part of playing (as the Samplooler's own
+// menu strip). Level 1: the pages side by side, the chosen one a filled pill, scrolled to keep it in view. Level 2:
+// the page's name small, then one setting at a time in an outlined pill with its value. Level 3: draw_param_strip.
+static void draw_pages_strip(int y)
+{
+    strip_bg(y);
+    int n = ngroups + 1, w[41], x = 2;
+    for (int i = 0; i < n; i++) w[i] = oled_pill_w(F_SMALL, i == 0 ? S_LEFT " PLAY" : group_name(groups[i - 1])) + 3;
+    if (sel1 < top1) top1 = sel1;
+    for (;;) {                                                     // slide the window until the chosen pill fits
+        int xe = 2; for (int i = top1; i <= sel1; i++) xe += w[i];
+        if (xe <= OLED_W - 2 || top1 >= sel1) break;
+        top1++;
+    }
+    for (int i = top1; i < n && x < OLED_W - 4; i++) {
+        const char *nm = i == 0 ? S_LEFT " PLAY" : group_name(groups[i - 1]);
+        if (x + w[i] - 3 > OLED_W - 1) { oled_ftext_ex(F_SMALL, x, y + 4, S_RIGHT, 1); break; }
+        oled_pill(F_SMALL, x, y + 2, nm, i == sel1);
+        x += w[i];
+    }
+    if (top1 > 0) { oled_rect(0, y + 1, 1, 10, true); }
+    if (sel1 > 0 && groups[sel1 - 1] == G_SOUND) ui_text_fit(F_TINY, 3, y + 12, OLED_W - 6, sound_name(meta.sound));
+    else oled_ftext_c(F_TINY, OLED_W / 2, y + 12, sel1 == 0 ? "PRESS: BACK TO PLAYING" : "TURN: PAGE   PRESS: OPEN", 1);
+}
+
+static void draw_items_strip(int y)
 {
     char v[32];
-    int sel, n, *top;
-    if (mlev == 1) {
-        n = ngroups + 1; sel = sel1; top = &top1;
-        oled_pill(F_SMALL, 0, 2, "MENU", true);
-        oled_ftext_r(F_SMALL, OLED_W - 1, 5, INST.name, 1);
-    } else {
-        n = nitems; sel = sel2; top = &top2;
-        int gx = oled_pill(F_SMALL, 0, 2, group_name(groups[sel1 - 1]), true);
-        (void)gx;
-        snprintf(v, sizeof v, "%d/%d", sel, n - 1);
-        if (sel > 0) oled_ftext_r(F_SMALL, OLED_W - 1, 5, v, 1);
-    }
-    const int rows = 4, rh = 12, y0 = 16;
-    if (sel < *top) *top = sel;
-    if (sel > *top + rows - 1) *top = sel - rows + 1;
-    float want = (float)(y0 + (sel - *top) * rh);
-    sel_y_anim = sel_y_anim < 0 ? want : sel_y_anim + 0.65f * (want - sel_y_anim);
-    for (int r = 0; r < rows && *top + r < n; r++) {
-        int i = *top + r, y = y0 + r * rh;
-        const char *name, *val = "";
-        if (mlev == 1) {
-            if (i == 0) name = S_LEFT " PLAY";
-            else {
-                name = group_name(groups[i - 1]);
-                val = groups[i - 1] == G_SOUND ? sound_name(meta.sound) : S_RIGHT;
-            }
-        } else {
-            name = item_name(items[i]);
-            val = item_value(items[i], v, sizeof v);
-        }
-        int nx = oled_ftext_ex(F_SMALL, 4, y + 3, name, 1);
-        if (val && *val) {
-            int room = OLED_W - 8 - nx - 6;
-            if (oled_ftext_w(F_SMALL, val, 1) <= room) oled_ftext_r(F_SMALL, OLED_W - 7, y + 3, val, 1);
-            else ui_text_fit(F_SMALL, nx + 6, y + 3, room, val);
-        }
-    }
-    int sy = (int)lroundf(sel_y_anim);
-    oled_invert(1, sy, OLED_W - 6, rh - 1);
-    // scroll bar
-    if (n > rows) {
-        int th = 47 * rows / n; if (th < 4) th = 4;
-        int ty = 16 + (47 - th) * *top / (n - rows);
-        oled_hline_pat(OLED_W - 2, 16, 1, 1, true);
-        for (int y = 16; y < 63; y += 2) oled_pixel(OLED_W - 2, y, true);
-        oled_rect(OLED_W - 3, ty, 3, th, true);
+    strip_bg(y);
+    int it = items[sel2];
+    oled_ftext_ex(F_TINY, 3, y + 2, group_name(groups[sel1 - 1]), 1);
+    if (sel2 > 0) { snprintf(v, sizeof v, "%d/%d", sel2, nitems - 1); oled_ftext_r(F_TINY, OLED_W - 3, y + 2, v, 1); }
+    int x = oled_pill(F_SMALL, 1, y + 9, item_name(it), false);
+    const char *val = item_value(it, v, sizeof v);
+    if (val && *val) {
+        int room = OLED_W - 3 - x - 4;
+        if (oled_ftext_w(F_SMALL, val, 1) <= room) oled_ftext_r(F_SMALL, OLED_W - 3, y + 11, val, 1);
+        else ui_text_fit(F_SMALL, x + 4, y + 11, room, val);
     }
 }
 
@@ -825,11 +1006,11 @@ void front_draw(void)
     }
     if (scr == SCR_CALIB) { draw_calib(); return; }
     if (scr == SCR_ABOUT) { draw_about(); return; }
-    if (mlev == 1 || mlev == 2) { draw_list(); if (toast_ms > 0) ui_box(40, toast_s); return; }
-
-    // the bottom strip: one at a time, sliding in
+    // the bottom strip: one at a time, sliding in (the menu's three levels are strips too: the scene plays on)
     int kind = 0;
-    if (mlev == 3) kind = 1;
+    if (mlev == 1) kind = 6;
+    else if (mlev == 2) kind = 7;
+    else if (mlev == 3) kind = 1;
     else if (card_ms > 0) kind = 2;
     else if (quick_ms > 0 && quick_p >= 0) kind = 3;
     else if (note_ms > 0) kind = 4;
@@ -860,6 +1041,8 @@ void front_draw(void)
     case 3: draw_param_strip(y, quick_p); break;
     case 4: strip_bg(y); oled_pill(F_SMALL, 2, y + 5, note_s, true); break;
     case 5: draw_hint(y); break;
+    case 6: draw_pages_strip(y); break;
+    case 7: draw_items_strip(y); break;
     }
     if (toast_ms > 0) ui_box(34, toast_s);
 }

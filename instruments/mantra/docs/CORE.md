@@ -44,7 +44,9 @@ it), WS2812 RGB LED on GPIO 48, native USB (MIDI + a 32 kHz sound card).
 | REC held 3 s from power-on, then let go | factory reset (tilt setup kept); a REC still down after 6 s is taken as stuck: no reset, REC ignored until it lets go, BOOT records meanwhile. Not with REC BUTTON OFF (RESET ALL in the menu still works) | |
 | knob held at power-on | USB stays the Serial/JTAG console (for `idf.py monitor`) | |
 
-The menu's pages: SOUND (choose, SAVE AS a user sound, REVERT), the instrument's pages (`INST.groups`),
+The menu is a strip over the bottom 18 rows of the scene, which goes on playing (as the Samplooler's own menu strip;
+the full-screen list went on 2026-10-22): the pages side by side as pills, then a page's settings one at a time with
+the page's name small above, then the setting being edited with its slider. The menu's pages: SOUND (choose, SAVE AS a user sound, REVERT), the instrument's pages (`INST.groups`),
 LOOP (with the looper), SYSTEM (volume, speaker on/off, mic gain, tilt setup, motion on/off, joystick auto/off and its
 orientation, the REC button on/off, MIDI channel, MIDI CC out, LED, hints, screen saver, ABOUT, RESET ALL).
 
