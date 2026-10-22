@@ -14,6 +14,21 @@
 // Around them: a harmony voice (a third, fifth, octave or a drone), vibrato with a delay, bends from the
 // joystick, a four-line feedback delay network reverb and an echo. The core's looper records it all.
 //
+//   BRASS (TRUMPET, TROMBONE, DIDGERIDOO)  STK's Brass: a lip resonance blowing into a bore twice the note's
+//          period; the lip picks the bore's mode, so blowing hard tightens the lip and the note jumps an octave.
+//          The didgeridoo has a vocal formant that opens with the breath.
+//   STRING (GUITAR)  a string in a loop (Karplus-Strong) plucked when a note starts and fed by the breath while
+//          it lasts, a soft clip in the loop: held, it swells and sings like a guitar on a sustainer. Let go and
+//          it rings out. DRIVE on the TONE page is the amp.
+//   SYNTH (SYNTH LEAD)  two detuned saws and a sub octave through a resonant low pass the breath opens.
+//   VOICE (CHOIR)  a glottal pulse through three formants, from OO to AH as the breath grows.
+//
+// The breath is the mic's low band (wind on a MEMS mic is rumble) over the room's floor, and it only counts
+// while that band stands well above the mid band (speech and music have a middle, wind has not: the ratio is
+// learned by BREATH SETUP and ROOM NOISE sets how strict), held for a moment first (a kick drum's thump peaks
+// and is gone, a breath keeps coming). The room's own level is subtracted, so a breath over noise keeps its
+// dynamics.
+//
 // Pitch comes from the tilt (a ladder of notes, with hysteresis), the joystick, or your own humming (YIN on
 // the mic); MIDI notes in override it while held, so a keyboard can play it while you blow. MIDI out:
 // notes, breath as CC 2, the bend as pitch bend.
@@ -41,13 +56,15 @@ enum {
     P_REVERB, P_SIZE, P_DAMP, P_ECHO, P_ETIME, P_EFB,
     P_BRANGE,
     P_ESYNC, P_TEMPO, P_LINK, P_GROUP, P_RANGE, P_PEERS,      // added with the link (2026-10-19): after the hidden one, so CCs stay
+    P_DRIVE, P_NOISE, P_BWIND,                                // 2026-10-22: the amp, the room, the learned breath/room band ratio
     P_N
 };
 enum { G_PLAY, G_PITCH, G_BREATH, G_TONE, G_SPACE, G_SONG, G_LINK, G_N };
 static const char *const groups[G_N] = { "PLAY", "PITCH", "BREATH", "TONE", "SPACE", "SONG", "LINK" };
 
-enum { M_OCARINA, M_FLUTE, M_PANPIPE, M_SHAKU, M_CLARINET, M_WHISTLE, M_BOTTLE, M_N };
-static const char *const model_l[M_N] = { "OCARINA", "FLUTE", "PAN PIPE", "SHAKUHACHI", "CLARINET", "WHISTLE", "BOTTLE" };
+enum { M_OCARINA, M_FLUTE, M_PANPIPE, M_SHAKU, M_CLARINET, M_WHISTLE, M_BOTTLE, M_TRUMPET, M_TROMBONE, M_DIDGE, M_GUITAR, M_LEAD, M_CHOIR, M_N };
+static const char *const model_l[M_N] = { "OCARINA", "FLUTE", "PAN PIPE", "SHAKUHACHI", "CLARINET", "WHISTLE", "BOTTLE",
+                                          "TRUMPET", "TROMBONE", "DIDGERIDOO", "GUITAR", "SYNTH LEAD", "CHOIR" };
 // the scales: the link's six (MAJOR, MINOR, DORIAN, MIXOLYDIAN, PHRYGIAN, HARM MINOR, numbered as SING does) and HUFF's own
 enum { SC_MAJPENTA, SC_MINPENTA, SC_MAJOR, SC_MINOR, SC_DORIAN, SC_MIXO, SC_HIJAZ, SC_BLUES, SC_INSEN, SC_CHROMATIC, SC_PHRYGIAN, SC_HARMMIN, SC_N };
 static const char *const scale_l[SC_N] = { "MAJ PENTA", "MIN PENTA", "MAJOR", "MINOR", "DORIAN", "MIXOLYDIAN", "HIJAZ", "BLUES", "IN SEN", "CHROMATIC", "PHRYGIAN", "HARM MINOR" };
@@ -77,11 +94,11 @@ static const param_t params[P_N] = {
     [P_MODEL]  = { "MODEL", "modl", G_PLAY, PK_ENUM, 0, 0, M_N - 1, 1, M_OCARINA, "", model_l, "WHAT YOU ARE BLOWING INTO" },
     [P_SCALE]  = { "SCALE", "scal", G_PLAY, PK_ENUM, 0, 0, SC_N - 1, 1, 0, "", scale_l, "THE NOTES THE TILT WALKS" },
     [P_KEY]    = { "KEY", "key ", G_PLAY, PK_ENUM, 0, 0, 11, 1, 0, "", key_l, "THE SCALE'S HOME NOTE" },
-    [P_OCT]    = { "OCTAVE", "octv", G_PLAY, PK_NUM, PF_INT | PF_SIGNED, -2, 2, 1, 0, "", NULL, "SHIFT ALL NOTES BY OCTAVES" },
-    [P_NOTES]  = { "NOTES", "nots", G_PLAY, PK_NUM, PF_INT, 3, 15, 1, 10, "", NULL, "NOTES ON THE TILT LADDER" },
+    [P_OCT]    = { "OCTAVE", "octv", G_PLAY, PK_NUM, PF_INT | PF_SIGNED, -4, 2, 1, 0, "", NULL, "SHIFT ALL NOTES BY OCTAVES" },
+    [P_NOTES]  = { "NOTES", "nots", G_PLAY, PK_NUM, PF_INT, 3, 24, 1, 10, "", NULL, "NOTES ON THE TILT LADDER" },
     [P_SOURCE] = { "PITCH FROM", "psrc", G_PITCH, PK_ENUM, 0, 0, 2, 1, 0, "", source_l, "WHAT CHOOSES THE NOTE" },
     [P_SNAP]   = { "SNAP", "snap", G_PITCH, PK_ENUM, 0, 0, 1, 1, 1, "", onoff_l, "OFF: SLIDE BETWEEN NOTES" },
-    [P_SPAN]   = { "TILT SPAN", "span", G_PITCH, PK_NUM, PF_INT, 30, 120, 5, 70, "deg", NULL, "DEGREES FROM LOW TO HIGH" },
+    [P_SPAN]   = { "TILT SPAN", "span", G_PITCH, PK_NUM, PF_INT, 30, 180, 5, 70, "deg", NULL, "DEGREES FROM LOW TO HIGH" },
     [P_GLIDE]  = { "GLIDE", "glid", G_PITCH, PK_NUM, PF_LOG, 0.002f, 1.0f, 1.25f, 0.025f, "s", NULL, "TIME TO SLIDE TO A NOTE" },
     [P_BENDR]  = { "BEND RANGE", "bndr", G_PITCH, PK_NUM, PF_INT, 1, 12, 1, 2, "st", NULL, "HOW FAR THE STICK BENDS" },
     [P_LEAN]   = { "LEAN DOES", "lean", G_PITCH, PK_ENUM, 0, 0, 2, 1, 0, "", lean_l, "SIDE TO SIDE TILT" },
@@ -89,7 +106,7 @@ static const param_t params[P_N] = {
     [P_TUNE]   = { "A4 TUNING", "tune", G_PITCH, PK_NUM, PF_INT, 415, 466, 1, 440, "Hz", NULL, "TUNE TO OTHER PLAYERS" },
     [P_SENSE]  = { "SENSITIVITY", "sens", G_BREATH, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "MORE: SOFT BREATH, LOUD" },
     [P_CURVE]  = { "CURVE", "curv", G_BREATH, PK_ENUM, 0, 0, 2, 1, 1, "", curve_l, "HOW BREATH MAPS TO LEVEL" },
-    [P_GATE]   = { "GATE", "gate", G_BREATH, PK_NUM, PF_INT, 0, 100, 5, 25, "%", NULL, "MORE: IGNORE THE ROOM" },
+    [P_GATE]   = { "GATE", "gate", G_BREATH, PK_NUM, PF_INT, 0, 100, 5, 40, "%", NULL, "MORE: IGNORE THE ROOM" },
     [P_OVER]   = { "OVERBLOW AT", "ovbl", G_BREATH, PK_NUM, PF_INT, 50, 100, 5, 85, "%", NULL, "JUMP UP HERE. 100: NEVER" },
     [P_BPITCH] = { "BREATH PITCH", "bpch", G_BREATH, PK_NUM, PF_INT, 0, 50, 2, 12, "ct", NULL, "HARD BREATH GOES SHARP" },
     [P_BSETUP] = { "BREATH SETUP", "bset", G_BREATH, PK_ACT, PF_NOCC, 0, 0, 0, 0, "", NULL, "IT LEARNS YOUR BREATH" },
@@ -107,13 +124,16 @@ static const param_t params[P_N] = {
     [P_ECHO]   = { "ECHO", "echo", G_SPACE, PK_NUM, PF_INT, 0, 100, 5, 0, "%", NULL, "A CANYON BEHIND YOU" },
     [P_ETIME]  = { "ECHO TIME", "etim", G_SPACE, PK_NUM, 0, 0.05f, 0.6f, 0.01f, 0.33f, "s", NULL, "TIME BETWEEN REPEATS" },
     [P_EFB]    = { "REPEATS", "efb ", G_SPACE, PK_NUM, PF_INT, 0, 90, 5, 35, "%", NULL, "HOW LONG THE ECHO LASTS" },
-    [P_BRANGE] = { "BREATH RANGE", "brng", G_BREATH, PK_NUM, PF_HIDE | PF_SYS | PF_NOCC | PF_LOG, 0.01f, 1.0f, 1.1f, 0.14f, "", NULL, "SET BY BREATH SETUP" },
+    [P_BRANGE] = { "BREATH RANGE", "brng", G_BREATH, PK_NUM, PF_HIDE | PF_SYS | PF_NOCC | PF_LOG, 0.01f, 4.0f, 1.1f, 1.0f, "", NULL, "SET BY BREATH SETUP" },
     [P_ESYNC]  = { "ECHO BEATS", "esyn", G_SPACE, PK_ENUM, 0, 0, 5, 1, 0, "", esync_l, "ON THE FLOCK'S BEAT" },
     [P_TEMPO]  = { "TEMPO", "stmp", G_SONG, PK_NUM, PF_INT | PF_SYS, 40, 180, 1, 100, "bpm", NULL, "SHARED WITH THE FLOCK" },
     [P_LINK]   = { "LINK", "nlnk", G_LINK, PK_ENUM, SYS, 0, 1, 1, 1, "", onoff_l, "SYNC WITH BOARDS NEARBY" },
     [P_GROUP]  = { "GROUP", "ngrp", G_LINK, PK_NUM, SYS | PF_INT, 1, 8, 1, 1, "", NULL, "SAME GROUP: THEY SYNC" },
     [P_RANGE]  = { "RANGE", "npow", G_LINK, PK_ENUM, SYS, 0, 2, 1, 1, "", range_l, "HOW FAR THE RADIO REACHES" },
     [P_PEERS]  = { "WHO IS THERE", "nwho", G_LINK, PK_ACT, PF_NOCC, 0, 0, 0, 0, "", NULL, "THE BOARDS LINKED NOW" },
+    [P_DRIVE]  = { "DRIVE", "driv", G_TONE, PK_NUM, PF_INT, 0, 100, 5, 0, "%", NULL, "THE AMP: CLEAN TO FUZZ" },
+    [P_NOISE]  = { "ROOM NOISE", "nois", G_BREATH, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "MORE: ONLY WIND COUNTS" },
+    [P_BWIND]  = { "BREATH BANDS", "bwnd", G_BREATH, PK_NUM, PF_HIDE | PF_SYS | PF_NOCC | PF_LOG, 0.3f, 20.0f, 1.1f, 0.6f, "", NULL, "SET BY BREATH SETUP" },
 };
 
 // ---------------------------------------------------------------- the sounds
@@ -132,12 +152,23 @@ static const preset_t presets[] = {
     { "THEREMIN",      "modl=1 snap=0 nots=12 span=80 vibd=45 vibr=6 glid=0.08 air=10 chif=0 rvb=45" },
     { "HUM ALONG",     "modl=0 psrc=2 scal=0 rvb=35 glid=0.04" },
     { "BLUES REED",    "modl=4 scal=7 key=7 octv=-1 bndr=3 vibd=10 rvb=30 echo=20 etim=0.25" },
+    { "GUITAR SOLO",   "modl=10 scal=1 key=9 octv=-1 driv=70 lean=1 bndr=2 vibd=12 vdly=0.25 rvb=25 echo=25 etim=0.3 efb=30 brit=55" },
+    { "CLEAN GUITAR",  "modl=10 scal=2 octv=-1 driv=0 lean=1 bndr=2 vibd=0 rvb=35 rsiz=50 brit=45" },
+    { "POWER CHORD",   "modl=10 scal=1 key=4 octv=-2 driv=95 harm=2 hlvl=90 lean=1 bndr=2 vibd=0 rvb=20 brit=50 nots=8" },
+    { "SYNTH SOLO",    "modl=11 scal=1 key=2 octv=-1 driv=25 lean=1 bndr=2 vibd=20 vdly=0.2 glid=0.04 echo=30 etim=0.38 efb=40 rvb=30 brit=55" },
+    { "ACID LEAD",     "modl=11 scal=7 key=9 octv=-2 driv=45 brit=75 glid=0.06 snap=0 nots=12 echo=20 etim=0.19 rvb=15" },
+    { "TRUMPET",       "modl=7 scal=2 key=10 octv=-1 air=15 chif=25 vibd=12 vdly=0.4 rvb=30 rsiz=60 brit=55" },
+    { "TROMBONE",      "modl=8 scal=2 key=10 octv=-1 air=15 chif=15 vibd=8 vdly=0.5 rvb=35 rsiz=70 brit=40 snap=0 glid=0.06 nots=8" },
+    { "DIDGERIDOO",    "modl=9 scal=9 key=2 nots=3 air=60 chif=0 vibd=0 rvb=45 rsiz=80 damp=50 brit=50 lean=2" },
+    { "CHOIR",         "modl=12 scal=2 rvb=65 rsiz=85 damp=55 vibd=10 vdly=0.5 harm=1 hlvl=55 air=20 chif=0" },
+    { "DEEP CHOIR",    "modl=12 scal=3 key=2 octv=-2 rvb=70 rsiz=95 damp=60 vibd=6 vdly=0.8 harm=5 hlvl=60 air=20 chif=0 nots=8" },
 };
 #define N_PRESETS ((int)(sizeof presets / sizeof presets[0]))
 
 enum { L_BLOW = LEARN_INST, L_OVERBLOW, L_SETUP };
 static const hint_t hints[] = {
     { "BLOW GENTLY AT THE MIC", L_BLOW },
+    { "TOO EASY, OR DEAF? MENU: BREATH SETUP", L_SETUP },
     { "TILT TO CHANGE THE NOTE", LEARN_TILT },
     { "BLOW SOFT, THEN HARDER: IT FOLLOWS", L_OVERBLOW },
     { "TURN THE KNOB: NEW SOUND", LEARN_TURN },
@@ -148,29 +179,52 @@ static const hint_t hints[] = {
 };
 
 // ---------------------------------------------------------------- the models
-enum { E_VESSEL, E_JET, E_REED };
+enum { E_VESSEL, E_JET, E_REED, E_BRASS, E_STRING, E_SYNTH, E_VOICE };
 typedef struct {
     uint8_t eng;
     int8_t  shift;          // semitones above the ladder (whistle +12, bottle -12)
     float   noise;          // breath noise in the pressure (jet, reed); the air level (vessel)
     float   pole;           // jet: the bore end's low pass; higher is darker
-    float   tune_a, tune_k; // jet, reed: how sharp the loop plays at MIDI 76 (cents) and per semitone above it
-                            // (measured in tools/sim, HUFF_CAL=1, at a normal breath); taken off the bore delay
+    float   tune_a, tune_k; // jet, reed, brass, string: how sharp the loop plays at MIDI 76 (cents) and per semitone above
+                            // it (measured in tools/sim, HUFF_CAL=1, at a normal breath); taken off the bore delay
     float   jet_hi;         // jet: overblown jet length (0.45 of the bore normally)
     float   ob_st;          // overblow in semitones: 12 (octave, jet: the jet does it), 19.02 (twelfth), 0 none
     float   h2, h3, q;      // vessel: overtones, the air resonance's Q
     float   gain;           // level: about -18 dBFS rms at a normal breath
     float   tone;           // tone filter, in harmonics, at BRIGHTNESS 50 %
     float   chiff_f;        // chiff band, in harmonics
+    const float *tune_tab;  // or, when the error is no line: cents sharp at MIDI 24, 28, .. 96 (19), interpolated
 } model_t;
+#define TUNE_N 19
+static float tune_cents(const model_t *md, float m)              // block rate
+{
+    if (!md->tune_tab) return md->tune_a + md->tune_k * (m - 76.0f);
+    float o = clampf((m - 24.0f) / 4.0f, 0.0f, (float)(TUNE_N - 1) - 0.001f);
+    int i = (int)o; float fr = o - (float)i;
+    return md->tune_tab[i] + fr * (md->tune_tab[i + 1] - md->tune_tab[i]);
+}
+// measured with HUFF_CAL=1 at a normal breath (2026-10-22): cents sharp at MIDI 24, 28, .. 96, taken off the model's
+// frequency. Where a model does not speak (the jets under about 100 Hz, the brass under 60) the last good value holds.
+static const float tune_flute[TUNE_N]   = { -2.9f, -4.7f, 114.8f, 92.1f, 71.4f, 57.9f, 55.1f, 50.5f, 46.1f, 43.4f, 40.2f, 36.2f, 33.5f, 29.7f, 24.8f, 20.3f, 17.1f, 13.1f, 13.1f };
+static const float tune_pan[TUNE_N]     = { 101.3f, 1.3f, 117.2f, 87.5f, 72.4f, 57.7f, 52.4f, 47, 41.2f, 37.7f, 32.4f, 27.2f, 21.8f, 14.8f, 5.9f, -1.2f, -9.9f, -14.5f, -14.5f };
+static const float tune_shaku[TUNE_N]   = { -5.5f, -5.5f, -0.2f, 2.6f, 75.4f, 56.3f, 53.9f, 49.1f, 43.9f, 41, 36.7f, 32.5f, 29, 23.7f, 16.5f, 10.7f, 5.2f, -1, -1 };
+static const float tune_whistle[TUNE_N] = { 43.9f, 43.9f, 43.9f, 91.3f, 71.2f, 58.7f, 57.3f, 53.3f, 49.4f, 47.7f, 45.6f, 42.9f, 42.3f, 40.5f, 38.6f, 37.4f, 36.8f, 36.7f, 36.7f };
+static const float tune_brass[TUNE_N]   = { 145.8f, 102.2f, 69.8f, 58.5f, 52.9f, 45, 39.9f, 32, 27.7f, 24.1f, 20.8f, 19.2f, 19.5f, 19.4f, 19.1f, 20.3f, 16.9f, 9.8f, 2 };
+static const float tune_string[TUNE_N]  = { -21, -16.4f, -13.9f, -10.5f, -7.9f, -7.1f, -5, -3.8f, -4.4f, -3.1f, -2.2f, -3.2f, -2.5f, -2.9f, -2.9f, -2.9f, -2.9f, -2.9f, -2.9f };
 static const model_t models[M_N] = {
-    [M_OCARINA]  = { E_VESSEL, 0,   0.30f, 0,     0,     0,      0,     0,      0.10f, 0.035f, 7.0f,  0.56f, 5.0f, 3.0f },
-    [M_FLUTE]    = { E_JET,    0,   0.12f, 0.63f, 28.5f, -0.96f, 0.22f, 12.0f,  0, 0, 0,             0.17f, 8.0f, 4.0f },
-    [M_PANPIPE]  = { E_JET,    0,   0.24f, 0.70f, 14.5f, -1.67f, 0.22f, 12.0f,  0, 0, 0,             0.17f, 5.0f, 3.0f },
-    [M_SHAKU]    = { E_JET,    0,   0.30f, 0.66f, 22.6f, -1.32f, 0.22f, 12.0f,  0, 0, 0,             0.17f, 6.0f, 2.5f },
-    [M_CLARINET] = { E_REED,   0,   0.12f, 0,     0,     0,      0,     19.02f, 0, 0, 0,             0.36f, 9.0f, 5.0f },
-    [M_WHISTLE]  = { E_JET,    12,  0.06f, 0.55f, 39.7f, -0.08f, 0.22f, 12.0f, 0, 0, 0,             0.16f, 10.0f, 5.0f },
-    [M_BOTTLE]   = { E_VESSEL, -12, 0.75f, 0,     0,     0,      0,     0,      0.02f, 0.01f, 22.0f, 0.8f, 3.0f, 2.0f },
+    [M_OCARINA]  = { E_VESSEL, 0,   0.30f, 0,     0,     0,      0,     0,      0.10f, 0.035f, 7.0f,  0.56f, 5.0f, 3.0f, NULL },
+    [M_FLUTE]    = { E_JET,    0,   0.12f, 0.63f, 0,     0,      0.22f, 12.0f,  0, 0, 0,             0.17f, 8.0f, 4.0f, tune_flute },
+    [M_PANPIPE]  = { E_JET,    0,   0.24f, 0.70f, 0,     0,      0.22f, 12.0f,  0, 0, 0,             0.17f, 5.0f, 3.0f, tune_pan },
+    [M_SHAKU]    = { E_JET,    0,   0.30f, 0.66f, 0,     0,      0.22f, 12.0f,  0, 0, 0,             0.17f, 6.0f, 2.5f, tune_shaku },
+    [M_CLARINET] = { E_REED,   0,   0.12f, 0,     0,     0,      0,     19.02f, 0, 0, 0,             0.36f, 9.0f, 5.0f, NULL },
+    [M_WHISTLE]  = { E_JET,    12,  0.06f, 0.55f, 0,     0,      0.22f, 12.0f, 0, 0, 0,             0.16f, 10.0f, 5.0f, tune_whistle },
+    [M_BOTTLE]   = { E_VESSEL, -12, 0.75f, 0,     0,     0,      0,     0,      0.02f, 0.01f, 22.0f, 0.8f, 3.0f, 2.0f, NULL },
+    [M_TRUMPET]  = { E_BRASS,  0,   0.05f, 0,     0,     0,      0,     12.0f,  0, 0, 0,             1.3f,  9.0f, 4.0f, tune_brass },
+    [M_TROMBONE] = { E_BRASS,  -12, 0.05f, 0,     0,     0,      0,     12.0f,  0, 0, 0,             1.3f,  6.0f, 3.0f, tune_brass },
+    [M_DIDGE]    = { E_BRASS,  -36, 0.10f, 0,     0,     0,      0,     0,      0, 0, 4.0f,          2.0f,  12.0f, 2.0f, tune_brass },
+    [M_GUITAR]   = { E_STRING, -12, 0,     0.5f,  0,     0,      0,     0,      0, 0, 0,             0.8f,  6.0f, 2.0f, tune_string },
+    [M_LEAD]     = { E_SYNTH,  0,   0,     0,     0,     0,      0,     12.0f,  0, 0, 2.5f,          0.20f, 12.0f, 3.0f, NULL },
+    [M_CHOIR]    = { E_VOICE,  -12, 0.12f, 0,     0,     0,      0,     0,      0, 0, 0,             0.7f,  8.0f, 2.0f, NULL },
 };
 
 // ---------------------------------------------------------------- shared between the UI and the audio task
@@ -180,11 +234,15 @@ static volatile float a_vib;                             // vibrato depth now, s
 static volatile float a_bright_add;                      // brightness from the joystick, -0.5..0.5
 static volatile int   a_harm_on;                         // the harmony voice sounds
 static volatile int   a_mute;                            // breath setup listens with the voice off
+static volatile int   a_hum;                             // PITCH FROM HUMMING: a voice at the mic is the point, not noise
 static volatile float a_cc_breath;                       // MIDI CC 2 in, 0..1 (decays when it stops)
 static volatile int   a_onset_req;                       // the UI saw a new note while blowing: a small chiff
 static volatile uint32_t a_fpb = 19200;                  // the flock's frames per beat (the echo's beats)
 // audio -> UI
-static volatile float v_breath, v_amp, v_benv, v_floor, v_oenv;
+static volatile float v_breath, v_amp, v_benv, v_floor, v_oenv, v_menv;
+static volatile int   v_open;                            // the breath gate is open
+static volatile float v_mclean, v_thr, v_r266, v_r200;   // ... and what it saw (logged by tick() for tuning on a board)
+static volatile int   v_windy, v_tonal, v_loud;
 static float v_lvl;
 float huff_breath(void) { return v_breath; }      // for tools/sim
 
@@ -192,14 +250,18 @@ static volatile int   v_over;
 static volatile uint32_t v_onsets;
 
 // ---------------------------------------------------------------- the audio side
-#define BORE_N 1024
+#define BORE_N 4096            // the brass bore is two periods long: 15.6 Hz at the bottom
 typedef struct {
     float bore_buf[BORE_N], jet_buf[512];
     dline_t bore, jet;
     float bore_last, refl_lp, jet_s, reed_z;
     dcb_t dcb;
-    float ph;                  // vessel oscillator
-    svf_t air_bp, chiff_bp;
+    float ph, ph2, ph3;        // vessel oscillator; the synth's second saw and its sub octave
+    float lip_y1, lip_y2;      // brass: the lip's resonance
+    float str_k, str_d, str_g; // string: the loss filter's coefficient, the delay it adds, the loop gain that holds the note (block rate)
+    float tune_f;              // the model's tuning error at this note, as a factor on the frequency (block rate)
+    float glot;                // voice: the glottal pulse's rounding
+    svf_t air_bp, chiff_bp, f3;
     float m_s;                 // smoothed note, MIDI
     float ob_s;                // smoothed overblow (semitones, reed)
     float press_s, amp_s, dyn, tone_z, tone_z2;
@@ -214,9 +276,15 @@ static float  duck = 1.0f;     // the model switch: down to 0, swap, back to 1
 static float  harm_g;          // the harmony voice's level, ramped
 static uint32_t seed = 0x2b8e1d33u;
 // breath
-static float benv, bms, bfloor = 0.01f, b_s, b_smooth, ms_k;
+static float benv, bms, bfloor = 0.01f, b_s, b_raw_s, b_smooth, ms_k;   // b_raw_s: the last block's breath before the setup's mute
 static biquad_t out_hp;
 static float blp[4], olp[4], oenv, lp_k;         // breath lives low: the mic and our own output, four poles at 250 Hz
+static float mlp1[3], mlp2, mms, menv, mk1, mk2; // the mic's middle (500 Hz to 4 kHz, the high pass three poles steep so the
+                                                 // breath's rumble does not leak into it): words and music live there, wind does not
+static float mfloor = 0.001f;                    // the room's middle, learned as the low band's floor is
+static bool  bopen; static int open_n, close_n, unwind_n, cool_n, voice_n; static float open_pk;   // the breath gate
+static float lring[512]; static uint32_t lw; static float ac200, ac266;   // the low band's autocorrelation at two lags: a tone or not
+static float drive_s, cab_z, cab_k;              // the amp
 static int   over;
 static float b_slow;
 static float vib_ph;
@@ -256,7 +324,8 @@ static void voice_reset(voice_t *v)
     v->jet = (dline_t){ v->jet_buf, 511, 0 };
     v->bore_last = v->refl_lp = v->reed_z = 0; v->dcb = (dcb_t){ 0, 0 };
     v->jet_s = 0.45f; v->press_s = v->amp_s = v->dyn = 0; v->tone_z = v->tone_z2 = 0; v->chiff = 0;
-    v->air_bp = (svf_t){ 0 }; v->chiff_bp = (svf_t){ 0 };
+    v->air_bp = (svf_t){ 0 }; v->chiff_bp = (svf_t){ 0 }; v->f3 = (svf_t){ 0 };
+    v->ph2 = v->ph3 = 0; v->lip_y1 = v->lip_y2 = 0; v->glot = 0; v->str_k = 0.6f; v->str_d = 0.67f; v->str_g = 1.0f; v->tune_f = 1.0f;
     v->ob_s = 0; v->fold = false; v->awake = false; v->quiet = 0;
 }
 
@@ -277,7 +346,7 @@ static inline float voice_run(voice_t *v, const model_t *md, float m, float b, i
         float pressure = v->press_s * (1.0f + (md->noise * (0.4f + air) + 0.6f * v->chiff) * noise);
         v->refl_lp = (1.0f - md->pole) * v->bore_last + md->pole * v->refl_lp;
         float temp = dcb_run(&v->dcb, v->refl_lp);
-        float fc = f * fast_exp2(-(md->tune_a + md->tune_k * (m - 76.0f)) * (1.0f / 1200.0f));
+        float fc = f * v->tune_f;
         float bd = clampf((float)AUDIO_SR / fc - 1.5f, 4.0f, (float)(BORE_N - 4));
         float jd = bd * v->jet_s;
         float jo = dline_read(&v->jet, jd > 1.0f ? jd : 1.0f);
@@ -301,13 +370,88 @@ static inline float voice_run(voice_t *v, const model_t *md, float m, float b, i
         float fl = 0.5f * (last + v->reed_z); v->reed_z = last;    // the one-zero loss filter
         float pd = -0.95f * fl - breath;
         float in = breath + pd * reed_table(pd);
-        float bd = clampf(0.5f * (float)AUDIO_SR / f - 1.5f, 2.0f, (float)(BORE_N - 4));
+        float bd = clampf(0.5f * (float)AUDIO_SR / (f * v->tune_f) - 1.5f, 2.0f, (float)(BORE_N - 4));
         float bo = dline_read(&v->bore, bd);
         dline_write(&v->bore, in);
         v->bore_last = flush_denormal(bo);
         v->dyn += 0.003f * ((b > 0.02f ? 0.3f + 0.7f * b : 0.0f) - v->dyn);     // the reed's own dynamics are small
         y = bo * v->dyn;
         v->amp_s = v->dyn;
+        break;
+    }
+    case E_BRASS: {
+        // STK's Brass: the lip is a two-pole resonance at the note, blown against the bore's pressure; the bore is two
+        // periods long, so its modes are the note's harmonics and the lip picks one. Blown hard the lip tightens an
+        // octave (ob_s) and the note jumps. The didgeridoo (q > 0) adds a vocal formant the breath opens.
+        float p_t = b > 0.02f ? 0.55f + 0.45f * b : 0.0f;
+        v->press_s += 0.004f * (p_t - v->press_s);
+        v->ob_s += 0.003f * ((ob ? md->ob_st : 0.0f) - v->ob_s);
+        float fc = f * v->tune_f;
+        float fl = fc * fast_exp2(v->ob_s * (1.0f / 12.0f));
+        float breath = v->press_s * (1.0f + (md->noise * (0.4f + air) + 0.3f * v->chiff) * noise);
+        float mouth = 0.3f * breath, borep = 0.85f * v->bore_last;
+        float d = mouth - borep;
+        float w = fl * (1.0f / (float)AUDIO_SR);
+        float r = 1.0f - 0.3927f * w;                                        // radius: a Q of 8 on every note (bandwidth f / 8)
+        float c1 = 2.0f * r * sin_turns(w + 0.25f), c2 = -r * r;            // the gain set so the lip's rest opening is the
+        float ly = 3.0f * (1.0f - c1 - c2) * d + c1 * v->lip_y1 + c2 * v->lip_y2;   // same on every note
+        v->lip_y2 = v->lip_y1; v->lip_y1 = flush_denormal(ly);
+        float dd = ly * ly; if (dd > 1.0f) dd = 1.0f;
+        float pin = dd * mouth + (1.0f - dd) * borep;
+        float bd = clampf(2.0f * (float)AUDIO_SR / fc + 3.0f, 4.0f, (float)(BORE_N - 4));
+        float bo = dline_read(&v->bore, bd);
+        dline_write(&v->bore, dcb_run(&v->dcb, pin));
+        v->bore_last = flush_denormal(bo);
+        v->dyn += 0.003f * ((b > 0.02f ? 0.3f + 0.7f * b : 0.0f) - v->dyn);
+        y = bo * v->dyn;
+        if (md->q > 0.0f) y = 0.5f * y + 1.6f * svf_bp(&v->air_bp, y, NULL);
+        v->amp_s = v->dyn;
+        break;
+    }
+    case E_STRING: {
+        // a string: one period of delay with a loss filter, plucked when a note starts (the chiff is the pick), fed a
+        // little noise while the breath lasts and clipped softly in the loop, so a held note swells and sings as on a
+        // sustainer. No breath: it rings out like a guitar.
+        v->press_s += (b > v->press_s ? 0.002f : 0.0007f) * (b - v->press_s);
+        float fc = f * v->tune_f;
+        float bd = clampf((float)AUDIO_SR / fc - v->str_d, 2.0f, (float)(BORE_N - 4));
+        float so = dline_read(&v->bore, bd);
+        v->refl_lp += v->str_k * (so - v->refl_lp);
+        float g = v->str_g;
+        float exc = v->chiff * (1.5f + 2.0f * b) * noise + v->press_s * v->press_s * 0.12f * svf_bp(&v->air_bp, noise, NULL);   // the sustainer feeds the note
+        float x = 0.5f * soft_tanh(2.0f * (v->refl_lp * g + exc));          // the loop's ceiling: 0.5
+        float dcy = x - v->dcb.x1 + 0.9995f * v->dcb.y1; v->dcb.x1 = x; v->dcb.y1 = flush_denormal(dcy);   // no DC in the loop (with a
+        dline_write(&v->bore, dcy);                                          // gain over 1 it fills with it); a gentle one: its phase lead shortens the loop
+        v->bore_last = flush_denormal(so);
+        v->refl_lp = flush_denormal(v->refl_lp);
+        v->chiff *= 0.994f;                                          // the pick is short
+        v->dyn += 0.01f * (fabsf(so) - v->dyn);
+        y = so * (0.6f + 0.4f * v->press_s);
+        v->amp_s = v->dyn;
+        break;
+    }
+    case E_SYNTH: {
+        // a lead: two saws a little apart and a square an octave down, through a resonant low pass the breath opens
+        v->press_s += (b > v->press_s ? 0.004f : 0.002f) * (b - v->press_s);
+        v->ob_s += 0.003f * ((ob ? md->ob_st : 0.0f) - v->ob_s);
+        float fs = f * fast_exp2(v->ob_s * (1.0f / 12.0f));
+        float dt = fs * (1.0f / (float)AUDIO_SR), dt2 = dt * 1.006f, dts = 0.5f * dt;
+        v->ph = wrap1(v->ph + dt); v->ph2 = wrap1(v->ph2 + dt2); v->ph3 = wrap1(v->ph3 + dts);
+        float x = 0.5f * (saw_blep(v->ph, dt) + saw_blep(v->ph2, dt2)) + 0.25f * square_blep(v->ph3, dts);
+        y = svf_lp(&v->air_bp, x) * v->press_s;
+        v->amp_s = v->press_s;
+        break;
+    }
+    case E_VOICE: {
+        // a voice: a rounded glottal pulse, a little breath, through three formants (set at block rate: OO to AH)
+        v->press_s += (b > v->press_s ? 0.0025f : 0.0015f) * (b - v->press_s);
+        float dt = f * (1.0f / (float)AUDIO_SR);
+        v->ph = wrap1(v->ph + dt);
+        v->glot += 0.25f * (saw_blep(v->ph, dt) - v->glot);
+        float src = v->glot + md->noise * (0.5f + air) * noise;
+        float y1 = svf_bp(&v->air_bp, src, NULL), y2 = svf_bp(&v->chiff_bp, src, NULL), y3 = svf_bp(&v->f3, src, NULL);
+        y = (y1 + 0.6f * y2 + 0.3f * y3 + 0.15f * v->glot) * v->press_s;
+        v->amp_s = v->press_s;
         break;
     }
     default: {                                                       // vessel
@@ -369,20 +513,76 @@ static void audio(const float *in, float *out, int n)
         float x = in[i];
         for (int j = 0; j < 4; j++) { blp[j] += lp_k * (x - blp[j]); x = blp[j]; }
         bms += ms_k * (x * x - bms);
+        lring[lw & 511] = x;                                        // half a period of 60 Hz and of 80 Hz back: a kick's thump
+        ac266 += ms_k * (x * lring[(lw - 266) & 511] - ac266);      // or a bass note correlates negatively there, a breath's
+        ac200 += ms_k * (x * lring[(lw - 200) & 511] - ac200);      // rumble not at all
+        lw++;
+        float h = in[i];
+        for (int j = 0; j < 3; j++) { mlp1[j] += mk1 * (h - mlp1[j]); h -= mlp1[j]; }   // the middle: 500 Hz (three poles) to 4 kHz
+        mlp2 += mk2 * (h - mlp2);
+        mms += ms_k * (mlp2 * mlp2 - mms);
         ylp1 += 0.33f * (in[i] - ylp1); ylp2 += 0.33f * (ylp1 - ylp2);
         if (++ydec >= 4) { ydec = 0; yring[yw & (YR - 1)] = ylp2; yw++; }
     }
     yring_w = yw;
     for (int j = 0; j < 4; j++) blp[j] = flush_denormal(blp[j]);
+    for (int j = 0; j < 3; j++) mlp1[j] = flush_denormal(mlp1[j]);
+    mlp2 = flush_denormal(mlp2); mms = flush_denormal(mms); ac200 = flush_denormal(ac200); ac266 = flush_denormal(ac266);
     benv = 2.8f * sqrtf(bms);                                     // a 30 ms RMS: steadier than a peak on gusty air
+    menv = 2.8f * sqrtf(mms);
     float gate = pv[P_GATE] * 0.01f;
-    float thr = bfloor * (1.6f + 3.6f * gate) + 0.002f + 1.2f * oenv;     // the speaker's own low band must not count as breath
-    // the room's floor: follows a quieter room at once, a noisier one slowly, and only between breaths, so
-    // a long note does not raise it and fade itself out
-    if (benv < bfloor) bfloor += 0.2f * (benv - bfloor);
-    else if (benv < thr) bfloor += 0.0005f * (benv - bfloor);
+    // the room's own low band comes off in power (subtracted, not just stepped over: a breath over noise keeps its
+    // dynamics), then a threshold over what is left; the speaker's own low band must not count as breath either
+    float over_room = bms * 7.84f - bfloor * bfloor;
+    float bclean = over_room > 0.0f ? sqrtf(over_room) : 0.0f;
+    float thr = bfloor * (1.0f + 3.6f * gate) + 0.002f + 1.2f * oenv;
+    // wind, not words: a breath's low band stands well over its middle (BREATH SETUP learns the ratio, ROOM NOISE sets
+    // how strict), and it keeps coming (a kick's thump peaks and is gone), so the gate opens after a moment and
+    // closes when the breath is gone for 30 ms or has sounded like a voice for 100 ms. HUMMING is a voice: it passes.
+    float nz = pv[P_NOISE] * 0.01f;
     float range = pv[P_BRANGE] * exp2f((50.0f - pv[P_SENSE]) / 25.0f);
-    float b = clampf((benv - thr) / range, 0.0f, 1.0f);
+    bool loud = bclean > thr;
+    // the bands compared are what stands over the room in each (a talker's steady middle is the room's, the breath's own
+    // middle and the syllable on top of it are what counts against its low band). Measured on a board (2026-10-22): a
+    // soft breath's low band is 5 to 20x its middle, a hard one's 1 to 2x (it is broadband at the port), so the band test
+    // is asked only of sounds under half a full breath (a voice never rumbles like a breath at the mouth), and only to
+    // open the gate, never to close it. (A tone test on the low band, for kicks and bass notes, was tried and dropped:
+    // real breath rumble repeats itself half a period later just as well.)
+    float over_mid = mms * 7.84f - mfloor * mfloor;
+    float mclean = over_mid > 0.0f ? sqrtf(over_mid) : 0.0f;
+    float inv = 1.0f / (bms + 1e-9f);
+    bool windy = nz <= 0.001f || a_hum || bclean > 0.4f * range || bclean > (mclean + 0.0005f) * exp2f(2.0f * nz * log2f(pv[P_BWIND]));
+    bool wind_in = windy;
+    // the room's floor: follows a quieter room at once, a noisier one in about 4 s while nothing wind-like is heard
+    // (between breaths, or under words and music), never under a breath, so a held note does not fade itself out.
+    // (A steady rumble with no middle, a bass line alone, passes for a breath and is not learned: ROOM NOISE up, or
+    // BREATH SETUP in a quiet room first, is the answer; learning it slowly under the open gate was tried on 2026-10-22
+    // and ate long notes through the threshold.)
+    // (b_s is the last block's breath: a gate that has been open at under 12 % for seconds is the room, not a breath;
+    // measured on a board 2026-10-22, a room's low band at 0.03..0.05 kept it open at b 0.01..0.1 and the floor at 0.01)
+    bool room_like = bopen && b_raw_s < 0.12f;
+    if (benv < bfloor) bfloor += 0.2f * (benv - bfloor);
+    else if (bclean < thr || room_like) bfloor += 0.0005f * (benv - bfloor);
+    else if (!bopen && !windy) bfloor += 0.0001f * (benv - bfloor);    // 20 s: on a board a hard breath can read as not wind
+    if (menv < mfloor) mfloor += 0.2f * (menv - mfloor);
+    else if (bclean < thr || room_like) mfloor += 0.0005f * (menv - mfloor);
+    else if (!bopen && !windy) mfloor += 0.0001f * (menv - mfloor);
+    int hold = (int)(nz * 20.0f);                                 // blocks: 0..40 ms
+    // a sound that was just a voice (or a kick's click) may not open the gate for a while (0..100 ms by ROOM NOISE):
+    // the thump that follows a click would, after the click has left the middle band's 30 ms window. Silence is not
+    // a voice: the wait only starts from a sound over the threshold that has sounded like one for 6 ms (the first
+    // blocks of a breath that starts at once read as middle: the low band's filters lag a little)
+    if (loud && !wind_in) { if (++voice_n >= 3) cool_n = (int)(nz * 50.0f); } else voice_n = 0;
+    if ((wind_in || !loud) && cool_n > 0) cool_n--;
+    if (!bopen) {
+        if (loud && wind_in && cool_n == 0) { if (bclean > open_pk) open_pk = bclean; if (++open_n > hold && bclean > 0.6f * open_pk) bopen = true; }
+        else { open_n = 0; open_pk = 0; }
+    } else {
+        if (bclean < 0.7f * thr) { if (++close_n >= 15) bopen = false; } else close_n = 0;
+        unwind_n = 0;
+        if (!bopen) { open_n = 0; open_pk = 0; close_n = unwind_n = 0; }
+    }
+    float b = bopen ? clampf((bclean - 0.7f * thr) / range, 0.0f, 1.0f) : 0.0f;
     int cv = (int)pv[P_CURVE];
     if (cv == 0) b = sqrtf(b) * (0.4f + 0.6f * sqrtf(b)); else if (cv == 2) b = b * b;
     // breath on a real mic is gusty: smooth it (about 25 ms up, 60 ms down), or the pressure itself rumbles
@@ -393,6 +593,7 @@ static void audio(const float *in, float *out, int n)
     b = b_smooth;
     float ccb = a_cc_breath;
     if (ccb > b) b = ccb;
+    b_raw_s = b;
     if (a_mute) b = 0;
     // overblowing, with some hysteresis
     float ob_at = pv[P_OVER] * 0.01f;
@@ -424,8 +625,44 @@ static void audio(const float *in, float *out, int n)
     for (int k = 0; k < 2; k++) {
         voice_t *v = &vo[k];
         float f = a4 * exp2f((v->m_s - 69.0f) / 12.0f);
-        svf_set(&v->air_bp, f, md->eng == E_VESSEL ? md->q : 2.0f);
-        svf_set(&v->chiff_bp, f * md->chiff_f, 1.5f);
+        v->tune_f = exp2f(-tune_cents(md, v->m_s + bend_s) / 1200.0f);
+        switch (md->eng) {
+        case E_BRASS:                                                // the didgeridoo's mouth: a formant the breath opens
+            if (md->q > 0.0f) svf_set(&v->air_bp, 350.0f + 1400.0f * b * b, md->q);
+            svf_set(&v->chiff_bp, f * md->chiff_f, 1.5f);
+            break;
+        case E_STRING: {                                             // the loss filter: darker strings lose more; its delay;
+            float k = clampf(0.2f + 0.75f * bright, 0.2f, 0.95f);    // the loop gain: the note rings 1.5 s on its own, and the
+            v->str_k = k; v->str_d = (1.0f - k) / k - 0.1f;          // breath holds its fundamental at exactly 1 (the clip bounds it)
+            svf_set(&v->air_bp, f, 3.0f);                            // the sustainer's band: the note itself
+            float w = TWO_PI * f / (float)AUDIO_SR, cw = cosf(w), hlp = k / sqrtf(1.0f - 2.0f * (1.0f - k) * cw + (1.0f - k) * (1.0f - k));
+            hlp *= sqrtf((2.0f - 2.0f * cw) / (1.0f + 0.9995f * 0.9995f - 2.0f * 0.9995f * cw));   // the loop's DC blocker, at the note
+            v->str_d -= atanf(2.55f / f) / w;                                 // ... and its phase lead, in samples (2.55 Hz corner)
+            float g_nat = 1.0f - clampf(1.0f / (1.5f * f), 0.0005f, 0.05f);
+            // blown, the loop's gain goes over 1 by up to 8 %: the cubic clip in the loop compresses more the louder the
+            // string, so the breath sets where it settles (about 0.26 at full breath), and it gets there in a few periods
+            v->str_g = (g_nat + (1.0f - g_nat) * v->press_s + 0.1f * v->press_s * v->press_s) / hlp;
+            svf_set(&v->chiff_bp, f * md->chiff_f, 1.5f);
+            break;
+        }
+        case E_SYNTH: {                                              // the low pass the breath opens
+            float cut = f * (1.0f + 14.0f * b * sqrtf(b)) * exp2f((bright - 0.5f) * 2.0f);
+            svf_set(&v->air_bp, clampf(cut, 80.0f, 12000.0f), md->q);
+            svf_set(&v->chiff_bp, f * md->chiff_f, 1.5f);
+            break;
+        }
+        case E_VOICE: {                                              // the formants: OO to AH as the breath grows
+            float o = clampf(b * 1.6f, 0.0f, 1.0f);
+            svf_set(&v->air_bp, 300.0f + 400.0f * o, 5.0f);
+            svf_set(&v->chiff_bp, 870.0f + 300.0f * o, 6.0f);
+            svf_set(&v->f3, 2240.0f + 300.0f * o, 6.0f);
+            break;
+        }
+        default:
+            svf_set(&v->air_bp, f, md->eng == E_VESSEL ? md->q : 2.0f);
+            svf_set(&v->chiff_bp, f * md->chiff_f, 1.5f);
+            break;
+        }
         float fb = a4 * exp2f((v->m_s + bend_s - 69.0f) / 12.0f);
         if (md->eng == E_JET) { if (!v->fold && fb > 2000.0f) v->fold = true; else if (v->fold && fb < 1890.0f) v->fold = false; }
         else v->fold = false;
@@ -436,6 +673,7 @@ static void audio(const float *in, float *out, int n)
     float tone_hz = a4 * exp2f((vo[0].m_s - 69.0f) / 12.0f) * md->tone * exp2f((bright - 0.5f) * 3.0f);
     tone_k_s += 0.3f * (onepole_hz(clampf(tone_hz, 300.0f, 14000.0f)) - tone_k_s);
     float tone_k = tone_k_s;
+    float drv = pv[P_DRIVE] * 0.01f;
     // effects
     float size = pv[P_SIZE] * 0.01f, rt = 0.5f + 5.5f * size * size;
     float g_t = exp2f(-3.0f * 3.3219f * 1500.0f / (rt * (float)AUDIO_SR));     // per pass of an average line
@@ -458,7 +696,7 @@ static void audio(const float *in, float *out, int n)
         float kg = 1.0f - powf(1.0f - glide_k, (float)n);
         harm_g += blk_0005 * (hw - harm_g); efb_s += blk_0005 * (efb - efb_s);
         fx_echo_s += blk_0005 * (echo_t - fx_echo_s); fx_rvb_s += blk_0005 * (rvb_t - fx_rvb_s); rv_g_s += blk_0005 * (g_t - rv_g_s);
-        vib_s += blk_0008 * (vib - vib_s); bend_s += blk_0015 * (bend - bend_s);
+        vib_s += blk_0008 * (vib - vib_s); bend_s += blk_0015 * (bend - bend_s); drive_s += blk_0005 * (drv - drive_s);
         vib_ph = wrap1(vib_ph + (float)n * vib_inc);
         vo[0].m_s += kg * (tgt - vo[0].m_s); vo[1].m_s += kg * (tgt_h - vo[1].m_s);
     } else
@@ -488,6 +726,15 @@ static void audio(const float *in, float *out, int n)
         vo[0].tone_z += tone_k * (y - vo[0].tone_z);
         vo[0].tone_z2 += tone_k * (vo[0].tone_z - vo[0].tone_z2);
         y = biquad_run(&out_hp, (0.35f * y + 0.65f * vo[0].tone_z2) * md->gain * duck);   // no rumble, no DC
+        // the amp: a soft clip with up to 41x in front, levelled after, then a cabinet's low pass; faded in by DRIVE
+        drive_s += 0.0005f * (drv - drive_s);
+        if (drive_s > 0.0005f) {
+            float pre = 1.0f + 40.0f * drive_s * drive_s;
+            float o = soft_tanh(y * 3.0f * pre) * (0.2f + 0.8f / pre);
+            cab_z += cab_k * (o - cab_z);
+            o += drive_s * (cab_z - o);
+            y += drive_s * (o - y);
+        }
         float ay = fabsf(y); if (ay > ypk) ypk = ay;
         // effects
         fx_echo_s += 0.0005f * (echo_t - fx_echo_s);
@@ -535,7 +782,7 @@ static void audio(const float *in, float *out, int n)
         bool fed = vo[0].awake || vo[1].awake || echo_awake;
         if (!fed && wpk < 1e-5f) { if (++rvb_quiet >= 32) { rvb_awake = false; rvb_quiet = 0; } } else rvb_quiet = 0;
     }
-    harm_g = flush_denormal(harm_g); vib_s = flush_denormal(vib_s); bend_s = flush_denormal(bend_s);
+    harm_g = flush_denormal(harm_g); vib_s = flush_denormal(vib_s); bend_s = flush_denormal(bend_s); cab_z = flush_denormal(cab_z);
     fx_echo_s = flush_denormal(fx_echo_s); fx_rvb_s = flush_denormal(fx_rvb_s); efb_s = flush_denormal(efb_s);
     bms = flush_denormal(bms); b_smooth = flush_denormal(b_smooth); b_slow = flush_denormal(b_slow);
     // our own low band, as the mic would hear it from the speaker (for the next block's threshold)
@@ -548,14 +795,15 @@ static void audio(const float *in, float *out, int n)
     for (int j = 0; j < 4; j++) olp[j] = flush_denormal(olp[j]);
     oenv = opk > oenv ? opk : oenv * 0.97f;
     (void)pk;
-    v_breath = b; v_benv = benv; v_floor = bfloor; v_over = ob; v_oenv = oenv;
+    v_breath = b; v_benv = benv; v_floor = bfloor; v_over = ob; v_oenv = oenv; v_menv = menv; v_open = bopen;
+    v_mclean = mclean; v_thr = thr; v_r266 = ac266 * inv; v_r200 = ac200 * inv; v_windy = windy; v_tonal = 0; v_loud = loud;
     v_lvl = ypk > v_lvl ? ypk : v_lvl * 0.97f;
     v_amp = clampf(v_lvl / 0.3f, 0.0f, 1.0f);
     v_sleep = (vo[0].awake ? 0 : 1) | (vo[1].awake ? 0 : 2) | (rvb_awake ? 0 : 4) | (echo_awake ? 0 : 8);
 }
 
 // ---------------------------------------------------------------- the UI side
-#define MAXN 15
+#define MAXN 24
 static int   note_midi[MAXN], nnotes, root_i;
 static int   idx = 3;
 static float pos_s;                      // where the tilt is on the ladder, continuous (for the screen)
@@ -568,11 +816,11 @@ static float breath_s, amp_s, cc_breath_t;
 static int   blow_ms, over_was, over_flash;
 static float voice_hz, voice_conf;       // HUMMING: what YIN heard
 static float voice_m = -1;               // ... snapped, held until the voice moves well away
-float huff_dbg(int k) { return k == 0 ? v_benv : k == 1 ? v_floor : k == 2 ? v_oenv : k == 3 ? voice_hz : voice_m; }   // for tools/sim
+float huff_dbg(int k) { return k == 0 ? v_benv : k == 1 ? v_floor : k == 2 ? v_oenv : k == 3 ? voice_hz : k == 4 ? voice_m : k == 5 ? v_menv : k == 6 ? (float)v_open : k == 7 ? vo[0].dyn : k == 8 ? vo[0].str_g : k == 9 ? vo[0].press_s : ac266 / (bms + 1e-9f); }   // for tools/sim
 static int   ytick;
 // breath setup
 static int   setup_step, setup_ms;
-static float setup_quiet, setup_blow, setup_peak;
+static float setup_quiet, setup_blow, setup_peak, setup_wind, setup_qmid;
 static int   setup_n;
 static const char *setup_msg;
 
@@ -696,7 +944,7 @@ static void changed(int p)
 
 static void init(void)
 {
-    ms_k = onepole_s(0.03f); lp_k = onepole_hz(250.0f);
+    ms_k = onepole_s(0.03f); lp_k = onepole_hz(250.0f); mk1 = onepole_hz(500.0f); mk2 = onepole_hz(4000.0f); cab_k = onepole_hz(4500.0f);
     blk_0005 = 1.0f - powf(1.0f - 0.0005f, (float)AUDIO_BLOCK); blk_0008 = 1.0f - powf(1.0f - 0.0008f, (float)AUDIO_BLOCK);
     blk_0015 = 1.0f - powf(1.0f - 0.0015f, (float)AUDIO_BLOCK);
     biquad_set(&out_hp, BQ_HP, 60.0f, 0.707f, 0);
@@ -727,7 +975,7 @@ static void action(int p)
     }
     if (p != P_BSETUP) return;
     menu_leave();
-    setup_step = 1; setup_ms = 0; setup_quiet = setup_blow = setup_peak = 0; setup_n = 0; setup_msg = NULL;
+    setup_step = 1; setup_ms = 0; setup_quiet = setup_blow = setup_peak = setup_wind = setup_qmid = 0; setup_n = 0; setup_msg = NULL;
     a_mute = 1;
 }
 
@@ -736,21 +984,31 @@ static void setup_tick(void)
     setup_ms += 10;
     float e = v_benv;
     if (setup_step == 1) {                                         // 2 s of quiet: the room
-        if (setup_ms > 400) { setup_quiet += e; setup_n++; }
-        if (setup_ms >= 2200) { setup_quiet /= (float)(setup_n ? setup_n : 1); setup_step = 2; setup_ms = 0; setup_n = 0; }
+        if (setup_ms > 400) { setup_quiet += e; setup_qmid += v_menv; setup_n++; }
+        if (setup_ms >= 2200) { setup_quiet /= (float)(setup_n ? setup_n : 1); setup_qmid /= (float)(setup_n ? setup_n : 1); setup_step = 2; setup_ms = 0; setup_n = 0; }
     } else if (setup_step == 2) {                                  // 3 s of a normal breath
-        if (e > setup_quiet * 3.0f + 0.003f) { setup_blow += e; setup_n++; if (e > setup_peak) setup_peak = e; }
+        if (e > setup_quiet * 2.0f + 0.003f) { setup_blow += e; setup_wind += v_menv; setup_n++; if (e > setup_peak) setup_peak = e; }
         if (setup_ms >= 3500) {
             a_mute = 0; setup_step = 0;
             if (setup_n < 60) { toast("DID NOT HEAR YOU: TRY AGAIN", 2000); return; }
-            float normal = setup_blow / (float)setup_n;
-            float thr = setup_quiet * (1.6f + 3.6f * pv[P_GATE] * 0.01f) + 0.002f;
-            float r = (normal - thr) / 0.7f;                            // a normal breath reads about 60 % once it plays (its own sound
-                                                                        // in the mic's low band raises the threshold a little)
-            param_set(P_BRANGE, clampf(r, 0.01f, 1.0f));
+            float normal = setup_blow / (float)setup_n, mid = setup_wind / (float)setup_n;
+            float over = normal * normal - setup_quiet * setup_quiet;  // the breath's own low band: the room's taken off in power
+            float clean = over > 0.0f ? sqrtf(over) : 0.0f;
+            float over_m = mid * mid - setup_qmid * setup_qmid;         // ... and its own middle
+            float clean_m = over_m > 0.0f ? sqrtf(over_m) : 0.0f;
+            float thr = setup_quiet * (1.0f + 3.6f * pv[P_GATE] * 0.01f) + 0.002f;
+            float r = (clean - 0.7f * thr) / 0.6f;                      // a normal breath reads about 60 % once it plays
+            param_set(P_BRANGE, clampf(r, 0.01f, 4.0f));
             param_set(P_SENSE, 50);
+            // the breath's low band over its middle: the gate asks for a third of that ratio (ROOM NOISE 50), so the
+            // breath passes with room to spare (a hard one has far less of a ratio than a normal one) and words and
+            // music, whose middle is their body, do not. Learned only
+            // in a room quiet enough for the breath's own middle to show (the room's taken off in power is too rough
+            // when the room moves); in a noisy one the ratio stays as it was
+            bool quiet_room = setup_qmid < 0.5f * mid;
+            if (quiet_room) param_set(P_BWIND, clampf(0.3f * clean / (clean_m + 0.001f), 0.3f, 20.0f));
             coach_done(L_SETUP);
-            toast("BREATH SET", 1500);
+            toast(quiet_room ? "BREATH SET" : "BREATH SET. NOISY ROOM: BANDS KEPT", 1800);
         }
     }
 }
@@ -833,6 +1091,11 @@ static void tick(const ctl_t *c)
     breath_s += 0.3f * (b - breath_s);
     amp_s += 0.3f * (v_amp - amp_s);
     if (b > 0.05f) ui_awake();
+    // the detector's numbers, four times a second while something is heard (read with sl_midi.py log; for tuning on a board)
+    if (c->ticks % 25 == 0 && (v_loud || v_open || v_benv > 3.0f * v_floor + 0.003f))
+        app_log("breath: low %.4f mid %.4f (over room %.4f, x%.1f) floor %.4f thr %.4f %s%s%s b %.2f",
+                (double)v_benv, (double)v_menv, (double)v_mclean, (double)(v_benv / (v_mclean + 0.0005f)),
+                (double)v_floor, (double)v_thr, v_loud ? "loud " : "", v_windy ? "windy " : "", v_open ? "OPEN" : "shut", (double)b);
     if (b > 0.2f) { if ((blow_ms += 10) > 1000) coach_done(L_BLOW); } else blow_ms = 0;
     if (v_over && !over_was) over_flash = 12;
     if (b > 0.75f) coach_done(L_OVERBLOW);
@@ -842,6 +1105,7 @@ static void tick(const ctl_t *c)
     // ---- where the note comes from
     int src = (int)pv[P_SOURCE];
     if (src == 1 && !c->has_joy) src = 0;
+    a_hum = src == 2;
     float pos;
     if (src == 1) pos = (c->jy * 0.5f + 0.5f) * (float)nnotes - 0.5f;
     else pos = c->has_imu ? (c->lean_y / pv[P_SPAN] + 0.5f) * (float)nnotes - 0.5f : (float)root_i;
@@ -907,7 +1171,7 @@ static void tick(const ctl_t *c)
     a_bright_add = c->has_joy && jy_mode == 1 ? 0.5f * c->jy : 0.0f;
 
     // ---- MIDI out, the LED
-    int note = (int)lroundf(m) + models[(int)pv[P_MODEL]].shift + (v_over ? (pv[P_MODEL] == M_CLARINET ? 19 : 12) : 0);
+    int note = (int)lroundf(m) + models[(int)pv[P_MODEL]].shift + (v_over ? (int)lroundf(models[(int)pv[P_MODEL]].ob_st) : 0);
     midi_out(b, note);
     int pb = 8192 + (int)(clampf(bend / pv[P_BENDR], -1.0f, 1.0f) * 8191.0f);
     if (abs(pb - last_pb) > 64 || (pb == 8192 && last_pb != 8192)) { last_pb = pb; midi_bend(pb); }
@@ -986,31 +1250,169 @@ static void ocarina(int open, float glow)
     }
 }
 
+// ---- the other pictures, one per engine, in the same 58 x 24 corner. frac: where the note sits in the ladder, 0 low
+// to 1 high. Each has a mouth the air streams into and a window the notes come out of (pic_mouth / pic_window).
+static void flute(float frac, float glow)
+{
+    oled_rframe(6, 29, 52, 7, 3);
+    oled_rect(10, 29, 3, 2, true);                                // the embouchure hole
+    if (glow > 0.05f) { int g = 1 + (int)(glow * 3.0f); oled_hline_pat(8, 27 - g, 7, 0x55, true); }
+    int open = (int)lroundf(frac * 6.0f);                         // the holes open from the far end as the note climbs
+    for (int k = 0; k < 6; k++) {
+        int x = 26 + 5 * k;
+        if (5 - k < open) { oled_pixel(x - 1, 32, true); oled_pixel(x + 1, 32, true); oled_pixel(x, 31, true); oled_pixel(x, 33, true); }
+        else oled_rect(x - 1, 31, 3, 3, true);
+    }
+}
+static void panpipes(float frac)
+{
+    static const int8_t top[5] = { 22, 26, 29, 32, 34 };
+    int played = clampi((int)(frac * 4.99f), 0, 4);
+    for (int k = 0; k < 5; k++) {
+        int x = 14 + 9 * k;
+        oled_frame(x, top[k], 6, 45 - top[k]);
+        if (k == played) oled_rect(x + 1, top[k] + 1, 4, 3, true);
+    }
+    oled_rect(12, 40, 49, 1, true); oled_rect(12, 42, 49, 1, true);   // the binding
+}
+static void clarinet(float frac)
+{
+    oled_line(4, 33, 10, 30, true); oled_line(4, 33, 10, 36, true);    // the mouthpiece
+    oled_frame(10, 30, 7, 7); oled_frame(16, 31, 33, 5);                // the barrel, the body
+    oled_line(48, 31, 58, 27, true); oled_line(48, 35, 58, 39, true); oled_line(58, 27, 58, 39, true);   // the bell
+    int open = (int)lroundf(frac * 7.0f);
+    for (int k = 0; k < 7; k++) {
+        int x = 20 + 4 * k;
+        if (6 - k < open) oled_pixel(x, 33, true); else oled_rect(x - 1, 32, 3, 3, true);
+    }
+    oled_rect(22, 29, 3, 1, true); oled_rect(30, 29, 3, 1, true); oled_rect(38, 29, 3, 1, true);   // keys
+}
+static void trumpet(float frac, float amp, bool over)
+{
+    oled_rect(4, 31, 3, 5, true); oled_rect(7, 32, 3, 3, true);         // the mouthpiece
+    oled_rect(10, 32, 31, 2, true);                                     // the lead pipe
+    oled_rframe(14, 33, 27, 8, 3);                                      // the tuning slide below
+    int combo = clampi((int)(frac * 7.99f), 0, 7);                      // the valves: pressed ones sit lower
+    for (int k = 0; k < 3; k++) {
+        int x = 20 + 6 * k, down = (combo >> k) & 1 ? 2 : 0;
+        oled_rect(x, 27 + down, 3, 5 - down, true); oled_rect(x - 1, 25 + down, 5, 2, true);
+    }
+    oled_line(41, 31, 58, 23, true); oled_line(41, 35, 58, 43, true); oled_line(58, 23, 58, 43, true);   // the bell
+    if (over) { oled_line(60, 26, 62, 24, true); oled_line(60, 40, 62, 42, true); oled_rect(60, 33, 3, 1, true); }
+    else if (amp > 0.3f) { oled_pixel(60, 29, true); oled_pixel(60, 37, true); oled_pixel(61, 33, true); }
+}
+static void didgeridoo(float amp, uint32_t frame)
+{
+    oled_line(4, 40, 56, 26, true); oled_line(4, 43, 56, 37, true); oled_line(56, 26, 56, 37, true);
+    oled_line(4, 40, 4, 43, true);
+    for (int k = 1; k < 8; k++) { int x = 4 + 7 * k, yt = 40 - (14 * (x - 4)) / 52, yb = 43 - (6 * (x - 4)) / 52; oled_pixel(x, yt + 2, true); oled_pixel(x, yb - 2, true); if (k & 1) oled_pixel(x, (yt + yb) / 2, true); }
+    if (amp > 0.1f) { int r = 2 + (int)(((frame / 2) % 4)); oled_circle(60, 31, r, true); }   // the drone, rippling out
+}
+static void guitar(float frac, float amp, uint32_t frame)
+{
+    oled_disc(13, 29, 5, true); oled_disc(15, 38, 7, true);               // the body
+    oled_rect(10, 33, 7, 1, false);                                       // the pickup
+    oled_frame(18, 31, 41, 7);                                            // the neck
+    for (int x = 23; x < 58; x += 5) oled_line(x, 32, x, 36, true);       // frets
+    int fx = 55 - (int)lroundf(frac * 33.0f);                             // the fretted spot: high notes near the body
+    for (int k = 0; k < 3; k++) {                                         // three strings, shaking with the sound
+        int y0 = 32 + 2 * k;
+        for (int x = 19; x < 58; x++) {
+            float w = amp > 0.03f ? amp * 1.6f * sin_turns((float)x * 0.06f + (float)frame * 0.37f + (float)k * 0.3f) : 0.0f;
+            int y = y0 + (int)lroundf(w);
+            if (y >= 32 && y <= 36) oled_pixel(x, y, x < fx || (x - 19) % 2 == 0 || k == 1);
+        }
+    }
+    oled_rect(fx - 1, 33, 3, 3, true);
+    oled_rect(58, 30, 3, 9, true);                                        // the head
+}
+static void keyboard(float frac, float b, uint32_t frame)
+{
+    oled_rrect(3, 21, 6, 3, 1, true); oled_line(9, 22, 14, 22, true); oled_line(14, 22, 14, 31, true);   // the breath tube
+    for (int k = 0; k < 8; k++) oled_frame(8 + 6 * k, 32, 7, 13);
+    static const uint8_t black[8] = { 1, 1, 0, 1, 1, 1, 0, 0 };
+    for (int k = 0; k < 8; k++) if (black[k]) oled_rect(12 + 6 * k, 32, 4, 7, true);
+    int key = clampi((int)(frac * 7.99f), 0, 7);
+    oled_rect(9 + 6 * key, 40, 5, 4, true);                               // the pressed key
+    for (int x = 16; x < 58; x++) {                                       // the wave above: the filter opens with the breath
+        float y = 26.0f + 3.5f * b * sin_turns((float)x * (0.04f + 0.08f * b) + (float)frame * 0.11f);
+        oled_pixel(x, (int)lroundf(y), true);
+    }
+}
+static void face(float b, float amp, bool choir, uint32_t frame)
+{
+    if (choir) { oled_circle(42, 31, 8, true); oled_pixel(39, 29, true); oled_pixel(45, 29, true); oled_rrect(39, 34, 7, 1 + (int)(b * 4.0f), 1, true); }
+    oled_circle(22, 32, 10, true);
+    bool blink = frame % 90 < 3;
+    if (blink) { oled_rect(17, 29, 3, 1, true); oled_rect(25, 29, 3, 1, true); } else { oled_rect(18, 28, 2, 2, true); oled_rect(26, 28, 2, 2, true); }
+    oled_line(14, 25, 18, 22, true); oled_line(22, 22, 24, 21, true); oled_line(27, 22, 30, 25, true);   // hair
+    int mh = 1 + (int)(b * 6.0f);
+    oled_rrect(17, 37 - mh / 2, 11, mh, 2, true);                         // the mouth, open with the breath
+    if (amp > 0.3f) oled_rect(19, 37 - mh / 2 + 1, 7, 1, false);          // teeth
+}
+// where each picture's mouth is (the air streams there) and its window (the notes come out there)
+static void pic_mouth(int eng, int model, int *x, int *y)
+{
+    switch (eng) {
+    case E_JET:    if (model == M_PANPIPE) { *x = 20; *y = 24; } else { *x = 10; *y = 27; } break;
+    case E_REED:   *x = 4; *y = 33; break;
+    case E_BRASS:  if (model == M_DIDGE) { *x = 4; *y = 41; } else { *x = 4; *y = 33; } break;
+    case E_STRING: *x = 26; *y = 34; break;
+    case E_SYNTH:  *x = 3; *y = 22; break;
+    case E_VOICE:  *x = 12; *y = 33; break;
+    default:       *x = 4; *y = OC_CY + 1; break;
+    }
+}
+static void pic_window(int eng, int model, int *x, int *y)
+{
+    switch (eng) {
+    case E_JET:    if (model == M_PANPIPE) { *x = 44; *y = 24; } else { *x = 56; *y = 26; } break;
+    case E_REED:   *x = 56; *y = 24; break;
+    case E_BRASS:  *x = 56; *y = 21; break;
+    case E_STRING: *x = 10; *y = 22; break;
+    case E_SYNTH:  *x = 50; *y = 21; break;
+    case E_VOICE:  *x = 30; *y = 32; break;
+    default:       *x = 16; *y = OC_CY - 12; break;
+    }
+}
+
 static const char *const note_spr[6] = { "...##", "...#.#", "...#..", ".###..", "####..", ".##..." };
 static const char *const note2_spr[6] = { ".#####", ".#...#", ".#...#", "##..##", "##..##", "......" };
 
+static float lad_w0;                                           // the ladder's window: the first rung shown (smoothed)
 static void ladder(int x, int y0, int y1)
 {
     int n = nnotes;
     float step = n > 1 ? (float)(y1 - y0) / (float)(n - 1) : 0;
-    for (int k = 0; k < n; k++) {
-        int y = y1 - (int)lroundf((float)k * step);
+    int vis = n;
+    if (step < 2.0f) {                                         // too many rungs for the rows: a window slides with the note
+        step = 2.0f; vis = (y1 - y0) / 2 + 1;
+        float want = clampf((float)idx - (float)vis * 0.5f + 0.5f, 0.0f, (float)(n - vis));
+        lad_w0 += 0.3f * (want - lad_w0);
+    } else lad_w0 = 0;
+    int w0 = (int)lroundf(lad_w0);
+    for (int k = w0; k < n && k < w0 + vis; k++) {
+        int y = y1 - (int)lroundf((float)(k - w0) * step);
         if (k == idx) oled_rrect(x, y - 1, 9, 3, 1, true);
         else if (k == root_i) oled_rect(x + 1, y, 7, 1, true);
         else oled_rect(x + 2, y, 5, 1, true);
     }
-    int by = y1 - (int)lroundf(pos_s * step);                  // where the tilt (or the stick) is: a pointer
+    if (w0 > 0) { oled_pixel(x + 4, y1 + 2, true); oled_pixel(x + 3, y1 + 3, true); oled_pixel(x + 5, y1 + 3, true); }           // more below
+    if (w0 + vis < n) { oled_pixel(x + 4, y0 - 3, true); oled_pixel(x + 3, y0 - 2, true); oled_pixel(x + 5, y0 - 2, true); }     // more above
+    int by = y1 - (int)lroundf((pos_s - lad_w0) * step);          // where the tilt (or the stick) is: a pointer
+    by = clampi(by, y0 - 1, y1 + 1);
     oled_line(x - 4, by - 2, x - 2, by, true); oled_line(x - 4, by + 2, x - 2, by, true); oled_pixel(x - 4, by - 1, true); oled_pixel(x - 4, by + 1, true); oled_pixel(x - 3, by, true);
 }
 
 static void scene(const view_t *v)
 {
     float b = breath_s, amp = amp_s;
-    const int mx = 4;                                                   // the mouthpiece's open end
+    int m = (int)pv[P_MODEL], eng = models[m].eng, mx, my, wx, wy;
+    pic_mouth(eng, m, &mx, &my); pic_window(eng, m, &wx, &wy);
     // air into the mouthpiece: more and faster with the breath
     int emit = b > 0.03f ? 1 + (int)(b * 3.0f) : 0;
     for (int i = 0; i < emit; i++)
-        parts_emit(&air, -6.0f, (float)OC_CY + 1.0f + 1.5f * rng_bi(&pseed), 50.0f + 150.0f * b, 0, 0.3f, b > 0.55f ? PART_STREAK : PART_DOT, 1);
+        parts_emit(&air, (float)mx - 10.0f, (float)my + 1.5f * rng_bi(&pseed), 50.0f + 150.0f * b, 0, 0.3f, b > 0.55f ? PART_STREAK : PART_DOT, 1);
     parts_step(&air, 0.04f, 0, 0);
     for (int i = 0; i < air.n; i++) if (air.p[i].x >= (float)mx) air.p[i].life = 0;
     parts_draw(&air);
@@ -1019,7 +1421,7 @@ static void scene(const view_t *v)
     acc += amp * 0.7f;
     if (acc > 1.0f && notes_p.n < 8) {
         acc = 0;
-        parts_emit(&notes_p, 16.0f, (float)(OC_CY - 12), 10.0f + 10.0f * rng_uni(&pseed), -16.0f - 10.0f * amp, 3.0f, PART_SQUARE, (uint8_t)(rng_next(&pseed) & 1));
+        parts_emit(&notes_p, (float)wx, (float)wy, 10.0f + 10.0f * rng_uni(&pseed), -16.0f - 10.0f * amp, 3.0f, PART_SQUARE, (uint8_t)(rng_next(&pseed) & 1));
     }
     parts_step(&notes_p, 0.04f, 0, 0);
     note_wob += 0.04f * pv[P_VIBR] * 6.2831853f;
@@ -1030,15 +1432,22 @@ static void scene(const view_t *v)
         int wx = (int)lroundf(sinf(note_wob + q->y * 0.25f) * a_vib * 4.0f);
         ui_sprite((int)q->x + wx, (int)q->y, q->size ? note2_spr : note_spr, 6, false, true);
     }
-    // the ocarina, its holes for this note
+    // the instrument, its holes (valves, frets, keys) for this note
     int lo = note_midi[0], hi = note_midi[nnotes - 1];
-    int open = hi > lo ? (int)lroundf((midi_now - (float)lo) / (float)(hi - lo) * 12.0f) : 0;
-    ocarina(clampi(open, 0, 12), amp);
-    if (over_flash > 0) { int r = 13 - over_flash; oled_circle(19, OC_CY, r, true); over_flash--; }
+    float frac = hi > lo ? clampf((midi_now - (float)lo) / (float)(hi - lo), 0.0f, 1.0f) : 0.0f;
+    switch (eng) {
+    case E_JET:    if (m == M_PANPIPE) panpipes(frac); else flute(frac, amp); break;
+    case E_REED:   clarinet(frac); break;
+    case E_BRASS:  if (m == M_DIDGE) didgeridoo(amp, v->frame); else trumpet(frac, amp, v_over); break;
+    case E_STRING: guitar(frac, amp, v->frame); break;
+    case E_SYNTH:  keyboard(frac, b, v->frame); break;
+    case E_VOICE:  face(b, amp, a_harm_on, v->frame); break;
+    default:       ocarina(clampi((int)lroundf(frac * 12.0f), 0, 12), amp); break;
+    }
+    if (over_flash > 0) { int r = 13 - over_flash; oled_circle(wx > 40 ? 54 : 19, wx > 40 ? 33 : OC_CY, r, true); over_flash--; }
     // the note, big, with the bend
     char nm[8];
-    int m = (int)pv[P_MODEL];
-    int shown = (int)lroundf(midi_now) + models[m].shift + (v_over ? (m == M_CLARINET ? 19 : 12) : 0);
+    int shown = (int)lroundf(midi_now) + models[m].shift + (v_over ? (int)lroundf(models[m].ob_st) : 0);
     ui_note_name(shown, nm, sizeof nm);
     int wob = a_vib > 0.05f && amp > 0.05f ? (int)lroundf(sinf(note_wob) * a_vib * 2.0f) : 0;
     const int tx = 64;
@@ -1056,8 +1465,7 @@ static void scene(const view_t *v)
     oled_rect(tx, 42, (int)(clampf(b, 0, 1) * (float)bw), 3, true);
     float oba = pv[P_OVER] * 0.01f;
     if (oba < 0.999f && models[m].ob_st > 0) oled_rect(tx + (int)(oba * (float)bw), 40, 1, 7, true);
-    ladder(117, 18, 44);
-    (void)v;
+    ladder(117, 19, 43);
 }
 
 static void draw_setup(const view_t *v)

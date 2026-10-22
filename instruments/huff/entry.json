@@ -1,9 +1,9 @@
 {
   "name": "HUFF",
-  "summary": "Blow at the mic and tilt the box for the notes. Ocarina, flute, pan pipe, shakuhachi, clarinet, tin whistle and a blown bottle; links to the other boards.",
+  "summary": "Blow at the mic, tilt for the notes. Ocarina, flutes, clarinet, brass, a didgeridoo, a guitar, a synth lead and a choir, an amp behind them; links to the other boards.",
   "author": "willbearfruits",
   "licence": "GPL-3.0",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "chip": "esp32s3",
   "uses": [
     "mic",
@@ -12,9 +12,10 @@
     "wifi"
   ],
   "status": "board",
-  "status_note": "Installed from the app and ran on a board on 2026-10-19. Not played much yet.",
+  "status_note": "Installed from the app and ran on a board on 2026-10-19. The breath detector for noisy rooms, the six new models and the amp (2026-10-22) have only run in the simulator so far.",
   "image": "images/play.gif",
   "more": [
+    "images/solo.gif",
     "images/splash.gif",
     "images/breath-setup.gif"
   ],

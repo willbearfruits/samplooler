@@ -20,33 +20,54 @@ enum {
     P_AIR, P_CHIFF, P_BRIGHT, P_VIB, P_VIBR, P_VIBD, P_HARM, P_HLVL,
     P_REVERB, P_SIZE, P_DAMP, P_ECHO, P_ETIME, P_EFB, P_BRANGE,
     P_ESYNC, P_TEMPO, P_LINK, P_GROUP, P_RANGE, P_PEERS,
+    P_DRIVE, P_NOISE, P_BWIND,
 };
+#define NM 13
 int huff_peers(void);
 int huff_sleep(void);
 float huff_breath(void);
 float huff_dbg(int k);
-static const char *const model_name[7] = { "OCARINA", "FLUTE", "PAN PIPE", "SHAKUHACHI", "CLARINET", "WHISTLE", "BOTTLE" };
-static const int model_shift[7] = { 0, 0, 0, 0, 0, 12, -12 };
+static const char *const model_name[NM] = { "OCARINA", "FLUTE", "PAN PIPE", "SHAKUHACHI", "CLARINET", "WHISTLE", "BOTTLE",
+                                            "TRUMPET", "TROMBONE", "DIDGERIDOO", "GUITAR", "SYNTH LEAD", "CHOIR" };
+static const int model_shift[NM] = { 0, 0, 0, 0, 0, 12, -12, 0, -12, -36, -12, 0, -12 };
 
-// ---- the mic: breath is low rumble; plus a little room; plus, if asked, the speaker leaking back
-typedef struct { float level, lp, leak, hum_hz, hum_ph; } mic_t;
+// ---- the mic: breath is low rumble; plus a little room; plus, if asked, the speaker leaking back, music (a bass line, a
+// chord, a kick on every beat), someone talking (band noise in syllables), a hummed note
+typedef struct { float level, lp, lp2, leak, hum_hz, hum_ph, music, mph[4], kt, speech, sp1, sp2, sp_t; } mic_t;
 static mic_t M;
 static float mic(float t, void *u)
 {
     mic_t *b = u;
-    b->lp += 0.03f * (sim_noise() - b->lp);                      // wind on a MEMS mic: rumble, falling off above ~150 Hz
-    float x = 0.0015f * sim_noise() + b->level * b->lp * 6.0f;
+    b->lp += 0.03f * (sim_noise() - b->lp); b->lp2 += 0.03f * (b->lp - b->lp2);   // wind on a MEMS mic: rumble, 12 dB/oct down above ~150 Hz
+    float x = 0.0015f * sim_noise() + b->level * b->lp2 * 50.0f;   // a board reads a normal breath near 0.6 (2026-10-22)
     if (b->leak > 0) { int i = (int)(t * AUDIO_SR) - 200; if (i >= 0 && i < sim_n) x += b->leak * sim_out[i]; }
+    if (b->music > 0) {
+        static const float hz[4] = { 55.0f, 220.0f, 277.2f, 329.6f };
+        float m = 0;
+        for (int k = 0; k < 4; k++) { b->mph[k] += hz[k] / AUDIO_SR; if (b->mph[k] >= 1) b->mph[k] -= 1; m += (k ? 0.12f : 0.5f) * (2.0f * b->mph[k] - 1.0f); }
+        b->kt += 1.0f / AUDIO_SR; if (b->kt >= 0.5f) b->kt = 0;
+        m += 1.2f * sinf(6.2831853f * 60.0f * b->kt) * expf(-b->kt / 0.06f);        // the kick's thump
+        if (b->kt < 0.008f) m += 0.8f * sim_noise() * (1.0f - b->kt / 0.008f);        // ... and its beater's click
+        x += b->music * m;
+    }
+    if (b->speech > 0) {
+        float w = sim_noise();
+        b->sp1 += 0.056f * (w - b->sp1); float hp = w - b->sp1;         // 300 Hz up
+        b->sp2 += 0.45f * (hp - b->sp2);                                // ... to about 3 kHz
+        b->sp_t += 1.0f / AUDIO_SR;
+        float syl = 0.5f + 0.5f * sinf(6.2831853f * 4.0f * b->sp_t);
+        x += b->speech * b->sp2 * syl * syl * 2.0f;
+    }
     if (b->hum_hz > 0) {                                          // a hummed note: a soft sawtooth
         b->hum_ph += b->hum_hz / AUDIO_SR; if (b->hum_ph > 1) b->hum_ph -= 1;
-        x += 0.08f * (2.0f * b->hum_ph - 1.0f);
+        x += 0.5f * (2.0f * b->hum_ph - 1.0f);
     }
     return x;
 }
 static void blow(float level) { M.level = level; SI.mic = mic; SI.mic_u = &M; }
 
 const char *const inst_click_skip[] = { "nlnk", "ngrp", "npow", NULL };   // the radio's switches, not the sound
-void inst_excite(void) { blow(0.12f); M.leak = 0; M.hum_hz = 0; sim_tilt(0, 0); SI.jx = SI.jy = 0; }
+void inst_excite(void) { blow(0.12f); M.leak = 0; M.hum_hz = 0; M.music = M.speech = 0; sim_tilt(0, 0); SI.jx = SI.jy = 0; }
 
 // the ladder as instrument.c builds it
 static int ladder(int *notes)
@@ -74,7 +95,8 @@ static void sweep(int model, float level, float *worst, int *silent, float *rms_
         blow(level); sim_run(0.9f);
         float want = midi_hz_((float)(notes[k] + model_shift[model]));
         if (want > 2000.0f && (model == 1 || model == 2 || model == 3 || model == 5)) want *= 0.5f;   // jets fold above B6
-        float f = m_pitch_at(sim_t - 0.4f, sim_t, want * 0.75f, want * 1.33f);
+        float f = m_pitch_at(sim_t - 0.4f, sim_t, want * (model == 11 ? 0.4f : 0.75f), want * 1.33f);
+        if (model == 11 && f > 0 && f < 0.75f * want) f *= 2.0f;      // the lead's sub octave
         float cents = f > 0 ? 1200.0f * log2f(f / want) : 9999.0f;
         float r = m_rms(sim_t - 0.4f, sim_t);
         *rms_avg += r / (float)N;
@@ -83,6 +105,14 @@ static void sweep(int model, float level, float *worst, int *silent, float *rms_
         else if (fabsf(cents) > *worst) *worst = fabsf(cents);
     }
     blow(0); sim_run(0.3f);
+}
+
+// the first sample over 0.01 from t0 on, as a time (t0 if none)
+static float onset_after(float t0)
+{
+    int i = (int)(t0 * AUDIO_SR);
+    while (i < sim_n && fabsf(sim_out[i]) < 0.01f) i++;
+    return i < sim_n ? (float)i / (float)AUDIO_SR : t0;
 }
 
 static int midi_count(float t0, int status, int *offs)
@@ -106,11 +136,11 @@ static void calibrate(void)
     param_set(P_OVER, 100);
     blow(0);
     static const float bs[4] = { 0.2f, 0.4f, 0.6f, 0.8f };
-    int m0 = getenv("HUFF_M") ? atoi(getenv("HUFF_M")) : 1, m1 = getenv("HUFF_M") ? m0 + 1 : 7;
+    int m0 = getenv("HUFF_M") ? atoi(getenv("HUFF_M")) : 1, m1 = getenv("HUFF_M") ? m0 + 1 : NM;
     for (int m = m0; m < m1; m++) {
         param_set(P_MODEL, (float)m);
         printf("model %s\n", model_name[m]);
-        for (int st = 0; st <= 32; st += 4) {
+        for (int st = -36; st <= 36; st += 4) {
             float mid = 60.0f + (float)st;
             printf("  midi %3.0f:", (double)(mid + (float)model_shift[m]));
             for (int L = 0; L < 4; L++) {
@@ -118,7 +148,8 @@ static void calibrate(void)
                 front_midi(0xB0, 2, 0); sim_run(0.2f);
                 front_midi(0xB0, 2, (uint8_t)(bs[L] * 127.0f)); sim_run(0.8f);
                 float want = midi_hz_(mid + (float)model_shift[m]);
-                float f = m_pitch_at(sim_t - 0.4f, sim_t, want * 0.75f, want * 1.33f);
+                float f = m_pitch_at(sim_t - 0.4f, sim_t, want * (m == 11 ? 0.4f : 0.75f), want * 1.33f);
+                if (m == 11 && f > 0 && f < 0.75f * want) f *= 2.0f;      // the lead's sub octave
                 printf("  b%.1f %+6.1fc %.3f", (double)bs[L], f > 0 ? (double)(1200.0f * log2f(f / want)) : 999.0, (double)m_rms(sim_t - 0.4f, sim_t));
                 front_midi(0x80, (uint8_t)mid, 0);
             }
@@ -149,7 +180,7 @@ static void by_ear(void)
 {
     section("by ear");
     int notes[16], N = ladder(notes);
-    for (int m = 0; m < 7; m++) {                                  // a run up and down the ladder on each model, blowing through
+    for (int m = 0; m < NM; m++) {                                 // a run up and down the ladder on each model, blowing through
         param_set(P_MODEL, (float)m); param_set(P_REVERB, 0); param_set(P_ECHO, 0); param_set(P_VIB, 0);
         blow(0); sim_tilt(0, lean_for(2, N)); sim_run(0.5f);
         blow(0.12f); sim_run(0.5f);
@@ -159,7 +190,7 @@ static void by_ear(void)
         float wc = worst_click(at, 10);
         char key[48]; snprintf(key, sizeof key, "note_change_click_%s", model_name[m]); metric(key, wc);
         check(wc < 3.0f, "%s: a run up and down the ladder, no click at a note change (worst spike %.2f of the signal's own)", model_name[m], (double)wc);
-        if (m == 0 || m == 1 || m == 4) { char sfx[32]; snprintf(sfx, sizeof sfx, "-run-%d", m); sim_wav(sfx, t0 - 0.3f, sim_t); }
+        if (m == 0 || m == 1 || m == 4 || m == 7 || m == 10 || m == 11 || m == 12) { char sfx[32]; snprintf(sfx, sizeof sfx, "-run-%d", m); sim_wav(sfx, t0 - 0.3f, sim_t); }
         blow(0); sim_run(0.4f);
     }
     // the overblow: FLUTE from soft to hard and back, the jump itself without a click
@@ -269,6 +300,20 @@ static void soak(float per)
 void inst_tests(void)
 {
     if (getenv("HUFF_CAL")) { calibrate(); return; }
+    if (getenv("HUFF_SWEEP")) { sim_menu_close(); for (int i = 0; i < 70; i++) sim_turn(-1); sim_run(0.3f); param_set(P_REVERB, 0); param_set(P_ECHO, 0);
+        if (getenv("HUFF_NOVIB")) { param_set(P_VIB, 0); param_set(P_BPITCH, 0); }
+        float worst, rms; int silent; sweep(atoi(getenv("HUFF_SWEEP")), 0.12f, &worst, &silent, &rms, true); return; }
+    if (getenv("HUFF_DBG")) {                                      // one note on one model, the level every 50 ms
+        param_set(P_VIB, 0); param_set(P_BPITCH, 0); param_set(P_REVERB, 0); param_set(P_ECHO, 0); param_set(P_OVER, 100);
+        param_set(P_MODEL, (float)atoi(getenv("HUFF_DBG"))); blow(0); sim_run(0.3f);
+        if (getenv("HUFF_DRV")) param_set(P_DRIVE, (float)atoi(getenv("HUFF_DRV")));
+        int mid = getenv("HUFF_N") ? atoi(getenv("HUFF_N")) : 72; int cc = getenv("HUFF_B") ? atoi(getenv("HUFF_B")) : 25;
+        front_midi(0x90, (uint8_t)mid, 100); front_midi(0xB0, 2, (uint8_t)cc);
+        for (int i = 0; i < 30; i++) { sim_run(0.05f); if (i % 10 == 9) { float w = midi_hz_((float)mid + (float)model_shift[atoi(getenv("HUFF_DBG"))]); float fd = m_pitch_at(sim_t - 0.3f, sim_t, 40, 4000); if (fd > 0.75f * w && fd < 1.33f * w) w = fd; printf("   pitch %.1f  harmonics at it: 0.5 %.5f 1 %.5f 1.5 %.5f 2 %.5f 3 %.5f 5 %.5f\n", (double)fd, (double)m_goertzel(sim_t - 0.3f, sim_t, 0.5f * w), (double)m_goertzel(sim_t - 0.3f, sim_t, w), (double)m_goertzel(sim_t - 0.3f, sim_t, 1.5f * w), (double)m_goertzel(sim_t - 0.3f, sim_t, 2 * w), (double)m_goertzel(sim_t - 0.3f, sim_t, 3 * w), (double)m_goertzel(sim_t - 0.3f, sim_t, 5 * w)); } printf("%5.2f s  rms %.4f  peak %.4f  breath %.2f  loop %.4f g %.5f press %.3f\n", (double)(0.05f * (float)(i + 1)), (double)m_rms(sim_t - 0.05f, sim_t), (double)m_peak(sim_t - 0.05f, sim_t), (double)huff_breath(), (double)huff_dbg(7), (double)huff_dbg(8), (double)huff_dbg(9)); }
+        front_midi(0xB0, 2, 0); front_midi(0x80, (uint8_t)mid, 0);
+        for (int i = 0; i < 20; i++) { sim_run(0.1f); printf("off %4.1f s  rms %.4f\n", (double)(0.1f * (float)(i + 1)), (double)m_rms(sim_t - 0.1f, sim_t)); }
+        return;
+    }
     if (getenv("HUFF_SOAK")) { sim_menu_close(); for (int i = 0; i < 70; i++) sim_turn(-1); sim_run(0.3f); soak((float)atof(getenv("HUFF_SOAK"))); return; }
     if (getenv("HUFF_QUICK")) {                                    // a few play screens, fast, for drawing work
         for (int i = 0; i < 70; i++) sim_turn(-1);
@@ -299,15 +344,69 @@ void inst_tests(void)
     check(playing > 0.02f && after < 0.003f, "the speaker leaking back into the mic (at half level) does not keep it sounding (%.3f -> %.5f)", (double)playing, (double)after);
     M.leak = 0;
 
+    // a noisy room: music (a bass line, a chord, a kick every half second) and someone talking must not play it, and a
+    // breath over them must. The breath is wind: its low band stands far over its middle; music and words have a middle.
+    section("a noisy room");
+    extern float huff_dbg(int);
+    blow(0); sim_run(0.5f);
+    // BREATH SETUP in the quiet first: it learns how far the breath's low band stands over its middle
+    sim_menu_param(P_BSETUP); sim_tap(); sim_run(2.3f); blow(0.12f); sim_run(3.6f); blow(0); sim_run(0.5f);
+    float bands_quiet = pv[P_BWIND];
+    check(bands_quiet > 3.0f, "BREATH SETUP in a quiet room learns the breath's bands (low over middle, halved: %.1f)", (double)bands_quiet);
+    M.music = 0.06f; sim_run(4.0f);
+    float r_music = m_rms(sim_t - 2.5f, sim_t);
+    note("music at the mic: low band %.4f, middle %.4f, floor %.4f, gate %s", (double)huff_dbg(0), (double)huff_dbg(5), (double)huff_dbg(1), huff_dbg(6) > 0 ? "open" : "shut");
+    check(r_music < 0.01f, "music at the mic (bass, a chord, a kick on every beat), no breath: at most a whisper on the kicks (rms %.5f)", (double)r_music);
+    blow(0.12f);
+    for (int i = 0; i < 15; i++) { sim_run(0.1f); if (getenv("HUFF_TRACE")) note("over music %.1f s: breath %.2f low %.4f mid %.4f floor %.4f gate %s", (double)(0.1f * (float)(i + 1)), (double)huff_breath(), (double)huff_dbg(0), (double)huff_dbg(5), (double)huff_dbg(1), huff_dbg(6) > 0 ? "open" : "shut"); }
+    float r_over = m_rms(sim_t - 0.8f, sim_t), rd_over = huff_breath();
+    check(r_over > 0.02f && rd_over > 0.25f, "a breath over the music plays (rms %.3f, the breath reads %.2f: what stands over the room)", (double)r_over, (double)rd_over);
+    blow(0); sim_run(1.5f);
+    check(m_rms(sim_t - 0.8f, sim_t) < 0.01f, "the breath stops, the music goes on: quiet again (rms %.5f)", (double)m_rms(sim_t - 0.8f, sim_t));
+    M.music = 0; sim_run(1.0f);
+    M.speech = 0.08f; sim_run(4.0f);
+    float r_talk = m_rms(sim_t - 2.5f, sim_t);
+    note("talking at the mic: low band %.4f, middle %.4f, floor %.4f", (double)huff_dbg(0), (double)huff_dbg(5), (double)huff_dbg(1));
+    check(r_talk < 0.003f, "someone talking at the mic: silent (rms %.5f)", (double)r_talk);
+    blow(0.12f); sim_run(1.5f);
+    check(m_rms(sim_t - 0.8f, sim_t) > 0.02f, "a breath over the talking plays (rms %.3f)", (double)m_rms(sim_t - 0.8f, sim_t));
+    blow(0); sim_run(1.0f); M.speech = 0; sim_run(1.0f);
+    // a bass line alone (no middle to tell it by, but a tone: its low band correlates half a period back, wind does not)
+    M.music = 0.04f; M.mph[1] = M.mph[2] = M.mph[3] = 0; sim_run(3.0f);
+    float r_bass = m_rms(sim_t - 2.0f, sim_t), tn = huff_dbg(10);
+    blow(0.12f); sim_run(1.5f);
+    float r_bass_b = m_rms(sim_t - 0.8f, sim_t), tnb = huff_dbg(10);
+    check(r_bass < 0.01f && r_bass_b > 0.02f, "a bass line alone: at most a whisper (rms %.5f, its low band correlates %.2f half a period back); a breath over it plays (%.3f)", (double)r_bass, (double)tn, (double)r_bass_b);
+    blow(0); M.music = 0; sim_run(1.0f);
+    // the setup with the music on: the range is learned over the room (its low band taken off), the bands are kept
+    M.music = 0.06f; sim_run(1.0f);
+    sim_menu_param(P_BSETUP); sim_tap(); sim_run(2.3f); blow(0.12f); sim_run(3.6f);
+    blow(0); sim_run(2.0f);
+    float r_after = m_rms(sim_t - 1.0f, sim_t);
+    blow(0.12f);
+    for (int i = 0; i < 10; i++) { sim_run(0.1f); if (getenv("HUFF_TRACE")) note("after setup %.1f s: breath %.2f low %.4f mid %.4f floor %.4f gate %s", (double)(0.1f * (float)(i + 1)), (double)huff_breath(), (double)huff_dbg(0), (double)huff_dbg(5), (double)huff_dbg(1), huff_dbg(6) > 0 ? "open" : "shut"); }
+    float rd_after = huff_breath();
+    check(r_after < 0.01f && rd_after > 0.4f && rd_after < 0.85f && fabsf(pv[P_BWIND] / bands_quiet - 1.0f) < 0.25f, "BREATH SETUP done with the music on: the music stays quiet (rms %.5f), a normal breath reads %.0f %%, the bands hold (%.1f, range %.3f)", (double)r_after, (double)(rd_after * 100.0f), (double)pv[P_BWIND], (double)pv[P_BRANGE]);
+    blow(0); M.music = 0; sim_run(1.0f);
+    param_set(P_BRANGE, param(P_BRANGE)->def); param_set(P_BWIND, param(P_BWIND)->def); sim_run(0.5f);
+    // the breath's latency: from the first air to the first sound
+    {   blow(0.12f); float t_air = sim_t; int i0 = (int)(t_air * AUDIO_SR); sim_run(0.3f);
+        int i = i0; while (i < sim_n && fabsf(sim_out[i]) < 0.01f) i++;
+        float lat = (float)(i - i0) / (float)AUDIO_SR * 1000.0f;
+        metric("breath_latency_ms", lat);
+        check(lat < 70.0f, "a breath sounds within 70 ms (%.0f ms: the gate's hold, the RMS and the onset)", (double)lat);
+        blow(0); sim_run(0.8f); }
+
     // every model, every note
     section("models in tune");
     float worst_all = 0;
-    for (int m = 0; m < 7; m++) {
+    for (int m = 0; m < NM; m++) {
         float worst, rms; int silent;
         sweep(m, 0.12f, &worst, &silent, &rms, m == 1);
         char key[48]; snprintf(key, sizeof key, "cents_worst_%s", model_name[m]); metric(key, worst);
         check(silent == 0, "%s sounds on all %d notes (%d silent)", model_name[m], (int)pv[P_NOTES], silent);
-        check(worst < (m == 1 ? 12.0f : 15.0f), "%s in tune within %d cents on every note (worst %.1f)", model_name[m], m == 1 ? 12 : 15, (double)worst);
+        int tol = m == 1 ? 12 : (m >= 7 && m <= 9) ? 25 : 15;        // the brass bends with the breath, as brass does
+        check(worst < (float)tol, "%s in tune within %d cents on every note (worst %.1f)", model_name[m], tol, (double)worst);
         check(rms > 0.03f && rms < 0.25f, "%s at a normal breath: rms %.3f (about -12 dBFS peaks)", model_name[m], (double)rms);
         if (worst > worst_all) worst_all = worst;
     }
@@ -332,6 +431,62 @@ void inst_tests(void)
     f = m_pitch_at(sim_t - 0.4f, sim_t, want * 0.75f, want * 1.33f);
     check(fabsf(1200.0f * log2f(f / want)) < 30.0f, "OCARINA does not overblow (%.0f Hz on %.0f)", (double)f, (double)want);
     blow(0); sim_run(0.5f);
+
+    // the trumpet blown hard jumps an octave; the lead too
+    param_set(P_MODEL, 7); blow(0); sim_run(0.3f); blow(0.1f); sim_run(1.0f);
+    f = m_pitch_at(sim_t - 0.4f, sim_t, want * 0.75f, want * 1.33f);
+    check(fabsf(1200.0f * log2f(f / want)) < 20.0f, "TRUMPET at a normal breath: %.0f Hz on %.0f", (double)f, (double)want);
+    blow(0.6f); sim_run(1.5f);
+    f = m_pitch_at(sim_t - 0.5f, sim_t, want * 1.5f, want * 2.6f);
+    check(fabsf(1200.0f * log2f(f / (2.0f * want))) < 30.0f, "TRUMPET blown hard: the lip tightens, an octave up (%.0f Hz)", (double)f);
+    blow(0); sim_run(0.5f);
+
+    section("deep and wide");
+    // OCTAVE -3: the flute at C2 (65 Hz) and the guitar (an octave down on top of that: C1, 33 Hz) sound and are in tune
+    param_set(P_OCT, -3); param_set(P_MODEL, 1); blow(0); sim_tilt(0, lean_for(3, N)); sim_run(0.3f); blow(0.12f); sim_run(1.5f);
+    { int nl[24]; ladder(nl); float w = midi_hz_((float)nl[3]);
+      f = m_pitch_at(sim_t - 0.6f, sim_t, w * 0.7f, w * 1.4f);
+      check(f > 0 && fabsf(1200.0f * log2f(f / w)) < 25.0f && m_rms(sim_t - 0.5f, sim_t) > 0.02f, "FLUTE three octaves down plays %.1f Hz for %.1f (rms %.3f)", (double)f, (double)w, (double)m_rms(sim_t - 0.5f, sim_t));
+      blow(0); param_set(P_MODEL, 10); sim_run(0.5f); blow(0.12f); sim_run(2.0f);
+      w *= 0.5f;                                                      // the guitar is an octave down on top
+      f = m_pitch_at(sim_t - 0.8f, sim_t, w * 0.7f, w * 1.4f);
+      check(f > 0 && fabsf(1200.0f * log2f(f / w)) < 40.0f && m_rms(sim_t - 0.5f, sim_t) > 0.008f, "GUITAR three octaves down plays %.1f Hz for %.1f (rms %.3f)", (double)f, (double)w, (double)m_rms(sim_t - 0.5f, sim_t));
+      blow(0); param_set(P_MODEL, 0); param_set(P_OCT, 0); sim_run(0.8f); }
+    // NOTES 24 over TILT SPAN 180: the ends of the ladder at the tilt's ends
+    param_set(P_NOTES, 24); param_set(P_SPAN, 180); sim_run(0.2f);
+    { int nl[24]; int n24 = ladder(nl);
+      sim_tilt(0, -88.0f); sim_run(0.5f); blow(0.12f); sim_run(1.0f);
+      float fl = m_pitch_at(sim_t - 0.4f, sim_t, 50, 6000), wl = midi_hz_((float)nl[0]);
+      blow(0); sim_tilt(0, 88.0f); sim_run(0.5f); blow(0.12f); sim_run(1.0f);
+      float fh = m_pitch_at(sim_t - 0.4f, sim_t, 50, 6000), wh = midi_hz_((float)nl[n24 - 1]);
+      sim_shot("ladder24");
+      check(fabsf(1200.0f * log2f(fl / wl)) < 30.0f && fabsf(1200.0f * log2f(fh / wh)) < 30.0f, "24 notes over 180 degrees: the box face down plays the lowest (%.0f Hz), face up the highest (%.0f Hz)", (double)fl, (double)fh);
+      blow(0); sim_tilt(0, 0); param_set(P_NOTES, 10); param_set(P_SPAN, 70); sim_run(0.5f); }
+    // DRIVE: the amp adds harmonics; turned while a note sounds it does not click; at 0 it is a wire
+    param_set(P_MODEL, 0); param_set(P_DRIVE, 0); sim_tilt(0, lean_for(3, N)); blow(0); sim_run(0.3f); blow(0.1f); sim_run(1.2f);
+    { int nl[24]; ladder(nl); float w0 = midi_hz_((float)nl[3]), w = m_pitch_at(sim_t - 0.5f, sim_t, w0 * 0.75f, w0 * 1.33f);   // at the pitch as played
+      float h1 = m_goertzel(sim_t - 0.5f, sim_t, w), h3 = m_goertzel(sim_t - 0.5f, sim_t, 3.0f * w), h5 = m_goertzel(sim_t - 0.5f, sim_t, 5.0f * w);
+      float clean = (h3 + h5) / (h1 + 1e-9f);
+      float tc = sim_t;
+      for (int v = 0; v <= 100; v += 5) { param_set(P_DRIVE, (float)v); sim_run(0.05f); }
+      float wc = worst_click_over(tc, sim_t);
+      sim_run(0.8f);
+      w = m_pitch_at(sim_t - 0.5f, sim_t, w0 * 0.75f, w0 * 1.33f);
+      float d1 = m_goertzel(sim_t - 0.5f, sim_t, w), d3 = m_goertzel(sim_t - 0.5f, sim_t, 3.0f * w), d5 = m_goertzel(sim_t - 0.5f, sim_t, 5.0f * w);
+      float dirty = (d3 + d5) / (d1 + 1e-9f);
+      float r_drv = m_rms(sim_t - 0.5f, sim_t);
+      check(dirty > 2.0f * clean, "DRIVE 100 on the ocarina: more odd harmonics than clean (3rd and 5th over the 1st: %.2f clean, %.2f driven)", (double)clean, (double)dirty);
+      check(wc < 3.0f, "DRIVE turned from 0 to 100 while the note sounds: no click (worst spike %.2f)", (double)wc);
+      check(r_drv > 0.03f && r_drv < 0.4f, "... and the level stays sane (rms %.3f)", (double)r_drv);
+      sim_shot("driven"); sim_wav("-drive", tc - 0.5f, sim_t);
+      param_set(P_DRIVE, 0); blow(0); sim_run(1.5f); }
+    // the guitar: blown, a note holds and swells; let go, it rings out
+    param_set(P_MODEL, 10); blow(0); sim_run(0.5f); blow(0.3f); sim_run(0.25f);
+    { float e0 = m_rms(sim_t - 0.1f, sim_t); sim_run(1.5f); float e1 = m_rms(sim_t - 0.3f, sim_t);
+      blow(0); sim_run(0.3f); float e2 = m_rms(sim_t - 0.1f, sim_t); sim_run(1.7f); float e3 = m_rms(sim_t - 0.3f, sim_t);
+      check(e1 > 0.7f * e0 && e1 > 0.02f, "GUITAR held by the breath: after 1.7 s the note is still there (%.3f, was %.3f)", (double)e1, (double)e0);
+      check(e2 > 0.003f && e3 < 0.3f * e2, "let go, the string rings on and fades (%.4f, then %.4f)", (double)e2, (double)e3); }
+    param_set(P_MODEL, 0); sim_run(0.5f);
 
     section("expression");
     // the joystick bends by BEND RANGE
@@ -371,7 +526,7 @@ void inst_tests(void)
     // humming: the pitch of your voice, snapped to the scale
     section("humming");
     param_set(P_SOURCE, 2);
-    M.hum_hz = 196.0f; blow(0.06f); sim_run(2.0f);           // G3 hummed, with some breath
+    M.hum_hz = 196.0f; blow(0.015f); sim_run(2.0f);          // G3 hummed, with a little breath
     f = m_pitch_at(sim_t - 0.5f, sim_t, 300, 1700);
     float mm = hz_to_midi(f);
     float pc = fmodf(mm + 1200.0f, 12.0f);
@@ -396,7 +551,7 @@ void inst_tests(void)
     blow(0.08f); sim_run(1.0f);
     extern float huff_breath(void);
     float rd = huff_breath();
-    check(pv[P_BRANGE] < 0.3f && rd > 0.4f && rd < 0.8f, "after setup a normal breath reads %.0f %% (range %.3f)", (double)(rd * 100.0f), (double)pv[P_BRANGE]);
+    check(pv[P_BRANGE] > 0.3f && pv[P_BRANGE] < 2.0f && rd > 0.4f && rd < 0.8f, "after setup a normal breath reads %.0f %% (range %.3f)", (double)(rd * 100.0f), (double)pv[P_BRANGE]);
     blow(0); sim_run(0.5f);
 
     // MIDI out
@@ -436,14 +591,16 @@ void inst_tests(void)
         // the echo on the beat: ECHO BEATS 1/4 at 120 BPM is 0.5 s; the BAND goes to 100 BPM and the repeats stretch to 0.6 s
         param_set(P_REVERB, 0); param_set(P_ECHO, 60); param_set(P_EFB, 0); param_set(P_ESYNC, 3); param_set(P_MODEL, 0);
         sim_tilt(0, lean_for(3, N)); sim_run(1.5f);
-        float t_on = sim_t; blow(0.12f); sim_run(0.12f); blow(0); sim_run(1.5f);
-        float e0 = m_rms(t_on + 0.52f, t_on + 0.65f), e1 = m_rms(t_on + 0.9f, t_on + 1.05f), e2 = m_rms(t_on + 0.3f, t_on + 0.45f);
+        float t_on = sim_t; blow(0.12f); sim_run(0.15f); blow(0); sim_run(1.5f);
+        t_on = onset_after(t_on);                                      // from the sound's own start (the gate's hold varies)
+        float e0 = m_rms(t_on + 0.5f, t_on + 0.65f), e1 = m_rms(t_on + 0.9f, t_on + 1.05f), e2 = m_rms(t_on + 0.3f, t_on + 0.43f);
         check(e0 > 3.0f * e1 && e0 > 3.0f * e2, "ECHO BEATS 1/4 at 120 BPM: a short note repeats half a second later (%.4f, around it %.4f %.4f)", (double)e0, (double)e2, (double)e1);
         sim_peer_use(k); { uint32_t o; float f; link_origin(&o, &f); link_set_time(19200, o, 4, 0); } sim_peer_use(-1);
         sim_run(4.0f);
         check((int)pv[P_TEMPO] == 100, "the BAND slows to 100 BPM: TEMPO follows (%d)", (int)pv[P_TEMPO]);
-        t_on = sim_t; blow(0.12f); sim_run(0.12f); blow(0); sim_run(1.5f);
-        e0 = m_rms(t_on + 0.62f, t_on + 0.72f); e1 = m_rms(t_on + 0.35f, t_on + 0.5f);
+        t_on = sim_t; blow(0.12f); sim_run(0.15f); blow(0); sim_run(1.5f);
+        t_on = onset_after(t_on);
+        e0 = m_rms(t_on + 0.6f, t_on + 0.75f); e1 = m_rms(t_on + 0.35f, t_on + 0.5f);
         check(e0 > 3.0f * e1, "... and the echo now repeats 0.6 s later (%.4f, before it %.4f)", (double)e0, (double)e1);
         param_set(P_ESYNC, 0); param_set(P_ECHO, 0); param_set(P_EFB, 35); param_set(P_REVERB, 30);
         sim_peer_power(k, false); sim_run(2.0f);
@@ -456,7 +613,7 @@ void inst_tests(void)
     section("cost");
     param_set(P_REVERB, 60); param_set(P_ECHO, 40); param_set(P_HARM, 1);
     blow(0); front_midi(0xB0, 2, 90);
-    for (int m = 0; m < 7; m += 1) {
+    for (int m = 0; m < NM; m += 1) {
         param_set(P_MODEL, (float)m); sim_run(0.5f);
         float in[AUDIO_BLOCK], out[AUDIO_BLOCK];
         for (int i = 0; i < AUDIO_BLOCK; i++) in[i] = 0.05f * sim_noise();
@@ -507,10 +664,24 @@ void inst_tests(void)
     blow(0); sim_run(1.0f);
     sim_gif_end();
     sim_wav("-tune", sim_t - 7.5f, sim_t);
+    // the guitar solo: a run with bends, sustained, in a gif
+    front_midi(0xC0, 14, 0); sim_run(0.5f);
+    { int nl[24]; int n = ladder(nl);
+      sim_gif_begin("solo");
+      static const int lick[] = { 2, 3, 4, 3, 2, 4, 5, 6, 5 };
+      for (int i = 0; i < 9; i++) {
+          sim_tilt(0, lean_for(lick[i], n)); blow(i == 8 ? 0.6f : 0.3f); sim_run(i == 8 ? 1.2f : 0.3f);
+          if (i == 8) { sim_tilt(14.0f, lean_for(lick[i], n)); sim_run(0.6f); sim_shot("solo"); }
+          if (i == 4) { blow(0); sim_run(0.1f); }
+      }
+      blow(0); sim_run(1.5f);
+      sim_gif_end();
+      sim_wav("-solo", sim_t - 6.0f, sim_t); }
+    front_midi(0xC0, 0, 0); sim_run(0.5f);
     // a shot of each model
-    for (int m = 0; m < 7; m++) {
+    for (int m = 0; m < NM; m++) {
         param_set(P_MODEL, (float)m); sim_tilt(0, lean_for(5, N)); blow(0.12f); sim_run(0.8f);
-        char lb[32]; snprintf(lb, sizeof lb, "model_%d", m); if (m == 3 || m == 4) sim_shot(lb);
+        char lb[32]; snprintf(lb, sizeof lb, "model_%d", m); if (m == 3 || m == 4 || m == 7 || m == 10 || m == 11 || m == 12) sim_shot(lb);
     }
     blow(0); param_set(P_MODEL, 0); sim_run(1.0f);
     // the screensaver, in a gif
