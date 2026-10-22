@@ -15,4 +15,4 @@ elif amidi -l 2>/dev/null | grep -q TWOFOLD; then
 fi
 PORT="${PORT:-$(ls /dev/serial/by-id/*Espressif* /dev/ttyACM0 2>/dev/null | head -1)}"
 cd firmware/build
-esptool.py --chip esp32s3 -p "$PORT" -b 460800 --before default_reset --after watchdog_reset write_flash "@flash_args"
+esptool.py --chip esp32s3 -p "$PORT" -b 460800 --before no_reset --after watchdog_reset write_flash "@flash_args"

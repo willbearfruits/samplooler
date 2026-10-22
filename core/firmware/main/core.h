@@ -108,8 +108,8 @@ void coach_done(int learn);                            // the player did it (UI 
 typedef struct {
     uint32_t frame;            // frames drawn since boot (25 per second)
     float    t;                // seconds since boot
-    int      cover;            // rows at the bottom the core draws over this frame: 0, or 18 for the edit strip,
-                               // a hint or the sound card; the list menu covers 16..63 (draw() is then skipped)
+    int      cover;            // rows at the bottom the core draws over this frame: 0, or 18 for the menu (its pages, a
+                               // page's settings, an edit), a hint or the sound card: the scene is never covered more
     float    out_level, in_level;   // peak meters 0..1, decaying
 } view_t;
 
