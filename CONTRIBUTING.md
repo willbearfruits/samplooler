@@ -113,3 +113,6 @@ USB product IDs so far (all with Espressif's vendor ID 0x303A, picked here, not 
 | 0x4029 | SING |
 | 0x402A | WRECK |
 | 0x402B | MANTRA |
+| 0x402C | WRECK2 |
+| 0x402D | AIR |
+| 0x402E | SIFT |

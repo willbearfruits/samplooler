@@ -15,7 +15,7 @@ pub const NEVER: &[&str] = &["TWOFOLD"];
 /// Names the firmwares had before the catalog knew them, and the ones it may not list.
 pub const LEGACY: &[&str] = &[
     "Samplooler", "Samplooler Family", "KNOCK", "HUFF", "HOWL", "SNIFF", "CHIRP", "ETHER", "JAM", "BAND",
-    "SING", "WRECK", "WRECK2", "MANTRA", "AIR", "DEMO",
+    "SING", "WRECK", "WRECK2", "MANTRA", "AIR", "SIFT", "DEMO",
 ];
 
 #[derive(Serialize, Clone, Debug)]

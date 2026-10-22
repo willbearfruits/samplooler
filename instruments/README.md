@@ -9,6 +9,7 @@ and flash the Samplooler back the same way. Anyone can add an instrument.
 | [AIR](air) | Drum on nothing. Swing the box like a stick: forward the hi-hat, left the kick, right the snare, back the open hat. Or the four quarters of a break. Sample your own sounds into the pads and loop it. | Runs on a board |
 | [HUFF](huff) | Blow at the mic, tilt for the notes. Ocarina, flutes, clarinet, brass, a didgeridoo, a guitar, a synth lead and a choir, an amp behind them; links to the other boards. | Runs on a board |
 | [MANTRA](mantra) | A formant voice and a seated Buddha who sings it: monks chanting OM, overtone singing, Daisy Bell, and a wall of amps behind him. Tilt for the vowels, turn it for the overtones. | Runs on a board |
+| [SIFT](sift) | A granular synth and recorder. Everything it hears is cut into grains and sorted by sound. Tilt to pick grains, turn from a tuned pattern on the beat to a wild cloud, shake to scatter. | Runs on a board |
 | [WRECK](wreck) | A breakcore machine that turns into a doom machine: one knob from a chopped, rolled, crushed break at twice the tempo down to one chord held under a break slowed into thunder. | Runs on a board |
 | [WRECK2](wreck2) | WRECK with the dice in your hand: the break plays straight from breakcore to doom, roll the box for chaos, tap to catch the bar you just heard, draw the drums, the riff and the bars. | Simulator only |
 

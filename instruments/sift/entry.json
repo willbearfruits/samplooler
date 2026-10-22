@@ -1,0 +1,24 @@
+{
+  "name": "SIFT",
+  "summary": "A granular synth and recorder. Everything it hears is cut into grains and sorted by sound. Tilt to pick grains, turn from a tuned pattern on the beat to a wild cloud, shake to scatter.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt",
+    "joystick",
+    "wifi"
+  ],
+  "hardware_note": "Takes up to 20 s of sound in PSRAM. It can load the Samplooler's saved slots as material.",
+  "status": "board",
+  "status_note": "Flashed on 2026-10-22: it starts and keeps up (CPU 16 %, internal RAM 150 KB free, the 20 s corpus in PSRAM). Not played much yet.",
+  "image": "images/sift-sweep.gif",
+  "more": [
+    "images/sift-play.gif",
+    "images/sift-shake.gif",
+    "images/sift-splash.gif"
+  ],
+  "added": "2026-10-22"
+}
