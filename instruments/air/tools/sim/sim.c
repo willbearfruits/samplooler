@@ -156,7 +156,6 @@ __attribute__((weak)) void sim_tick_hook(void) { }
 void sim_tick(void)
 {
     sim_tick_hook();
-    for (int i = 0; i < SI.nburst && i < 64; i++) burst_raw[i] = imu_axes(SI.burst[i]);
     float in[AUDIO_BLOCK], out[AUDIO_BLOCK];
     for (int b = 0; b < TICK_FRAMES / AUDIO_BLOCK; b++) {
         for (int i = 0; i < AUDIO_BLOCK; i++) {
@@ -170,6 +169,7 @@ void sim_tick(void)
         frames_now += AUDIO_BLOCK;
     }
     sim_t = (float)frames_now / (float)AUDIO_SR;
+    for (int i = 0; i < SI.nburst && i < 64; i++) burst_raw[i] = imu_axes(SI.burst[i]);   // after the audio: a mic callback may have filled it
     held_ms = SI.pressed ? held_ms + 10 : 0;
     front_in_t fi = {
         .enc = SI.enc, .tap = SI.tap, .pressed = SI.pressed, .held_ms = held_ms, .rec = SI.rec,

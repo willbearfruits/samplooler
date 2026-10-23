@@ -1,10 +1,11 @@
 // AIR: drum on nothing. Swing the box through the air and it is a stick. The gyro sees the stroke: forward is
-// the hi-hat, left the kick, right the snare, back the open hat. Each pad is a synthesized drum (as KNOCK's) or
-// a sample of your own: hold the knob, hit the air for the pad, make a sound into the mic. The samples survive a
-// power cycle (the FAT partition the Samplooler's slots live on). REC is an event looper: hold it while you play,
-// let go and it loops; on the link the loop is whole beats of the flock's tempo and starts on a beat.
+// the hi-hat, left the kick, right the snare, back the open hat. There is always a beat (TEMPO, or the flock's);
+// every hit is pulled to its nearest sixteenth. Tap REC and make a sound: the sound is cut from where it starts
+// to where it dies and lands on the next pad clockwise (the samples survive a power cycle on the FAT partition the
+// Samplooler's slots live on). Hold REC and play: a loop of whole bars, up to four stacked, each on or off, in
+// musical time, so they follow the tempo wherever it goes.
 //
-// This header is the contract between instrument.c (the UI task: gestures, the looper, the link, the screens),
+// This header is the contract between instrument.c (the UI task: gestures, the loops, the link, the screens),
 // inst_engine.c (the audio task: voices, samples, loop playback, the bus) and inst_store.c (flash, device only).
 #pragma once
 #include "core.h"
@@ -12,49 +13,63 @@
 
 // ---- params (the table in instrument.c, in this order)
 enum {
+    // LOOPS
+    P_TEMPO, P_LOOP1, P_LOOP2, P_LOOP3, P_LOOP4, P_ERASE_LAST, P_ERASE_ALL, P_QUANT, P_SWING, P_LLEVEL, P_MUTATE,
     // PADS
-    P_FRONT, P_LEFT, P_RIGHT, P_BACK, P_LEVEL, P_TUNE, P_DECAY, P_PUNCH,
+    P_FRONT, P_LEFT, P_RIGHT, P_BACK, P_SAMPLE, P_FORGET, P_SMAX, P_SKEEP, P_LEVEL, P_TUNE, P_DECAY, P_PUNCH,
+    // FEEL
+    P_SETUP, P_SENS, P_VEL, P_HAND, P_FLIP, P_CONFIRM, P_TILT, P_STICK,
+    // FX
+    P_FILTER, P_DRIVE, P_CRUSH, P_COMP, P_ECHO, P_ETIME, P_EFB, P_ROOM, P_RSIZE, P_GRAIN, P_GSIZE,
     // BREAK (the kit's own, KP_* from P_KBREAK: inst_kit.h; its last three are hidden, so they sit last on the page)
     P_STRETCH,
     P_KBREAK, P_KPRINT, P_KROOM, P_KTUNE, P_KTONE, P_KDECAY, P_KSWING, P_KGHOSTS, P_KHUMAN, P_KTAKE, P_KLENGTH, P_KSLICES, P_KGATE,
-    // FEEL
-    P_SENS, P_VEL, P_HAND, P_FLIP, P_TILT, P_JOYY, P_QUANT, P_TEMPO,
-    // SAMPLE
-    P_SAMPLE, P_SMAX, P_SKEEP, P_FORGET,
-    // LOOP
-    P_BEATS, P_GRID, P_SNAP, P_SWING, P_MUTATE, P_LLEVEL, P_UNDO, P_CLEAR,
-    // BUS
-    P_FILTER, P_DRIVE, P_CRUSH, P_COMP, P_ECHO, P_ETIME, P_EFB, P_ROOM, P_RSIZE, P_GRAIN, P_GSIZE,
     // LINK
     P_LINK, P_GROUP, P_RANGE, P_HANDS, P_PEERS,
+    // kept, not shown: the next pad a sample goes to, and what SWING SETUP measured
+    P_NEXT, P_CALV, P_CALH,
     P_N
 };
 
 enum { PD_FRONT, PD_LEFT, PD_RIGHT, PD_BACK, NPAD };
 enum { V_SAMPLE, V_KICK, V_SNARE, V_HAT, V_OHAT, V_TOM, V_CLAP, V_RIM, V_COWBELL, V_SHAKER, V_CONGA, V_ZAP, V_PART1, V_PART2, V_PART3, V_PART4, V_OFF, NVTYPE };
-enum { HANDS_ONE, HANDS_LEFT, HANDS_RIGHT };
+enum { HANDS_AUTO, HANDS_ONE, HANDS_LEFT, HANDS_RIGHT };
+enum { LP_EMPTY, LP_OFF, LP_ON };            // a LOOP n setting
+enum { STICK_LOOPS, STICK_ROLL, STICK_OFF };
 enum { SRC_LIVE, SRC_LOOP, SRC_MIDI, SRC_ROLL };
 
-#define MAXHITS    256
+#define NLOOP      4
+#define LOOP_HITS  128                  // hits a loop can hold
+#define BAR_MAX    8
+#define PPB        96                   // ticks per beat: musical time, so a loop follows the tempo
+#define BAR_TICKS  (4 * PPB)
 #define PAD_MAX    (1 * AUDIO_SR)       // a sample: 1 s at most (the breaks take a megabyte of the PSRAM)
 #define PAD_PRE    96                   // 3 ms kept from before the sound that starts a take
 
 typedef struct { uint8_t pad, vel, src; uint32_t at; } trig_t;             // UI -> audio; at: the frame to play on (0: now)
 typedef struct { uint32_t frame; uint8_t pad, vel, src; } played_t;        // audio -> UI
 
-// the loop: the UI writes hits (then publishes eng_nhits), the audio task reads them
+// the grid: beat 0 in our frames and the frames per beat, published by the UI each tick, read per block
+typedef struct { uint32_t fpb, origin; float frac; } grid_t;
+void   eng_set_grid(const grid_t *g);                   // UI
+void   eng_get_grid(grid_t *g);                         // any task
+int64_t eng_tick_at(const grid_t *g, uint32_t frame);   // the grid's tick (1/PPB beat) at a frame, rounded down
+uint32_t eng_frame_of(const grid_t *g, int64_t tick);   // the frame a tick falls on
+int64_t eng_floor_div(int64_t a, int64_t b);
+
+// a loop: hits at ticks from its first bar, cycling every bars * BAR_TICKS. The UI writes hits (then publishes n),
+// the audio task reads them. born: the cycle a hit was recorded live in (not replayed in that one)
+typedef struct { uint16_t tick; uint8_t pad, vel; int32_t born; } hit_t;
 typedef struct {
-    uint32_t off;                   // frames from the loop's start, as played
-    uint8_t  pad, vel, layer;
-    volatile uint8_t dead;          // undone or cleared: skipped
-    uint16_t born;                  // the pass it was added in: not replayed in that same pass
-} hit_t;
-extern hit_t eng_hits[MAXHITS];
-extern volatile int      eng_nhits;
-extern volatile uint32_t eng_loop_len;     // 0: no loop
-extern volatile uint32_t eng_loop_start;   // frame where pass 0 began
-extern volatile int      eng_loop_run;     // 1 playing, 0 stopped
-extern volatile int      eng_beats_fixed;  // the loop's beats when the link set them; 0: BEATS or a guess
+    hit_t hits[LOOP_HITS];
+    volatile int n;
+    volatile int64_t start;         // the tick of its first bar
+    volatile int bars;              // 0: empty
+    volatile int on;
+    uint32_t serial;                // recording order (ERASE LAST takes the highest)
+} loop_t;
+extern loop_t eng_loops[NLOOP];
+extern volatile int eng_run;        // 0: every loop is quiet (hold the knob)
 
 // controls from the UI (plain stores)
 extern volatile float eng_tune;            // semitones: TUNE and the tilt
@@ -88,12 +103,9 @@ void eng_init(void);                       // allocates the pads, the echo and t
 void eng_audio(const float *in, float *out, int n);
 void eng_trigger(const trig_t *t);
 bool eng_played_pop(played_t *p);
-uint32_t eng_pass(uint32_t frame);         // which pass of the loop a frame falls in
-uint32_t eng_qoff(const hit_t *h);         // where a hit plays in the loop after GRID, STRENGTH and SWING
-int   eng_beats(void);                     // beats in the loop: the link's, BEATS, or with AUTO what gives 75..165 BPM
-float eng_bpm(void);                       // 0 without a loop
 int   eng_voices_on(void);                 // voices sounding now (for the screen and the tests)
 int   eng_part_kind(int part);             // what a part mostly is (KS_*, inst_kit.h) from the break's slices, -1 none
+uint16_t eng_hit_tick(const loop_t *l, const hit_t *h);   // where a hit plays in its loop after SWING
 
 // tables shared with the screen and the sounds
 extern const char *const vt_label[NVTYPE];       // short names for the screen

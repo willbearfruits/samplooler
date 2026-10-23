@@ -21,10 +21,10 @@
 #include "inst_kit.h"
 #include "dsp.h"
 // AIR has no chopper's grid: the sampling paths that asked WRECK's machine for its step get a plain beat
-typedef struct { uint32_t fpb; int feel_q; } grid_t;
+typedef struct { uint32_t fpb; int feel_q; } wgrid_t;
 static inline int wr_steps_per_beat(int q) { (void)q; return 4; }
-static inline void wr_grid_get(grid_t *g) { g->fpb = 16000; g->feel_q = 0; }
-static inline int32_t wr_to_next_step(const grid_t *g, uint32_t frame) { (void)g; (void)frame; return 0; }
+static inline void wr_grid_get(wgrid_t *g) { g->fpb = 16000; g->feel_q = 0; }
+static inline int32_t wr_to_next_step(const wgrid_t *g, uint32_t frame) { (void)g; (void)frame; return 0; }
 #include <stdio.h>
 #include <string.h>
 #ifdef ESP_PLATFORM
@@ -1044,7 +1044,7 @@ void kit_rec_confirm(void)
     if (take_buf == r_buf) take_buf = -1;
     key_of[r_buf] = 0;
     if (r_src == KSRC_RESAMPLE) {                                 // on the machine's step
-        grid_t g; wr_grid_get(&g);
+        wgrid_t g; wr_grid_get(&g);
         uint32_t from = r_press - RES_PRE;
         det_reset();
         take_begin(from + (uint32_t)wr_to_next_step(&g, from));
@@ -1145,7 +1145,7 @@ static void rec_finish(uint32_t release)
     int32_t avail = (int32_t)(cut - r_S);
     if (avail > r_n) avail = r_n;
     if (avail < AUDIO_SR / 10) { rs_st = RS_IDLE; toast(r_n ? "TOO SHORT: NO BREAK" : "BUSY: HOLD REC AGAIN", 1200); return; }
-    grid_t g; wr_grid_get(&g);
+    wgrid_t g; wr_grid_get(&g);
     float mbeat = 4.0f * (float)g.fpb / (float)wr_steps_per_beat(g.feel_q);   // frames per beat of the machine
     int lm = (int)P(KP_LENGTH), bars = lm ? 1 << (lm - 1) : 0, beats; int32_t L; float bpm;
     if (!bars || r_src == KSRC_RESAMPLE) {                       // whole beats (or bars) at the machine's tempo

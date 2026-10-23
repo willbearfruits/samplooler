@@ -1,7 +1,7 @@
 // AIR's sound engine. Audio task only, except where noted. The drums are KNOCK's voices; a pad set to SAMPLE
-// plays its own buffer at the tune's rate. The loop replays hits with GRID, STRENGTH and SWING applied at
-// playback (never destructive). The bus: DJ filter, drive, punch (a compressor), tape echo, room, then the
-// stutter (beat repeat) the stick asks for.
+// plays its own buffer at the tune's rate. The loops are hits at ticks of the grid (1/96 beat), replayed from the
+// grid the UI publishes each tick, so they follow the tempo and the link's slew; SWING is applied at playback. The
+// bus: DJ filter, drive, punch (a compressor), tape echo, room, then the stutter (beat repeat) the stick asks for.
 #include "inst_air.h"
 #include "inst_kit.h"
 #include "dsp.h"
@@ -15,10 +15,8 @@ const int pad_gm[NPAD] = { 42, 36, 38, 46 };
 static const int8_t pad_deg[NPAD] = { 0, -5, 7, 3 };
 
 // ---------------------------------------------------------------- shared state
-hit_t eng_hits[MAXHITS];
-volatile int      eng_nhits;
-volatile uint32_t eng_loop_len, eng_loop_start;
-volatile int      eng_loop_run = 1, eng_beats_fixed;
+loop_t eng_loops[NLOOP];
+volatile int   eng_run = 1;
 volatile float eng_tune, eng_key, eng_mutate, eng_filter, eng_roll_hz, eng_stutter, eng_part_rate = 1.0f;
 volatile int   eng_part_bar = -1;
 volatile int   eng_roll_pad, eng_roll_vel = 90;
@@ -40,6 +38,35 @@ bool eng_played_pop(played_t *p) { return playq_pop(&played, p); }
 
 static uint32_t seed = 0x9e3779b9u;
 static uint32_t frame0;                     // audio_frames() at this block
+
+// ---------------------------------------------------------------- the grid (a seqlock: the UI writes, any task reads)
+static grid_t grid_v = { 19200, 0, 0.0f };  // 100 BPM from frame 0 until the UI says otherwise
+static volatile uint32_t grid_seq;
+
+void eng_set_grid(const grid_t *g)
+{
+    __atomic_store_n(&grid_seq, grid_seq + 1, __ATOMIC_RELEASE);
+    grid_v = *g;
+    __atomic_store_n(&grid_seq, grid_seq + 1, __ATOMIC_RELEASE);
+}
+void eng_get_grid(grid_t *g)
+{
+    uint32_t s0, s1;
+    do { s0 = __atomic_load_n(&grid_seq, __ATOMIC_ACQUIRE); *g = grid_v; s1 = __atomic_load_n(&grid_seq, __ATOMIC_ACQUIRE); } while (s0 != s1 || (s0 & 1));
+}
+int64_t eng_floor_div(int64_t a, int64_t b) { int64_t q = a / b; return (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q; }
+#define floor_div eng_floor_div
+int64_t eng_tick_at(const grid_t *g, uint32_t frame)
+{
+    if (!g->fpb) return 0;
+    int64_t rel = (int32_t)(frame - g->origin);
+    return floor_div(rel * PPB - (int64_t)(g->frac * (float)PPB), (int64_t)g->fpb);
+}
+uint32_t eng_frame_of(const grid_t *g, int64_t tick)
+{
+    int64_t f = floor_div(tick * (int64_t)g->fpb + PPB / 2, PPB);
+    return g->origin + (uint32_t)(int32_t)f + (uint32_t)(int32_t)(g->frac + 0.5f);
+}
 
 // ---------------------------------------------------------------- voices
 #define NV 12
@@ -315,41 +342,14 @@ void eng_init(void)
     if (!eng_pad[0] || !eng_pad[NPAD - 1] || !echo_buf || !stut_buf) app_log("air: short of memory (pads %p, echo %p, stutter %p)", (void *)eng_pad[0], (void *)echo_buf, (void *)stut_buf);
 }
 
-uint32_t eng_pass(uint32_t frame) { uint32_t l = eng_loop_len; return l ? (frame - eng_loop_start) / l : 0; }
-
-int eng_beats(void)
+// SWING: the odd sixteenths late, up to three quarters of a sixteenth
+uint16_t eng_hit_tick(const loop_t *l, const hit_t *h)
 {
-    if (eng_beats_fixed > 0) return eng_beats_fixed;
-    int b = (int)pv[P_BEATS];
-    uint32_t len = eng_loop_len;
-    if (b > 0 || !len) return b > 0 ? b : 4;
-    static const int pref[] = { 4, 2, 8, 3, 6, 1, 12, 16 };
-    float sec = (float)len / (float)AUDIO_SR, best = 1e9f; int bb = 4;
-    for (int i = 0; i < 8; i++) {
-        float bpm = (float)pref[i] * 60.0f / sec;
-        if (bpm >= 75.0f && bpm <= 165.0f) return pref[i];
-        float d = fabsf(bpm - 110.0f);
-        if (d < best) { best = d; bb = pref[i]; }
-    }
-    return bb;
-}
-float eng_bpm(void) { uint32_t len = eng_loop_len; return len ? (float)eng_beats() * 60.0f * (float)AUDIO_SR / (float)len : 0.0f; }
-
-uint32_t eng_qoff(const hit_t *h)
-{
-    static const int div[] = { 0, 1, 2, 3, 4, 6, 8 };       // GRID: OFF, 1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32
-    uint32_t len = eng_loop_len;
-    int d = div[(int)pv[P_GRID]];
-    if (!len || !d) return h->off;
-    int steps = eng_beats() * d;
-    float g = (float)len / (float)steps, off = (float)h->off;
-    float k = (float)(int)(off / g + 0.5f);
-    float target = k * g;
-    if (((int)k & 1) && d >= 2) target += pv[P_SWING] * 0.01f * g * 0.5f;
-    float q = off + (target - off) * pv[P_SNAP] * 0.01f;
-    while (q >= (float)len) q -= (float)len;
-    if (q < 0) q += (float)len;
-    return (uint32_t)q;
+    int t = h->tick;
+    if ((t % (PPB / 2)) == PPB / 4) t += (int)(pv[P_SWING] * 0.01f * (float)(PPB / 4));
+    int len = l->bars * BAR_TICKS;
+    if (len > 0 && t >= len) t -= len;
+    return (uint16_t)t;
 }
 
 static void trigger(int pad, int vel, int src, int delay)
@@ -365,28 +365,39 @@ static void trigger(int pad, int vel, int src, int delay)
     playq_push(&played, &p);
 }
 
+// the loops: every tick of the grid that falls in this block, and every hit of every loop that is on at that tick
 static void loop_block(int n)
 {
-    uint32_t len = eng_loop_len;
-    if (!len || !eng_loop_run) return;
-    uint32_t rel = frame0 - eng_loop_start, ph = rel % len;
-    int nh = eng_nhits;
+    if (!eng_run) return;
+    grid_t g; eng_get_grid(&g);
+    if (!g.fpb) return;
+    int64_t t_lo = eng_tick_at(&g, frame0 - 1) + 1, t_hi = eng_tick_at(&g, frame0 + (uint32_t)n - 1);
+    if (t_hi < t_lo) return;
     float mu = eng_mutate;
-    for (int i = 0; i < nh; i++) {
-        hit_t *h = &eng_hits[i];
-        if (h->dead) continue;
-        uint32_t q = eng_qoff(h), d = (q + len - ph) % len;
-        if (d >= (uint32_t)n) continue;
-        uint32_t pass = (rel + d) / len;
-        if ((uint16_t)pass == h->born) continue;                       // it was played in this pass: it already sounded
-        int pad = h->pad, vel = h->vel;
-        if (mu > 0.001f) {
-            float r = rng_uni(&seed);
-            if (r < mu * 0.35f) continue;                     // dropped
-            if (r < mu * 0.7f) pad = (int)(rng_next(&seed) % NPAD);
-            vel = clampi((int)((float)vel * (1.0f + mu * 0.5f * rng_bi(&seed))), 10, 127);
+    for (int64_t t = t_lo; t <= t_hi; t++) {
+        int d = (int)(int32_t)(eng_frame_of(&g, t) - frame0);
+        if (d < 0) d = 0; else if (d >= n) d = n - 1;
+        for (int k = 0; k < NLOOP; k++) {
+            loop_t *l = &eng_loops[k];
+            int bars = l->bars, nh = l->n;
+            if (!bars || !l->on || !nh) continue;
+            int len = bars * BAR_TICKS;
+            int64_t since = t - l->start;
+            int rel = (int)(since - floor_div(since, len) * len);
+            int32_t cycle = (int32_t)floor_div(since, len);
+            for (int i = 0; i < nh; i++) {
+                const hit_t *h = &l->hits[i];
+                if (eng_hit_tick(l, h) != rel || h->born == cycle) continue;   // born: it sounded live in that cycle
+                int pad = h->pad, vel = h->vel;
+                if (mu > 0.001f) {
+                    float r = rng_uni(&seed);
+                    if (r < mu * 0.35f) continue;                     // dropped
+                    if (r < mu * 0.7f) pad = (int)(rng_next(&seed) % NPAD);
+                    vel = clampi((int)((float)vel * (1.0f + mu * 0.5f * rng_bi(&seed))), 10, 127);
+                }
+                trigger(pad, vel, SRC_LOOP, d);
+            }
         }
-        trigger(pad, vel, SRC_LOOP, (int)d);
     }
 }
 
