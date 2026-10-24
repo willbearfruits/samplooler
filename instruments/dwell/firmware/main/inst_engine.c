@@ -11,14 +11,19 @@
 // harmonic above 14 kHz), two levels crossfaded by the fractional wish so BRIGHT never steps. TANPURA has a string
 // per slot and ROOM a loop head per copy; neither clusters' phases. After the slots: the difference tone, the hall
 // (a four-line FDN, Householder mixing), LEVEL, REST, the duck round a source change, then the room pass's playback.
+// The slots are two layers of NVL (eng_layer crossfades them, equal power, over eng_fade_s); a slot whose layer is
+// silent takes its targets at once. Before the hall: the energy's VCA, the interference bursts (eng_zap), the dirt (an
+// asymmetric cubic soft clip with first-order antiderivative anti-aliasing, a DC blocker, a tone low pass, wet/dry) and
+// the echo (PSRAM, its time gliding like tape, a dark saturating feedback, wet/dry).
 // Every gain that reaches the sound is ramped inside the block; frequencies step per block, phase-continuous.
 //
-// Internal RAM (app_alloc_fast): the bank (28 KB: the current source's six tables, or TANPURA's six strings), the
-// WAVE tables (16 KB), the hall (33 KB). PSRAM (app_alloc): the three spectra's banks built at init (74 KB), the
-// take (128 KB), the room's two buffers (768 KB).
+// Internal RAM (app_alloc_fast): the bank (39 KB: the current source's six tables, or TANPURA's twelve strings), the
+// WAVE tables (8 KB), the hall (33 KB). PSRAM (app_alloc): the three spectra's banks built at init (74 KB), the take
+// (128 KB), the room's two buffers (768 KB), the echo (203 KB).
 #include "inst_dwell.h"
 #include "inst_eng.h"
 #include "dsp.h"
+#include "spsc.h"
 #include <string.h>
 #ifdef ESP_PLATFORM
 #include "esp_attr.h"
@@ -37,6 +42,10 @@ volatile int   eng_take_on, eng_take_frames; volatile float eng_take_level;
 volatile float eng_wave_hz; volatile int eng_wave_ready;
 volatile int   eng_room_state, eng_room_pass, eng_room_passes, eng_room_pos, eng_room_frames, eng_room_have;
 volatile float eng_room_peak, eng_room_base_hz;
+volatile int   eng_layer;
+volatile float eng_fade_s = 8.0f, eng_vca = 1.0f, eng_drive, eng_tone = 0.6f, eng_dmix = 1.0f, eng_grit;
+volatile float eng_echo_s = 0.45f, eng_echo_fb, eng_echo_mix, eng_zap_gate;
+volatile float eng_layer_x, eng_zap_env, eng_drive_now;
 
 int16_t *dw_take;
 float   *dw_wtab[2];
@@ -47,8 +56,10 @@ volatile int dw_wave_cur, dw_wave_want, dw_wave_busy;
 #define NLEV       6                        // 1 2 4 8 16 32 harmonics
 #define TAB_F      (TAB_N + 1)
 #define BANK_F     (NLEV * TAB_F)           // 6150 floats
-#define STR_N      1168                     // a string's ring: 32000 / 27.5 and a little
-#define BANK_ALLOC (NV * STR_N)             // 7008 floats: the strings share the bank
+#define STR_N      816                      // a string's ring: 32000 / 40 and a little (lower strings play an octave up)
+#define BANK_ALLOC (NV * STR_N)             // 9792 floats: the strings (both layers) share the bank with the tables
+#define ECHO_N     52000                    // the echo's line: 1.625 s (PSRAM)
+#define NZAP       16                       // interference bursts sounding at once
 #define ROOM_N     (ROOM_MAX_S * AUDIO_SR)
 #define ROOM_XF    640                      // the loop's seam, 20 ms
 #define V_GAIN     0.075f                   // one pure voice's peak at level 1
@@ -81,7 +92,7 @@ typedef struct {
     // TANPURA
     float sd;                          // the string's delay, samples
     float slp, sdx, sdy, senv, spk, sg, srel, sexc_a, sexc_lp;
-    int   sw, sexc;
+    int   sw, sexc, sexc_len;
     uint32_t rng;
 } slot_t;
 static slot_t S[NV];
@@ -123,6 +134,22 @@ static float wheel_ph, swell_ph, buzz_env, buzz_ph, air_s;
 static svf_t buzz_bp, air_bp;
 static int   pluck_wait, pluck_k;
 static float wave_xf;
+
+// the layers, the VCA, the dirt, the echo
+static float lay_x, lay_g[2] = { 1.0f, 0.0f };
+static float vca_s = 1.0f, drive_s, dmix_s = 1.0f, grit_s, tone_k = 1.0f, tone_last = -1.0f;
+static float dr_u1, dr_dcx, dr_dcy, dr_lp, dr_G = 2.5f, dr_bias = 1.0f, dr_mix, dr_out = 1.0f;
+static float *echo_buf;
+static int   echo_w;
+static float echo_d = 0.45f * (float)AUDIO_SR, echo_lp, efb_s, emix_s, e_dry = 1.0f, e_wet;
+// the interference
+typedef struct { uint32_t at; int len; float amp; int kind; } zap_t;
+SPSC(zapq, zap_t, 64)
+static zapq_t zq;
+typedef struct { uint32_t at; int k, len; float amp, ph, inc; int kind; bool on; } zv_t;
+static zv_t zv[NZAP];
+static slot_t BODY;                    // the reed's formants and the bow's box: the same filter for every voice, so run once on their sum
+static float zbuf[AUDIO_BLOCK], zenv[AUDIO_BLOCK];
 
 // the room pass
 static int   room_rec = -1, room_play = -1, room_loop = -1, room_len, room_len_seen;
@@ -204,8 +231,10 @@ void eng_init(void)
     for (int k = 0; k < HALL_N; k++) hall_buf[k] = app_alloc_fast((size_t)hall_len[k] * sizeof(float));
     dw_take = app_alloc(TAKE_N * sizeof(int16_t));
     for (int k = 0; k < 2; k++) rbuf[k] = app_alloc(ROOM_N * sizeof(int16_t));
+    echo_buf = app_alloc(ECHO_N * sizeof(float));                     // read and written in step, once a sample: PSRAM is fine
     if (!bank || !dw_wtab[0] || !dw_wtab[1] || !hall_buf[HALL_N - 1]) { app_log("DWELL: out of internal RAM"); bank = NULL; return; }
     if (!dw_take || !rbuf[1]) app_log("DWELL: out of PSRAM (no take or room)");
+    if (!echo_buf) app_log("DWELL: out of PSRAM (no echo)");
     dw_wave_default(dw_wtab[0]);
     memcpy(dw_wtab[1], dw_wtab[0], (WAVE_N + 1) * sizeof(float));
     eng_wave_ready = 1;
@@ -219,6 +248,8 @@ void eng_init(void)
         reso_set(&s->r1, 280.0f, 0.06f); reso_set(&s->r2, 480.0f, 0.06f);
         s->sd = 400.0f; s->srel = 1.1f;
     }
+    formants_for(&BODY, eng_source);
+    reso_set(&BODY.r1, 280.0f, 0.06f); reso_set(&BODY.r2, 480.0f, 0.06f);
     svf_set(&buzz_bp, 1800.0f, 1.2f);
     svf_set(&air_bp, 1500.0f, 0.8f);
     // the first source's tables, at once: no switch at boot
@@ -243,6 +274,11 @@ void eng_room_start(int passes, int frames, float base_hz)
     room_req_base = base_hz > HZ_MIN ? base_hz : 65.4f;
     room_cmd = 1;
     __atomic_add_fetch(&room_seq, 1, __ATOMIC_RELEASE);
+}
+bool eng_zap(uint32_t at, int len, float amp, int kind)
+{
+    zap_t z = { .at = at, .len = len < 4 ? 4 : len > 4000 ? 4000 : len, .amp = clampf(amp, 0.0f, 1.0f), .kind = kind };
+    return zapq_push(&zq, &z);
 }
 void eng_room_stop(void) { room_cmd = 2; __atomic_add_fetch(&room_seq, 1, __ATOMIC_RELEASE); }
 const int16_t *eng_room_loop(int *frames)
@@ -332,7 +368,14 @@ static IRAM_ATTR __attribute__((noinline)) void string_run(float *restrict out, 
         if (z > thr) z = thr + (z - thr) * STR_KNEE;
         float dc = z - dx + 0.999f * dy; dx = z; dy = dc;
         float x = dc * g;
-        if (s->sexc > 0) { exlp += STR_EX * (rng_bi(&r) - exlp); x += exlp * s->sexc_a * 4.0f; s->sexc--; }   // a soft pluck: a thread, not a pick
+        if (s->sexc > 0) {                                           // a soft pluck: a finger's smooth push, a little noise for life
+            int k = s->sexc_len - s->sexc;
+            float wq = 0.25f * (float)s->sexc_len;
+            float bump = (float)k < wq ? sin_turns(0.5f * (float)k / wq) : 0.0f;
+            exlp += STR_EX * (rng_bi(&r) - exlp);
+            x += s->sexc_a * (0.8f * bump + 1.5f * exlp);
+            s->sexc--;
+        }
         ring[w] = x;
         if (++w >= STR_N) w = 0;
         // the bridge's buzz: what swings past JAW_CAP of the string's envelope, through the climbing formant
@@ -368,6 +411,110 @@ static IRAM_ATTR __attribute__((noinline)) void hall_run(const float *restrict i
     hall_lp[0] = flush(l0); hall_lp[1] = flush(l1); hall_lp[2] = flush(l2); hall_lp[3] = flush(l3);
 }
 
+// the dirt: the cubic soft clip x - x^3/3 (flat at 2/3 past 1) and its antiderivative, for first-order ADAA
+static inline float clip3(float x) { return x > 1.0f ? 0.6666667f : x < -1.0f ? -0.6666667f : x - x * x * x * (1.0f / 3.0f); }
+static inline float clip3_F(float x)
+{
+    float a = fabsf(x);
+    return a > 1.0f ? 0.6666667f * a - 0.25f : 0.5f * x * x - x * x * x * x * (1.0f / 12.0f);
+}
+// asymmetric: the negative side through k times the gain (k < 1 clips it later and higher): a fuzz's even harmonics
+static inline float clipa(float u, float k) { return u >= 0.0f ? clip3(u) : clip3(k * u) / k; }
+static inline float clipa_F(float u, float k) { return u >= 0.0f ? clip3_F(u) : clip3_F(k * u) / (k * k); }
+// in place: in-gain (G), the asymmetric clip (k) with first-order ADAA, a DC blocker for what the asymmetry leaves, the
+// tone, the clean and the driven mixed; G, k, out-gain and mix ramp over the block from where they were
+static IRAM_ATTR __attribute__((noinline)) void drive_run(float *restrict x, int n, float G1, float k1, float o1, float m1, float grit, uint32_t *rs)
+{
+    if (m1 <= 0.0f && dr_mix <= 0.0f) { dr_G = G1; dr_bias = k1; dr_out = o1; return; }   // clean: nothing to do
+    float G = dr_G, dG = (G1 - G) / (float)n, k = dr_bias, dk = (k1 - k) / (float)n, o = dr_out, dO = (o1 - o) / (float)n;
+    float m = dr_mix, dm = (m1 - m) / (float)n, u1 = dr_u1, dcx = dr_dcx, dcy = dr_dcy, lp = dr_lp, tk = tone_k;
+    uint32_t r = *rs;
+    for (int i = 0; i < n; i++) {
+        float clean = x[i];
+        float u = (clean + grit * 0.04f * rng_bi(&r)) * G;
+        float du = u - u1, y;
+        if (fabsf(du) > 1e-4f) y = (clipa_F(u, k) - clipa_F(u1, k)) / du;
+        else y = clipa(0.5f * (u + u1), k);
+        u1 = u;
+        float h = y - dcx + 0.9985f * dcy; dcx = y; dcy = h;         // what the asymmetry leaves: about 8 Hz
+        lp += tk * (h - lp);
+        x[i] = clean + m * (lp * o - clean);
+        G += dG; k += dk; o += dO; m += dm;
+    }
+    dr_G = G1; dr_bias = k1; dr_out = o1; dr_mix = m1;
+    dr_u1 = u1; dr_dcx = flush(dcx); dr_dcy = flush(dcy); dr_lp = flush(lp); *rs = r;
+}
+// in place: the echo. Its time glides (tape), what comes round is darkened and saturated, then mixed in (equal power)
+static IRAM_ATTR __attribute__((noinline)) void echo_run(float *restrict x, int n, float d1, float fb1, float wet1, float dry1)
+{
+    float d = echo_d, dd = (d1 - d) / (float)n, fb = efb_s, wet = e_wet, dw = (wet1 - wet) / (float)n, dry = e_dry, dy = (dry1 - dry) / (float)n;
+    float lp = echo_lp;
+    int w = echo_w;
+    float *buf = echo_buf;
+    for (int i = 0; i < n; i++) {
+        float rp = (float)w - d; if (rp < 0.0f) rp += (float)ECHO_N;
+        int i0 = (int)rp; float fr = rp - (float)i0;
+        int i1 = i0 + 1; if (i1 >= ECHO_N) i1 = 0;
+        float a = buf[i0], e = a + (buf[i1] - a) * fr;
+        lp += 0.35f * (e - lp);                                      // a little darker each time round
+        buf[w] = flush(x[i] + fb * 0.5f * soft_tanh(2.0f * lp));      // and never more than half scale coming round
+        if (++w >= ECHO_N) w = 0;
+        x[i] = x[i] * dry + e * wet;
+        d += dd; wet += dw; dry += dy;
+    }
+    echo_d = d1; e_wet = wet1; e_dry = dry1; echo_lp = flush(lp); echo_w = w; (void)fb1;
+}
+// the interference: new bursts from the queue into free voices; then n samples of them into zbuf, their envelope
+// into zenv (a Wi-Fi frame is a crackle of noise, a Bluetooth advert a short buzz; 8-sample edges)
+static bool zaps_take(void)
+{
+    zap_t z;
+    while (zapq_pop(&zq, &z)) {
+        int k = -1;
+        for (int i = 0; i < NZAP; i++) if (!zv[i].on) { k = i; break; }
+        if (k < 0) continue;                                          // all busy: this one is lost in the others
+        static const float buzz[3] = { 1180.0f, 1590.0f, 2030.0f };  // the three advertising channels, as three buzzes
+        zv[k] = (zv_t){ .at = z.at, .k = -1, .len = z.len, .amp = z.amp, .kind = z.kind, .on = true,
+                        .inc = buzz[(z.at >> 3) % 3] / (float)AUDIO_SR };
+    }
+    for (int i = 0; i < NZAP; i++) if (zv[i].on) return true;
+    return false;
+}
+static IRAM_ATTR __attribute__((noinline)) float zaps_run(int n, uint32_t frame0, uint32_t *rs)
+{
+    memset(zbuf, 0, (size_t)n * sizeof(float));
+    memset(zenv, 0, (size_t)n * sizeof(float));
+    float pk = 0.0f;
+    uint32_t r = *rs;
+    for (int j = 0; j < NZAP; j++) {
+        zv_t *z = &zv[j];
+        if (!z->on) continue;
+        int i0 = 0;
+        if (z->k < 0) {                                              // not started: when its moment comes in this block
+            int32_t off = (int32_t)(z->at - frame0);
+            if (off >= n) continue;
+            if (off < -AUDIO_SR / 10) off = 0;                       // far too late (a stall): now
+            i0 = off > 0 ? off : 0;
+            z->k = 0;
+        }
+        for (int i = i0; i < n; i++) {
+            int left = z->len - z->k;
+            if (left <= 0) { z->on = false; break; }
+            float e = z->k < 8 ? (float)z->k * 0.125f : left < 8 ? (float)left * 0.125f : 1.0f;
+            float v;
+            if (z->kind == ZAP_WIFI) v = 0.25f * rng_bi(&r);
+            else { z->ph += z->inc; z->ph -= (float)(z->ph >= 1.0f); v = z->ph < 0.5f ? 0.12f : -0.12f; }
+            zbuf[i] += z->amp * e * v;
+            zenv[i] += z->amp * e;
+            z->k++;
+        }
+        if (z->k >= z->len) z->on = false;
+    }
+    for (int i = 0; i < n; i++) { if (zenv[i] > 1.0f) zenv[i] = 1.0f; if (zenv[i] > pk) pk = zenv[i]; }
+    *rs = r;
+    return pk;
+}
+
 // ---------------------------------------------------------------- the source switch (under the duck)
 // the reed's two formants; the shruti box's lower and more nasal
 static void formants_for(slot_t *s, int src)
@@ -387,7 +534,8 @@ static bool switch_build(int step)
 {
     int sp = spec_of(want_src);
     if (step == 0) {
-        for (int v = 0; v < NV; v++) { slot_reset_filters(&S[v]); formants_for(&S[v], want_src); }
+        for (int v = 0; v < NV; v++) slot_reset_filters(&S[v]);
+        slot_reset_filters(&BODY); formants_for(&BODY, want_src);
         if (want_src == SRC_TANPURA) memset(bank, 0, BANK_ALLOC * sizeof(float));
         if (want_src == SRC_ROOM) room_len_seen = -1;                  // the heads spread out
         pluck_wait = 0; pluck_k = 0; buzz_env = 0.0f;
@@ -518,7 +666,7 @@ static bool slot_render(slot_t *s, float *buf, int n, int src, float strum_mul)
     float wobble = 1.0f;
     if (src == SRC_GURDY) wobble = 1.0f + 0.003f * sin_turns(wheel_ph);
     if (src == SRC_TANPURA) {
-        float f = s->hz; if (f < 27.5f) f = 27.5f; if (f > 2000.0f) f = 2000.0f;
+        float f = s->hz; while (f < 40.0f) f *= 2.0f; if (f > 2000.0f) f = 2000.0f;
         float d = (float)AUDIO_SR / f - (1.0f - STR_A) / STR_A;         // the loop's low pass delays the rest
         float d0 = s->sd; s->sd = d;
         // the decay: 6 s at the fundamental; the jawari's knee, relative to the string's own envelope, hardens as it decays
@@ -530,7 +678,7 @@ static bool slot_render(slot_t *s, float *buf, int n, int src, float strum_mul)
         float sweep = s->spk > 1e-6f ? clampf(JAW_SP * (1.0f - s->senv / s->spk), 0.0f, 1.0f) : 0.0f;
         svf_set(&s->f1, f * (2.0f + JAW_SWEEP * sweep), JAW_Q);
         string_run(buf, bank + (s - S) * STR_N, s, d0, d, s->srel, eng_jawari, n);
-        float g = 5.0f * norm;
+        float g = 11.0f * norm;                                       // the soft pluck is quiet: up to the other sources
         for (int i = 0; i < n; i++) buf[i] *= g;
         s->cg[0] = norm;
         return true;
@@ -621,7 +769,7 @@ void eng_audio(const float *in, float *out, int n)
         if (a > strum_env) strum_env = a;
         if (cur_src == SRC_TANPURA) pluck_wait = (int)(clampf(eng_pluck_s, 0.1f, 8.0f) * (float)AUDIO_SR);   // the cycle starts again after a strum
         if (cur_src == SRC_TANPURA && sw_state == SW_IDLE)
-            for (int v = 0; v < NV; v++) if (S[v].lv > 0.02f || eng_slot_lvl[v] > 0.0f) { S[v].sexc = (int)S[v].sd; S[v].sexc_a = 0.25f * (0.5f + a); S[v].spk = 0.0f; }
+            for (int v = 0; v < NV; v++) if (S[v].lv > 0.02f || eng_slot_lvl[v] > 0.0f) { S[v].sexc = S[v].sexc_len = (int)S[v].sd; S[v].sexc_a = 0.25f * (0.5f + a); S[v].spk = 0.0f; }
         if (cur_src == SRC_GURDY) buzz_env = a > buzz_env ? a : buzz_env;
     }
     switch_tick();
@@ -643,6 +791,21 @@ void eng_audio(const float *in, float *out, int n)
     mute_s += 0.0392f * ((passing_mute ? 0.0f : 1.0f) - mute_s);
     int copies = clampi(eng_copies, 1, NCOPY);
     ncopy = 1 + (int)((float)(copies - 1) * dense_s + 0.5f);
+    // the layers' crossfade: linear in time over FADE, equal power
+    {
+        float fs = eng_fade_s; if (fs < 0.2f) fs = 0.2f;
+        float lt = eng_layer ? 1.0f : 0.0f, step = (float)n / (fs * (float)AUDIO_SR);
+        if (lay_x < lt) { lay_x += step; if (lay_x > lt) lay_x = lt; }
+        else if (lay_x > lt) { lay_x -= step; if (lay_x < lt) lay_x = lt; }
+        xfade_gains(lay_x, &lay_g[0], &lay_g[1]);
+        eng_layer_x = lay_x;
+    }
+    // while both layers sound, the copies are shared out: 40 at most (48 with one layer: 6 tones of 8)
+    {
+        int active = 0;
+        for (int v = 0; v < NV; v++) if ((S[v].lv > 1e-4f || eng_slot_lvl[v] > 0.0f) && lay_g[v / NVL] > 0.001f) active++;
+        if (active > 6 && ncopy * active > 40) { ncopy = 40 / active; if (ncopy < 1) ncopy = 1; }
+    }
     eng_copies_now = src == SRC_TANPURA ? 1 : ncopy;
     // the strum: instant up, down over STRUM; applied through a 5 ms one-pole
     float ss = eng_strum_s; if (ss < 0.05f) ss = 0.05f;
@@ -672,7 +835,7 @@ void eng_audio(const float *in, float *out, int n)
             pluck_wait += (int)(ps * (float)AUDIO_SR);
             for (int k = 0; k < NV; k++) {
                 slot_t *s = &S[pluck_k]; pluck_k = (pluck_k + 1) % NV;
-                if (s->lv > 0.02f || eng_slot_lvl[pluck_k ? pluck_k - 1 : NV - 1] > 0.0f) { s->sexc = (int)s->sd; s->sexc_a = 0.25f; s->spk = 0.0f; break; }
+                if (s->lv > 0.02f || eng_slot_lvl[pluck_k ? pluck_k - 1 : NV - 1] > 0.0f) { s->sexc = s->sexc_len = (int)s->sd; s->sexc_a = 0.25f; s->spk = 0.0f; break; }
             }
         }
     }
@@ -684,15 +847,16 @@ void eng_audio(const float *in, float *out, int n)
         float hz_t = eng_slot_hz[v], lvl_t = clampf(eng_slot_lvl[v], 0.0f, 1.0f);
         if (!(hz_t > HZ_MIN)) lvl_t = 0.0f;
         else if (hz_t != s->hz_t) { s->hz_t = hz_t; s->lg_t = log2f(hz_t); }
-        if (s->lv < 0.02f) s->lg = s->lg_t;                              // near silence: the new pitch at once
+        bool hidden = lay_g[v / NVL] < 0.01f;                          // its layer is all but silent: no one hears it arrive
+        if (s->lv < 0.02f || hidden) s->lg = s->lg_t;                    // near silence: the new pitch at once
         else s->lg += kp * (s->lg_t - s->lg);
-        s->lv += kp * (lvl_t - s->lv);
+        if (hidden) s->lv = lvl_t; else s->lv += kp * (lvl_t - s->lv);
         if (s->lv < 1e-5f && lvl_t == 0.0f) s->lv = 0.0f;
         s->hz = fabsf(s->lg - s->lg_t) < 1e-6f ? s->hz_t : exp2_prec(s->lg);
         eng_slot_hz_now[v] = s->lv > 0.001f ? s->hz : 0.0f;
         eng_slot_lvl_now[v] = s->lv;
         lv_sum += s->lv;
-        float g1 = s->lv * V_GAIN * strum_mul * mute_s;
+        float g1 = s->lv * V_GAIN * strum_mul * mute_s * lay_g[v / NVL];
         if (src == SRC_GURDY) g1 *= 1.0f - 0.1f * (0.5f + 0.5f * sin_turns(wheel_ph));
         if (src == SRC_SHRUTI) g1 *= 1.0f - 0.35f * breath_s * (0.5f + 0.5f * sin_turns(swell_ph));
         if (src == SRC_BOW) { s->bow += 0.04f * (rng_bi(&s->rng) - s->bow); g1 *= 1.0f + 0.06f * s->bow; }
@@ -700,10 +864,10 @@ void eng_audio(const float *in, float *out, int n)
         if (g1 < 1e-6f && g0 < 1e-6f) { if (s->lv == 0.0f) for (int c = 0; c < NCOPY; c++) s->cg[c] = 0.0f; continue; }
         float sb[AUDIO_BLOCK];
         if (!slot_render(s, sb, n, src, strum_mul)) continue;
-        if (src == SRC_REED || src == SRC_SHRUTI || src == SRC_BOW || src == SRC_GURDY) slot_body(s, sb, n, src, body_s);
         float g = g0, dg = (g1 - g0) / (float)n;
         for (int i = 0; i < n; i++) { bus[i] += g * sb[i]; g += dg; }
     }
+    if (src == SRC_REED || src == SRC_SHRUTI || src == SRC_BOW || src == SRC_GURDY) slot_body(&BODY, bus, n, src, body_s);
     // the sources' extras on the bus: the shruti box's air, the gurdy's trompette
     if (src == SRC_SHRUTI) {
         float a1 = 0.3f * breath_s * V_GAIN * (lv_sum > 1.0f ? 1.0f : lv_sum) * mute_s, a = air_s, da = (a1 - a) / (float)n;
@@ -742,6 +906,43 @@ void eng_audio(const float *in, float *out, int n)
         } else diff_lvl_s = 0.0f;
         eng_diff_hz = diff_lvl_s > 1e-4f ? diff_hz_s : 0.0f;
     }
+    // the energy's VCA (30 ms), then the interference: its bursts on the bus, the drone chopped under them
+    {
+        float v0 = vca_s;
+        vca_s += kblock(0.03f, n) * (clampf(eng_vca, 0.0f, 1.5f) - vca_s);
+        float dv = (vca_s - v0) / (float)n, g = v0, gate = clampf(eng_zap_gate, 0.0f, 1.0f);
+        if (zaps_take()) {
+            float zpk = zaps_run(n, audio_frames(), &rng);
+            eng_zap_env = zpk > eng_zap_env ? zpk : eng_zap_env * 0.97f;
+            for (int i = 0; i < n; i++) { bus[i] = bus[i] * g * (1.0f - gate * zenv[i]) + zbuf[i]; g += dv; }
+        } else {
+            eng_zap_env *= 0.97f;
+            for (int i = 0; i < n; i++) { bus[i] *= g; g += dv; }
+        }
+    }
+    // the dirt: up to +32 dB into the clip, the negative side clipping up to twice as late; the clip's ceiling holds the level, so a
+    // crescendo into the dirt grows by about 10 dB, not 30
+    {
+        drive_s += 0.0392f * (clampf(eng_drive, 0.0f, 1.0f) - drive_s);
+        dmix_s += 0.0392f * (clampf(eng_dmix, 0.0f, 1.0f) - dmix_s);
+        grit_s += 0.1f * (clampf(eng_grit, 0.0f, 1.0f) - grit_s);
+        float tn = clampf(eng_tone, 0.0f, 1.0f);
+        if (fabsf(tn - tone_last) > 0.002f) { tone_last = tn; tone_k = onepole_hz(800.0f * fast_exp2(tn * 4.32f)); }
+        float pre = 1.0f + 40.0f * drive_s * drive_s, G = 2.5f * pre;
+        float o = 0.4f * (1.0f + 0.25f * drive_s);                   // unity while it is clean; flat out, peaks near 0.5
+        float m = dmix_s * smoothstep(0.0f, 0.12f, drive_s + 0.5f * grit_s);
+        drive_run(bus, n, G, 1.0f - 0.5f * drive_s, o, m, grit_s, &rng);
+        eng_drive_now = drive_s;
+    }
+    // the echo
+    if (echo_buf) {
+        float dt = clampf(eng_echo_s, 0.02f, 1.6f) * (float)AUDIO_SR;
+        float d1 = echo_d + kblock(0.25f, n) * (dt - echo_d);
+        efb_s += 0.0392f * (clampf(eng_echo_fb, 0.0f, 0.97f) - efb_s);
+        emix_s += 0.0392f * (clampf(eng_echo_mix, 0.0f, 1.0f) - emix_s);
+        float dry1, wet1; xfade_gains(emix_s, &dry1, &wet1);
+        echo_run(bus, n, d1, efb_s, wet1, dry1);
+    }
     // the hall
     float t60 = 0.4f * fast_exp2(tail_s * 5.6439f);                   // 0.4 s .. 20 s
     if (fabsf(t60 - hall_t60) > 0.01f * t60) {
@@ -766,6 +967,8 @@ void eng_audio(const float *in, float *out, int n)
         memset(out, 0, (size_t)n * sizeof(float));
         for (int k = 0; k < HALL_N; k++) { memset(hall_buf[k], 0, (size_t)hall_len[k] * sizeof(float)); hall_lp[k] = 0.0f; }
         for (int v = 0; v < NV; v++) slot_reset_filters(&S[v]);
+        if (echo_buf) memset(echo_buf, 0, ECHO_N * sizeof(float));
+        echo_lp = dr_u1 = dr_dcx = dr_dcy = dr_lp = 0.0f;
         pk = 0.0f;
     }
     eng_out_lvl = pk > eng_out_lvl ? pk : eng_out_lvl * 0.98f;

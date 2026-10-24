@@ -44,7 +44,7 @@ void test_scene(void)
     sim_gif_end();
     sim_shot("trail");
     check(D.lead_b == 3 && D.lead_c == 1, "the walk reached (3, 1): lead at (%d, %d) %s", D.lead_b, D.lead_c, D.lead_name);
-    int on = 0; for (int i = 0; i < NV; i++) on += D.slot[i].on;
+    int on = 0; for (int i = 0; i < NVL; i++) on += D.slot[i].on;
     check(on >= 3, "a trail is sounding (%d slots on)", on);
 
     // the knob: pure to dense over 4 s
@@ -105,6 +105,33 @@ void test_scene(void)
     sim_shot("room_done");
     param_set(P_SOURCE, SRC_SINE);
 
+    // the second round: a crescendo, a shake, a new root fading in, the radios
+    INST.action(P_HOME); run(9.0f);
+    param_set(P_REST, -20.0f); param_set(P_CLIMB, 3.0f); param_set(P_FALL, 6.0f); param_set(P_KNOCK, KN_NEXT); param_set(P_NEXT, NX_FIFTH); param_set(P_FADE, 3.0f);
+    sim_gif_begin("energy");
+    SI.gyro = (vec3_t){ 400.0f, 0.0f, 0.0f }; run(3.0f);
+    sim_shot("energy_full");
+    SI.gyro = (vec3_t){ 0.0f, 0.0f, 0.0f };
+    for (int i = 0; i < 80; i++) { SI.acc = (vec3_t){ (i & 1) ? 1.6f : -1.6f, 0.3f, 1.0f }; sim_tick(); if (i == 40) sim_shot("shake"); }
+    SI.acc = (vec3_t){ 0, 0, 1 };
+    run(1.0f);
+    SI.acc = (vec3_t){ 0.2f, 0.1f, 1.9f }; sim_tick(); sim_tick(); SI.acc = (vec3_t){ 0, 0, 1 };
+    run(1.5f);
+    check(D.fade > 0.2f && D.fade < 0.8f, "half way through the fade (%.2f)", (double)D.fade);
+    sim_shot("fade");
+    run(4.0f);
+    sim_gif_end();
+    check(!strcmp(D.root_name, "3/2"), "a knock a second after the shake moved the root a fifth (%s)", D.root_name);
+    sim_shot("new_root");
+    param_set(P_RADIO, RAD_BOTH); param_set(P_ZAP, 100.0f);
+    sim_gif_begin("radio");
+    run(3.0f);
+    sim_gif_end();
+    sim_shot("radio");
+    param_set(P_RADIO, RAD_OFF);
+    INST.action(P_HOME); run(4.0f);
+    param_set(P_REST, -14.0f);
+
     // the splash and the saver as stills (the sim's boot made the splash animation)
     oled_clear(); scene_splash(30); sim_shot("splash_open");
     oled_clear(); scene_splash(85); sim_shot("splash");
@@ -124,7 +151,7 @@ void test_scene(void)
     int lit = lit_pixels(16, 64);
     check(lit > 50 && lit < 128 * 48 * 6 / 10, "an empty D draws a sane frame (%d px lit)", lit);
     D.cur_b = 9.0f; D.cur_c = -9.0f; D.lead_b = 3; D.lead_c = 2; D.limit = LIM_7; D.dense = 1.0f; D.strum = 5.0f; D.peers = 20; D.spread = 1; D.rank = 3;
-    for (int i = 0; i < NV; i++) { D.slot[i].on = 1; D.slot[i].b = 3; D.slot[i].c = 2; D.slot[i].lvl = 0.5f; snprintf(D.slot[i].name, sizeof D.slot[i].name, "1323/1024"); }
+    for (int i = 0; i < NVL; i++) { D.slot[i].on = 1; D.slot[i].b = 3; D.slot[i].c = 2; D.slot[i].lvl = 0.5f; snprintf(D.slot[i].name, sizeof D.slot[i].name, "1323/1024"); }
     snprintf(D.lead_name, sizeof D.lead_name, "1323/1024");
     draw_now();
     lit = lit_pixels(16, 64);

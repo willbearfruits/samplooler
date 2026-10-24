@@ -15,7 +15,8 @@
 void test_engine(void);
 void test_scene(void);
 
-const char *const inst_click_skip[] = { "nlnk", "ngrp", "npow", NULL };   // the radio's switches, not the sound
+// the radio's switches (not the sound), and the interference (bursts of noise are clicks by design)
+const char *const inst_click_skip[] = { "nlnk", "ngrp", "npow", "radi", "zap ", NULL };
 
 // ---------------------------------------------------------------- helpers
 static void run(float s) { int n = (int)(s * 100.0f + 0.5f); for (int i = 0; i < n; i++) sim_tick(); }
@@ -39,11 +40,12 @@ static void quiet(void)                                               // quick e
 {
     set("drft", 0.5f); set("dens", 0); set("voic", 4); set("root", 1); set("move", MOVE_SWELL); set("limt", LIM_7);
     set("srce", SRC_SINE); set("spce", 0); set("diff", 0); set("knck", 1); set("sprd", 0); set("folw", 1); set("tstp", 10); set("dwel", 0.4f);
+    set("hand", 0); set("radi", RAD_OFF);
     sim_tilt(0, 0); run(0.5f);
 }
-static int slots_on(void) { int n = 0; for (int i = 0; i < NV; i++) n += D.slot[i].on; return n; }
-static int slot_named(const char *name) { for (int i = 0; i < NV; i++) if (D.slot[i].on && !D.slot[i].is_root && !strcmp(D.slot[i].name, name)) return i; return -1; }
-static int lead_slot(void) { for (int i = 0; i < NV; i++) if (D.slot[i].on && D.slot[i].is_lead) return i; return -1; }
+static int slots_on(void) { int n = 0; for (int i = 0; i < NVL; i++) n += D.slot[i].on; return n; }
+static int slot_named(const char *name) { for (int i = 0; i < NVL; i++) if (D.slot[i].on && !D.slot[i].is_root && !strcmp(D.slot[i].name, name)) return i; return -1; }
+static int lead_slot(void) { for (int i = 0; i < NVL; i++) if (D.slot[i].on && D.slot[i].is_lead) return i; return -1; }
 static float fund(void) { return D.fund_hz; }
 // the tilt: forward = the bottom edge up = lean_y negative; TILT STEP 10 degrees per cell
 static void tilt_cells(float b, float c) { sim_tilt(c * 10.0f, -b * 10.0f); }
@@ -65,7 +67,7 @@ static void boot(void)
     check(D.lead_b == 0 && D.lead_c == 0 && !strcmp(D.lead_name, "1/1"), "the lead starts on 1/1 (%s)", D.lead_name);
     check(fabsf(fund() - 130.8f) < 0.5f, "1/1 is C3 at OCTAVE 3: %.1f Hz", (double)fund());
     int root = -1, lead = lead_slot();
-    for (int i = 0; i < NV; i++) if (D.slot[i].on && D.slot[i].is_root) root = i;
+    for (int i = 0; i < NVL; i++) if (D.slot[i].on && D.slot[i].is_root) root = i;
     check(root >= 0 && lead >= 0 && root != lead && slots_on() == 2, "two tones: the root and the lead (%d on)", slots_on());
     run(3.0f);
     float pr = m_goertzel(sim_t - 1.0f, sim_t, fund() * 0.5f), pl = m_goertzel(sim_t - 1.0f, sim_t, fund()), p3 = m_goertzel(sim_t - 1.0f, sim_t, fund() * 1.5f);
@@ -177,18 +179,18 @@ static void hands(void)
     sim_rec(0.1f); run(3.0f);
     float r2 = m_rms(sim_t - 0.5f, sim_t);
     check(!D.rest && r2 > r0 * 0.7f, "tapped again: it returns (rms %.3f)", (double)r2);
-    jolt(1.9f); run(0.05f);
-    check(eng_strum_env > 0.3f && D.knock_frames < 3000, "a knock (0.9 g over gravity) strums (env %.2f)", (double)eng_strum_env);
+    jolt(1.9f); run(0.2f);                                           // a knock counts once nothing follows it for 120 ms
+    check(eng_strum_env > 0.3f && D.knock_frames < 6000, "KNOCK STRUM: a knock (0.9 g over gravity) strums (env %.2f)", (double)eng_strum_env);
     float e = eng_strum_env;
-    jolt(1.9f); run(0.05f);
+    jolt(1.9f); run(0.2f);
     check(eng_strum_env <= e * 1.05f, "a second knock within the cooldown does not");
     run(0.5f);
-    set("knck", 0); e = eng_strum_env; jolt(1.9f); run(0.05f);
+    set("knck", 0); e = eng_strum_env; jolt(1.9f); run(0.2f);
     check(eng_strum_env <= e, "KNOCK OFF: no strum");
     set("knck", 1);
-    set("sens", 0); run(0.5f); e = eng_strum_env; jolt(1.5f); run(0.05f);
+    set("sens", 0); run(0.5f); e = eng_strum_env; jolt(1.5f); run(0.2f);
     check(eng_strum_env <= e, "SENSE 0: 0.5 g is not a knock");
-    set("sens", 100); run(0.5f); jolt(1.4f); run(0.05f);
+    set("sens", 100); run(0.5f); jolt(1.4f); run(0.2f);
     check(eng_strum_env > 0.3f, "SENSE 100: 0.4 g is");
     set("sens", 50);
 
@@ -291,6 +293,8 @@ static void sounds(void)
     for (int i = 0; i < INST.npresets; i++) {
         front_midi(0xC0, (uint8_t)i, 0);
         set("drft", 0.5f);
+        bool hand = pv[P_HAND] > 50.0f;                                 // it sounds only while moving: move it
+        if (hand) SI.gyro = (vec3_t){ 200.0f, 0.0f, 0.0f };
         run(3.0f);
         float r = m_rms(sim_t - 1.0f, sim_t), pk = m_peak(sim_t - 1.0f, sim_t);
         bool ok = r > 0.003f && pk < 0.92f;
@@ -298,6 +302,7 @@ static void sounds(void)
         note("%s: rms %.3f peak %.2f source %d%s", INST.presets[i].name, (double)r, (double)pk, (int)pv[P_SOURCE], ok ? "" : "  <-- off");
         if (!ok) bad++;
         if (i < 4) { char nm[32]; snprintf(nm, sizeof nm, "sound_%d", i); sim_shot(nm); }
+        if (hand) { SI.gyro = (vec3_t){ 0.0f, 0.0f, 0.0f }; run(0.5f); }
     }
     check(bad == 0, "all %d sounds play at a sane level (%d do not)", INST.npresets, bad);
     load("DREAM HOUSE");

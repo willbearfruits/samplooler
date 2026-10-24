@@ -60,3 +60,20 @@ CONFIG_LWIP_IRAM_OPTIMIZATION=n
 # Buffers only the screen and the radio touch (UI_RAM in core.h) live in PSRAM: internal RAM is for the sound's code
 # and the radio's own buffers.
 CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+
+# DWELL's RADIO (inst_air.c, as ETHER's): Bluetooth LE through NimBLE as a passive observer only (it listens; it never
+# advertises or connects), legacy advertising reports only. Started the first time RADIO wants it.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+CONFIG_BT_NIMBLE_SECURITY_ENABLE=n
+CONFIG_BT_NIMBLE_50_FEATURE_SUPPORT=n
+CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
+# Wi-Fi (the link, and listening) and Bluetooth at once: ESP-IDF's software coexistence time-shares the antenna.
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
+# NimBLE's host memory in PSRAM, so internal RAM stays for the sound and the two stacks' tasks.
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y

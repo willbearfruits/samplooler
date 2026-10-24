@@ -1,6 +1,7 @@
 # DWELL manual
 
-Version 0.1. Checked in the host simulator (`tools/sim`, 156 checks). Started on a board (13 % CPU on DREAM HOUSE); not played yet.
+Version 0.2. Checked in the host simulator (`tools/sim`, 191 checks). Version 0.1 started on a board (13 % CPU on
+DREAM HOUSE) and was heard; 0.2 has not been on a board yet.
 
 ## The lattice
 
@@ -71,11 +72,79 @@ resonate at has gone; what it does has taken over. A tap on REC stops it early. 
 SPEAKER) and a room; with headphones the mic hears nothing and it stops after the first pass. Move the box between
 passes and the room answers differently.
 
-## The strum
+## ENERGY: the crescendo
 
-A knock on the box strums every tone: the level jumps and decays over STRUM > STRUM seconds, the brightness opens with
-it; TANPURA plucks all its strings and starts its cycle of plucks again, GURDY buzzes. STRUM > SENSE sets how hard a knock has to be; STRUM > KNOCK OFF
-leaves the box deaf to knocks.
+Movement pumps energy into the drone: the box turned faster than 25 degrees a second (a hand holding still is slower),
+up to full at 375, and its jolts. While it moves, the energy climbs at full speed to the top in ENERGY > CLIMB seconds
+(8 by default); while it is still, it falls back to nothing in ENERGY > FALL seconds (20). Gestures add up: two
+swings with a pause between leave more than one. The energy:
+
+- multiplies every voice: from ENERGY > REST LEVEL (-14 dB) at nothing to full at the top, even in dB;
+- raises DENSE towards 100 % by TO DENSE (60 %), and the harmonics with it;
+- raises the overdrive towards 100 % by TO DIRT (50 %).
+
+ENERGY > HAND multiplies the voices by the movement itself, as it is now (a quick follower, about 0.1 s): at 100 the
+drone sounds only while the box moves, like a bow; at 0 it is a drone you push. While the box swings the lattice does
+not move: a cell counts only once the box is calm (under 60 degrees a second) for DWELL.
+
+Measured in the simulator: four seconds of swinging with CLIMB 4 s and REST LEVEL -20 dB took the drone up by 19.4 dB;
+five seconds still with FALL 10 s, half way back down; ten, at rest again.
+
+## SHAKE
+
+A shake is jolt after jolt: the acceleration changing by more than 0.35 g from one hundredth of a second to the next,
+for a while (it takes about 0.15 s to count fully, so one knock does not; it dies away in about 0.7 s). ENERGY > SHAKE
+sets how much it throws in: grit (noise into the overdrive), the overdrive itself up by half, the copies beating up to
+six times faster, the echo's feedback up to 95 % (it saturates as it comes round, so it surges but stays bounded), and
+a kick to the energy.
+
+## TAP: a knock
+
+A knock is one jolt (over TAP > SENSE's threshold, 0.575 g at 50) on a still box, with nothing following it for 0.12 s;
+jolts that keep coming are a shake. TAP > KNOCK says what it does:
+
+- NEXT ROOT (the default): the whole drone fades over onto a new fundamental, over TAP > FADE seconds (8). There are two
+  layers of voices: the one sounding fades out while the other, the same chord on the new root, fades in (equal power).
+  TAP > NEXT ROOT is the step: LEAN (the cell you are leaning towards: tipped one step away, a fifth up; level, a fifth
+  up anyway), or always 3/2, 4/3, 7/4, 8/7 or 9/8. The root stays within half an octave of the key's note (a fifth up
+  is heard as a fourth down) and is shown under the ratio: TO 3/2 while it fades, ON 3/2 after. A knock during a fade
+  waits for it. TAP > HOME fades back to the key.
+- STRUM: every tone's level jumps and decays over TAP > STRUM seconds, the brightness opening with it; TANPURA plucks all
+  its strings and starts its cycle of plucks again, GURDY buzzes.
+- OFF: the box is deaf to knocks.
+
+While both layers sound, the copies are shared out (40 at most, so 3 each with twelve tones).
+
+## DIRT: the overdrive
+
+The voices, after the energy, go through an overdrive: up to 32 dB of gain into a soft clipper whose negative side
+clips later than its positive side (a fuzz's even harmonics), with first-order antiderivative anti-aliasing, a DC
+blocker, then DIRT > TONE (a low pass from 800 Hz to 16 kHz). DIRT > DRIVE is its floor; the energy and a shake add to
+it. DIRT > DIRT MIX is the wet and dry: at 0 the clean voices, at 100 only the driven ones. The clipper's ceiling holds
+the level, so a crescendo into the dirt gains about 10 dB rather than 30. Ratios of small whole numbers saturate into
+more of the same: a just fifth over its root, driven, puts its new overtones on the root's harmonics (measured: 3000
+times the energy on them as between them). Measured with one pure voice at DRIVE 100: the 3rd harmonic 10 dB under the
+fundamental, the 2nd 26, the 5th 15.
+
+## ECHO
+
+After the overdrive: an echo of ECHO > ECHO seconds (20 ms to 1.6 s; or ECHO SYNC: 1 beat, 3/4, 1/2 or 1/4 of the
+flock's tempo), its time gliding like tape when it changes. What comes round is a little darker each time and
+saturates, never above half scale: ECHO > FEEDBACK (0 to 95 %) can run long without blowing up. ECHO > ECHO MIX is the
+wet and dry (equal power). Then the hall (SPACE, TAIL), with its own wet and dry.
+
+## RADIO: interference
+
+RADIO > RADIO (OFF by default): WI-FI, BLUETOOTH or BOTH. Each Wi-Fi frame the antenna hears becomes a burst of crackle,
+0.3 to 8 ms long by the frame's length, as loud as its signal is strong; each Bluetooth advert a 1 to 2 ms buzz, one
+pitch for each of the three advertising channels. The bursts go into the overdrive and chop the drone under them (as a
+phone's bursts do in a speaker). RADIO > INTERFERE sets how hard. A router's beacons give a tick ten times a second
+(102.4 ms apart), a phone's traffic bursts. Nothing about who sent a frame is read or kept: only when, how strong, how
+long.
+
+With the link on, DWELL listens on the link's own channel (1), so the other boards' packets are in it too. With the link
+off it listens on RADIO > CHANNEL. Bluetooth starts the first time it is wanted and then shares the antenna with Wi-Fi.
+On the board the Bluetooth listener, Wi-Fi listening alongside the link, and the memory they need have not been tried.
 
 ## REC tapped
 
@@ -101,21 +170,26 @@ IS THERE lists the boards heard.
 
 | | |
 | - | - |
-| DREAM HOUSE | pure sines, 7-limit, four voices and the root |
+| DREAM HOUSE | pure sines, 7-limit, four voices and the root; moving barely drives it |
+| DRUMM | from near silence (REST -30 dB) into a bowed, driven wall: CLIMB 20 s, FALL 45 s, a long echo |
+| MIASMA | a hurdy-gurdy, harsh from the start (DRIVE 70), shaking throws it to pieces, a short hard echo |
+| IMPERIAL | a quiet reed (REST -24 dB), slow to build (30 s), barely driven, a 1.2 s echo, a long hall |
+| BOWED BY HAND | it sounds only while you move it (HAND 100) |
 | NIBLOCK | a bowed wall: DENSE 80, eight copies beating at 0.3 Hz, no root |
 | ADNOS | a reed that slides: GLIDE, DRIFT 90 s |
 | IN A ROOM | the ROOM source, 12 passes of 4 s set: run ROOM > ROOM PASS |
 | TANPURA | four strings plucked every 0.8 s, the jawari at 55 |
 | SHRUTI BOX | the reed with the bellows |
-| HURDY GURDY | the wheel at 1.2 Hz, short strums |
-| STRUMMING | sines, six voices, strums ringing 5 s (Charlemagne Palestine) |
+| HURDY GURDY | the wheel at 1.2 Hz, short strums (KNOCK STRUM) |
+| STRUMMING | sines, six voices, strums ringing 5 s (Charlemagne Palestine; KNOCK STRUM) |
 | CONRAD | a bow in 5-limit, four copies at 0.8 Hz |
 | DAVACHI | six reed voices that slide over 45 s |
 | DEEP LISTENING | a quiet reed in a long hall |
-| TEMPO BEATS | the clusters beat at the flock's tempo |
+| INTERFERENCE | both radios cutting in, driven, with an echo |
+| TEMPO BEATS | the clusters beat at the flock's tempo, the echo at 3/4 of a beat |
 | YOUR TONE | the WAVE source: hold REC and sing |
 | TARTINI | two sines and their difference tone |
-| PYTHAGORAS | 3-limit: the fifths only |
+| PYTHAGORAS | 3-limit: the fifths only; a knock moves the root a fifth |
 
 ## Settings
 
@@ -133,68 +207,108 @@ Every setting is on MIDI CC 20 + its number (the table says which) both ways; pr
 | MOVE | 24 | New tones swell, or slide: SWELL, GLIDE |
 | LEVEL | 25 | How loud (0..100 %) |
 
+### ENERGY
+
+| Setting | CC | |
+| - | - | - |
+| CLIMB | 26 | Moving this long: full (1.0..60.0 s) |
+| FALL | 27 | Still this long: back down (2.0..120.0 s) |
+| REST LEVEL | 28 | How quiet it is unmoved (-40..0 dB) |
+| TO DENSE | 29 | Moving thickens it (0..100 %) |
+| TO DIRT | 30 | Moving drives it (0..100 %) |
+| HAND | 31 | 100: it sounds as you move (0..100 %) |
+| SHAKE | 32 | What a shake throws in (0..100 %) |
+
+### TAP
+
+| Setting | CC | |
+| - | - | - |
+| KNOCK | 33 | A strum, or a new root: OFF, STRUM, NEXT ROOT |
+| NEXT ROOT | 34 | The step to the new root: LEAN, 3/2, 4/3, 7/4, 8/7, 9/8 |
+| FADE | 35 | The new root fades in (0.5..60.0 s) |
+| STRUM | 36 | How long a strum rings (0.2..8.0 s) |
+| SENSE | 37 | How easily a knock counts (0..100 %) |
+| HOME |  | Fade back to the key |
+
 ### LATTICE
 
 | Setting | CC | |
 | - | - | - |
-| LIMIT | 26 | The primes the ratios use: 7 (YOUNG), 5, 3 |
-| OCTAVE | 27 | Where 1/1 sits (1..4) |
-| TILT STEP | 28 | Degrees per cell (6..20) |
-| DWELL | 29 | Stay on a cell this long (0.1..2.0 s) |
+| LIMIT | 39 | The primes the ratios use: 7 (YOUNG), 5, 3 |
+| OCTAVE | 40 | Where 1/1 sits (1..4) |
+| TILT STEP | 41 | Degrees per cell (6..20) |
+| DWELL | 42 | Stay on a cell this long (0.1..2.0 s) |
 
 ### CLUSTER
 
 | Setting | CC | |
 | - | - | - |
-| COPIES | 30 | Copies per tone at dense (1..8) |
-| BEAT | 31 | How fast the copies beat (0.05..8.0 Hz) |
-| BEAT SYNC | 32 | Beats at the flock's tempo: OFF, TEMPO |
-| BRIGHT | 33 | Harmonics (0..100 %) |
-| DIFF TONE | 34 | A sub at the difference (0..100 %) |
+| COPIES | 43 | Copies per tone at dense (1..8) |
+| BEAT | 44 | How fast the copies beat (0.05..8.0 Hz) |
+| BEAT SYNC | 45 | Beats at the flock's tempo: OFF, TEMPO |
+| BRIGHT | 46 | Harmonics (0..100 %) |
+| DIFF TONE | 47 | A sub at the difference (0..100 %) |
 
 ### SOURCE
 
 | Setting | CC | |
 | - | - | - |
-| SOURCE | 35 | What each tone is: SINE, REED, BOW, TANPURA, SHRUTI, GURDY, WAVE, ROOM |
-| PLUCK | 36 | Tanpura: plucks this often (0.2..4.0 s) |
-| JAWARI | 37 | Tanpura: the bridge's buzz (0..100 %) |
-| WHEEL | 38 | Gurdy: the wheel's turn (0.3..4.0 Hz) |
-| BREATH | 39 | Shruti: the bellows (0..100 %) |
-| BODY | 40 | Bow, reed: its wooden box (0..100 %) |
+| SOURCE | 48 | What each tone is: SINE, REED, BOW, TANPURA, SHRUTI, GURDY, WAVE, ROOM |
+| PLUCK | 49 | Tanpura: plucks this often (0.2..4.0 s) |
+| JAWARI | 50 | Tanpura: the bridge's buzz (0..100 %) |
+| WHEEL | 51 | Gurdy: the wheel's turn (0.3..4.0 Hz) |
+| BREATH | 52 | Shruti: the bellows (0..100 %) |
+| BODY | 53 | Bow, reed: its wooden box (0..100 %) |
 
-### STRUM
-
-| Setting | CC | |
-| - | - | - |
-| KNOCK | 41 | A knock strums every tone: OFF, ON |
-| STRUM | 42 | How long a strum rings (0.2..8.0 s) |
-| SENSE | 43 | How easily a knock counts (0..100 %) |
-
-### ROOM
+### DIRT
 
 | Setting | CC | |
 | - | - | - |
-| PASSES | 44 | Times through the room (1..30) |
-| PASS LEN | 45 | Seconds per pass (2..ROOM_MAX_S s) |
-| ROOM PASS |  | Play, record, again, again |
+| DRIVE | 54 | Overdrive: more overtones (0..100 %) |
+| TONE | 55 | Dark to bright after it (0..100 %) |
+| DIRT MIX | 56 | Clean to driven (0..100 %) |
+
+### ECHO
+
+| Setting | CC | |
+| - | - | - |
+| ECHO | 57 | The echo's time (0.02..1.6 s) |
+| ECHO SYNC | 58 | On the flock's beat: OFF, 1 BEAT, 3/4, 1/2, 1/4 |
+| FEEDBACK | 59 | How often it comes back (0..95 %) |
+| ECHO MIX | 60 | Dry to all echo (0..100 %) |
 
 ### SPACE
 
 | Setting | CC | |
 | - | - | - |
-| SPACE | 47 | How much hall (0..100 %) |
-| TAIL | 48 | A small room to endless (0..100 %) |
+| SPACE | 61 | How much hall (0..100 %) |
+| TAIL | 62 | A small room to endless (0..100 %) |
+
+### RADIO
+
+| Setting | CC | |
+| - | - | - |
+| RADIO | 63 | The air's traffic as noise: OFF, WI-FI, BLUETOOTH, BOTH |
+| INTERFERE | 70 | How hard the air cuts in (0..100 %) |
+| CHANNEL | 71 | Wi-fi channel, link off (1..13) |
+
+### ROOM
+
+| Setting | CC | |
+| - | - | - |
+| PASSES | 72 | Times through the room (1..30) |
+| PASS LEN | 73 | Seconds per pass (2..ROOM_MAX_S s) |
+| ROOM PASS |  | Play, record, again, again |
 
 ### SONG
 
 | Setting | CC | |
 | - | - | - |
-| TEMPO | 49 | Shared with linked boards (50..200) |
-| KEY | 50 | 1/1 is this note: C, C#, D, D#, E, F, F#, G, G#, A, A#, B |
-| SCALE | 51 | For chords from the link: MAJOR, MINOR, DORIAN, MIXOLYDIAN, PHRYGIAN, HARM MINOR |
-| FOLLOW | 52 | A linked chord moves 1/1: OFF, ON |
-| SPREAD | 53 | Each board one tone: OFF, ON |
+| TEMPO | 75 | Shared with linked boards (50..200) |
+| KEY | 76 | 1/1 is this note: C, C#, D, D#, E, F, F#, G, G#, A, A#, B |
+| SCALE | 77 | For chords from the link: MAJOR, MINOR, DORIAN, MIXOLYDIAN, PHRYGIAN, HARM MINOR |
+| FOLLOW | 78 | A linked chord moves 1/1: OFF, ON |
+| SPREAD | 79 | Each board one tone: OFF, ON |
 | LINK |  | Sync with boards nearby: OFF, ON |
 | GROUP |  | Same group: they sync (1..8) |
 | RANGE |  | How far the radio reaches: NEAR, ROOM, FAR |
@@ -211,5 +325,7 @@ Every setting is on MIDI CC 20 + its number (the table says which) both ways; pr
 
 ## Levels
 
-Nominal peaks around -12 dBFS with four voices; the wall at DENSE 100 about 6 dB louder; the core's limiter at -1
-dBFS after everything. The root at OCTAVE 3 is 65 Hz: the small speaker loses it, the line out has it.
+At full energy and clean, nominal peaks around -12 dBFS with four voices; at rest, REST LEVEL under that (-14 dB by
+default). A cluster keeps a pure tone's average level and peaks up to twice as high. Fully driven, the overdrive's
+ceiling puts peaks near -6 dBFS whatever goes in; the echo and the hall add to it, and the core's limiter at -1 dBFS
+catches the rest. The root at OCTAVE 3 is 65 Hz: the small speaker loses it, the line out has it.

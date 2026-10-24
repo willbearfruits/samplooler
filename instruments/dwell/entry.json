@@ -1,25 +1,28 @@
 {
   "name": "DWELL",
-  "summary": "A drone you live inside. Tilt walks a lattice of just ratios and the tones you pass stay; one knob from pure sines to a beating wall; a change takes 20 s. Sing a note: it stacks it. The room sings.",
+  "summary": "A drone you live inside. Tilt walks a lattice of just ratios; move it and it swells into a driven wall, shake it for grit, knock for a new root. Sing a note, let the room sing, let the radios crackle.",
   "author": "willbearfruits",
   "licence": "GPL-3.0",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "chip": "esp32s3",
   "uses": [
     "mic",
     "tilt",
     "joystick",
     "speaker",
-    "wifi"
+    "wifi",
+    "bluetooth"
   ],
   "hardware_note": "ROOM PASS plays through the speaker and listens with the mic: it needs the speaker on (or the line out into a real speaker) and a room; on headphones it stops after the first pass. The root sits low (65 Hz at OCTAVE 3): the small speaker loses it, the line out has it.",
   "status": "simulator",
-  "status_note": "Built 2026-10-24 and checked in the host simulator (156 checks). Started on a board the same day: 13 % CPU on the first sound with the radio on. Not played yet.",
+  "status_note": "0.1 started on a board on 2026-10-24 (13 % CPU on the first sound, 118 KB free) and was heard. 0.2 (energy, shake, the knock's new root, overdrive, echo, the radios) passes the simulator (191 checks) and has not been on a board.",
   "listed": false,
   "image": "images/dwell-walk.gif",
   "more": [
+    "images/dwell-energy.gif",
     "images/dwell-dense.gif",
     "images/dwell-room.gif",
+    "images/dwell-radio.gif",
     "images/dwell-splash.gif"
   ],
   "added": "2026-10-24"

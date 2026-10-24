@@ -5,7 +5,7 @@
 set(INSTRUMENT_NAME   "DWELL")
 set(INSTRUMENT_PID    0x4030)
 set(INSTRUMENT_SERIAL "DW")
-set(INSTRUMENT_REQUIRES esp_wifi esp_event fatfs wear_levelling)
+set(INSTRUMENT_REQUIRES esp_wifi esp_event fatfs wear_levelling bt)
 
 # the core, then instrument.c and any inst_*.c (or layer_*.c) next to it
 file(GLOB inst_extra "${CMAKE_CURRENT_LIST_DIR}/inst_*.c" "${CMAKE_CURRENT_LIST_DIR}/layer_*.c")

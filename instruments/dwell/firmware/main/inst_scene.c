@@ -22,6 +22,9 @@
 //   the splash    DWELL opens out from a point while a lattice of dots spreads from the centre; the figure lies down;
 //                 the tagline
 //   the saver     the sounding ratios drifting across a dark screen
+//   second round  the energy as a bar along the bottom row (the figure sits up as it climbs), a shake jitters the
+//                 lattice, the radios' interference as static over it (and RF in the strip's corner), a new root's
+//                 fade as a dotted line along the strip's top, "TO 3/2" while it fades, "ON 3/2" after
 #include "inst_dwell.h"
 #include "ui.h"
 #include "dsp.h"
@@ -142,7 +145,7 @@ static float row_y(float b) { return (float)LEAD_CY - (b - scroll_b) * (float)RO
 static const dw_slot_t *slot_at(int b, int c)
 {
     const dw_slot_t *best = NULL;
-    for (int i = 0; i < NV; i++) {
+    for (int i = 0; i < NVL; i++) {
         const dw_slot_t *s = &D.slot[i];
         if (!s->on || s->b != b || s->c != c) continue;
         if (!best || s->is_lead || (s->lvl > best->lvl && !best->is_lead)) best = s;
@@ -158,15 +161,21 @@ static float pill_fill(const dw_slot_t *s)
     return l;
 }
 
+static uint32_t jit = 0x1234567u;
+static int jrand(int n) { jit = jit * 1664525u + 1013904223u; return (int)((jit >> 16) % (uint32_t)n); }
+
 static void lattice(void)
 {
     int cmax = D.limit == LIM_3 ? 0 : LAT_C;
+    // a shake jitters the whole field a pixel or two
+    int sj = D.shake > 0.15f ? 1 + (int)(D.shake * 2.0f) : 0;
+    int jx = sj ? jrand(2 * sj + 1) - sj : 0, jy = sj ? jrand(3) - 1 : 0;
     for (int b = LAT_B; b >= -LAT_B; b--) {
         float fy = row_y((float)b);
-        int cy = (int)lroundf(fy);
+        int cy = (int)lroundf(fy) + jy;
         if (cy + 5 < LAT_Y0 || cy - 5 >= LAT_Y1) continue;
         for (int c = -cmax; c <= cmax; c++) {
-            int cw = (int)colw[c + 2], cx = (int)lroundf(colx[c + 2]);
+            int cw = (int)colw[c + 2], cx = (int)lroundf(colx[c + 2]) + jx;
             char nm[12]; lat_name(D.limit, b, c, nm, sizeof nm);
             int tw = oled_ftext_w(F_TINY, nm, 0);
             const dw_slot_t *s = slot_at(b, c);
@@ -198,6 +207,13 @@ static void lattice(void)
         oled_invert(mx - 1, my + 4, 3, 1);
         oled_rect(mx - 1, my + 5, 3, 1, true);
     }
+}
+
+// the radios' interference: static over the lattice, as much as the bursts are loud
+static void static_noise(void)
+{
+    int k = (int)(D.zap * 90.0f);
+    for (int i = 0; i < k; i++) oled_invert(jrand(128), LAT_Y0 + jrand(LAT_Y1 - LAT_Y0), 1 + jrand(2), 1);
 }
 
 // the room's envelope, faint behind the lattice when the source is the room
@@ -238,7 +254,9 @@ static void readout(void)
     int xe = oled_ftext_ex(F_MED, x, 47, nm, 0);
     if (fabsf(D.lead_et) < 0.5f) snprintf(b, sizeof b, "0C"); else snprintf(b, sizeof b, "%+dC", (int)lroundf(D.lead_et));
     if (xe + 4 + oled_ftext_w(F_TINY, b, 0) <= 128) oled_ftext_ex(F_TINY, xe + 4, 49, b, 0);
-    snprintf(b, sizeof b, "%dHZ", (int)lroundf(D.fund_hz));
+    if (D.fade >= 0.0f) snprintf(b, sizeof b, "TO %s", D.root_name[0] ? D.root_name : "1/1");
+    else if (D.root_name[0]) snprintf(b, sizeof b, "ON %s %dHZ", D.root_name, (int)lroundf(D.fund_hz));
+    else snprintf(b, sizeof b, "%dHZ", (int)lroundf(D.fund_hz));
     oled_ftext_ex(F_TINY, x, 57, b, 0);
     // the right slot: REST, else DIFF and BEAT taking turns when both
     const char *r = NULL;
@@ -257,6 +275,12 @@ static void floor_strip(const view_t *v)
     (void)v;
     oled_rect(0, STRIP_Y, 128, 64 - STRIP_Y, false);
     oled_hline_pat(0, FLOOR_Y, 128, 0xFF, true);
+    oled_rect(0, 63, (int)(clampf(D.energy, 0.0f, 1.0f) * 128.0f + 0.5f), 1, true);   // the energy, along the bottom row
+    if (D.fade >= 0.0f) oled_hline_pat(0, STRIP_Y, (int)(D.fade * 128.0f), 0x55, true);
+    if (D.radio) {                                                  // RF, lit while the air cuts in
+        oled_ftext_ex(F_TINY, 2, 48, "RF", 0);
+        if (D.zap > 0.15f) oled_invert(1, 47, 9, 7);
+    }
     bool sit = D.rec || D.analysing;
     if (sit) {
         figure_sitting(3, FLOOR_Y);
@@ -280,7 +304,9 @@ static void floor_strip(const view_t *v)
     float lift_want = D.strum > 0.05f ? clampf(D.strum * 3.0f, 0.0f, 2.0f) : 0.0f;
     head_lift += (lift_want - head_lift) * (lift_want > head_lift ? 0.6f : 0.12f);
     chest = D.rest ? 0.0f : 0.5f + 0.5f * sin_turns(breath);
-    figure_lying(3, FLOOR_Y, head_lift, chest);
+    int fx = 3 + (D.shake > 0.2f ? jrand(3) - 1 : 0);
+    if (D.energy > 0.66f) figure_sitting(fx + 4, FLOOR_Y);          // the crescendo raises it
+    else figure_lying(fx, FLOOR_Y, head_lift + 2.0f * clampf(D.energy * 3.0f - 1.0f, 0.0f, 1.0f), chest);
     // the room's standing wave: wavelength the lead's ratio, height the output, swinging at the beat when dense
     float ratio = lat_ratio(D.limit, D.lead_b, D.lead_c);
     float stand = D.dense > 0.1f ? sin_turns(eng_beat_phase) : sin_turns((float)fr * 0.006f);
@@ -383,6 +409,7 @@ void scene_draw(const view_t *v)
     }
     if (D.source == SRC_ROOM && env_have) room_shadow();
     lattice();
+    if (D.zap > 0.03f) static_noise();
     if (D.rest) oled_dither(0, LAT_Y0, 128, LAT_Y1 - LAT_Y0, 2, false);
     if (v->cover > 0) oled_rect(0, STRIP_Y, 128, 64 - STRIP_Y, false);
     else floor_strip(v);
@@ -433,7 +460,7 @@ bool scene_splash(int f)
 void scene_saver(uint32_t f)
 {
     int n = 0;
-    for (int i = 0; i < NV; i++) {
+    for (int i = 0; i < NVL; i++) {
         const dw_slot_t *s = &D.slot[i];
         if (!s->on || !s->name[0]) continue;
         float sp = 0.25f + 0.08f * (float)i;
