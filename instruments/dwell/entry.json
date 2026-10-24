@@ -1,0 +1,26 @@
+{
+  "name": "DWELL",
+  "summary": "A drone you live inside. Tilt walks a lattice of just ratios and the tones you pass stay; one knob from pure sines to a beating wall; a change takes 20 s. Sing a note: it stacks it. The room sings.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt",
+    "joystick",
+    "speaker",
+    "wifi"
+  ],
+  "hardware_note": "ROOM PASS plays through the speaker and listens with the mic: it needs the speaker on (or the line out into a real speaker) and a room; on headphones it stops after the first pass. The root sits low (65 Hz at OCTAVE 3): the small speaker loses it, the line out has it.",
+  "status": "simulator",
+  "status_note": "Built 2026-10-24, checked in the host simulator. Not on a board yet.",
+  "listed": false,
+  "image": "images/dwell-walk.gif",
+  "more": [
+    "images/dwell-dense.gif",
+    "images/dwell-room.gif",
+    "images/dwell-splash.gif"
+  ],
+  "added": "2026-10-24"
+}

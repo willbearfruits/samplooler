@@ -1,0 +1,6 @@
+# 4 MB flash: 1.5 MB app, 2.4 MB wear-levelled FAT for sample slots
+# Name,     Type, SubType, Offset,   Size
+nvs,        data, nvs,     0x9000,   0x6000
+phy_init,   data, phy,     0xf000,   0x1000
+factory,    app,  factory, 0x10000,  0x180000
+storage,    data, fat,     0x190000, 0x270000
