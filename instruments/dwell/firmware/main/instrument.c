@@ -13,8 +13,9 @@
 #include <string.h>
 
 // ---------------------------------------------------------------- params
-static const char *const groups[] = { "DRONE", "ENERGY", "TAP", "LATTICE", "CLUSTER", "SOURCE", "DIRT", "ECHO", "SPACE", "RADIO", "ROOM", "SONG" };
-enum { G_DRONE, G_ENERGY, G_TAP, G_LAT, G_CLUS, G_SRC, G_DIRT, G_ECHO, G_SPACE, G_RADIO, G_ROOM, G_SONG, G_N };
+static const char *const groups[] = { "DRONE", "ENERGY", "BOW", "TAP", "LATTICE", "CLUSTER", "SOURCE", "DIRT", "ECHO", "SPACE",
+                                      "FEEDBACK", "TOGETHER", "RADIO", "ROOM", "SONG" };
+enum { G_DRONE, G_ENERGY, G_BOW, G_TAP, G_LAT, G_CLUS, G_SRC, G_DIRT, G_ECHO, G_SPACE, G_FB, G_TOG, G_RADIO, G_ROOM, G_SONG, G_N };
 static const char *const off_on[] = { "OFF", "ON" };
 static const char *const move_l[] = { "SWELL", "GLIDE" };
 static const char *const limit_l[] = { "7 (YOUNG)", "5", "3" };
@@ -25,6 +26,10 @@ static const char *const next_l[NNX] = { "LEAN", "3/2", "4/3", "7/4", "8/7", "9/
 static const char *const esync_l[] = { "OFF", "1 BEAT", "3/4", "1/2", "1/4" };
 static const float esync_beats[] = { 0.0f, 1.0f, 0.75f, 0.5f, 0.25f };
 static const char *const radio_l[] = { "OFF", "WI-FI", "BLUETOOTH", "BOTH" };
+static const char *const axes_l[] = { "ONE", "SPLIT" };
+static const char *const fbmode_l[] = { "OFF", "AIR", "INNER", "BOTH" };
+static const char *const share_l[] = { "OWN", "SHARED", "TRADED" };
+static const char *const fifth_l[] = { "OFF", "UP", "DOWN" };
 static const char *const key_l[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 static const char *const scale_l[] = { "MAJOR", "MINOR", "DORIAN", "MIXOLYDIAN", "PHRYGIAN", "HARM MINOR" };   // SING's, as the link numbers them
 static const int8_t scales[][7] = { { 0, 2, 4, 5, 7, 9, 11 }, { 0, 2, 3, 5, 7, 8, 10 }, { 0, 2, 3, 5, 7, 9, 10 },
@@ -45,8 +50,13 @@ static const param_t params[P_N] = {
     [P_REST]    = { "REST LEVEL", "rstl", G_ENERGY, PK_NUM, PF_INT | PF_SIGNED, -40, 0, 1, -14, "dB", NULL, "HOW QUIET IT IS UNMOVED" },
     [P_TODENSE] = { "TO DENSE", "tdns", G_ENERGY, PK_NUM, PF_INT, 0, 100, 5, 60, "%", NULL, "MOVING THICKENS IT" },
     [P_TODRIVE] = { "TO DIRT", "tdrv", G_ENERGY, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "MOVING DRIVES IT" },
-    [P_HAND]    = { "HAND", "hand", G_ENERGY, PK_NUM, PF_INT, 0, 100, 5, 0, "%", NULL, "100: IT SOUNDS AS YOU MOVE" },
     [P_SHAKE]   = { "SHAKE", "shak", G_ENERGY, PK_NUM, PF_INT, 0, 100, 5, 70, "%", NULL, "WHAT A SHAKE THROWS IN" },
+    [P_GRIT]    = { "GRIT", "grit", G_ENERGY, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "A SHAKE'S SIZZLE, IN TUNE" },
+    [P_HAND]    = { "HAND", "hand", G_BOW, PK_NUM, PF_INT, 0, 100, 5, 0, "%", NULL, "100: IT SOUNDS AS YOU MOVE" },
+    [P_AXES]    = { "AXES", "axes", G_BOW, PK_ENUM, 0, 0, 1, 1, AX_SPLIT, "", axes_l, "EACH MOTION ITS VOICE" },
+    [P_RING]    = { "RING", "ring", G_BOW, PK_NUM, PF_LOG, 0.05f, 5.0f, 1.15f, 0.6f, "s", NULL, "IT RINGS ON AFTER THE BOW" },
+    [P_PRESS]   = { "PRESSURE", "pres", G_BOW, PK_NUM, PF_INT, 0, 100, 5, 60, "%", NULL, "FAST: BRIGHT, THEN A GROWL" },
+    [P_BCHANGE] = { "BOW CHANGE", "bchg", G_BOW, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "A TURN BACK: AN ACCENT" },
     [P_KNOCK]   = { "KNOCK", "knck", G_TAP, PK_ENUM, 0, 0, 2, 1, KN_NEXT, "", knock_l, "A STRUM, OR A NEW ROOT" },
     [P_NEXT]    = { "NEXT ROOT", "next", G_TAP, PK_ENUM, 0, 0, NNX - 1, 1, NX_LEAD, "", next_l, "THE STEP TO THE NEW ROOT" },
     [P_FADE]    = { "FADE", "fade", G_TAP, PK_NUM, PF_LOG, 0.5f, 60.0f, 1.15f, 8.0f, "s", NULL, "THE NEW ROOT FADES IN" },
@@ -77,6 +87,18 @@ static const param_t params[P_N] = {
     [P_EMIX]    = { "ECHO MIX", "emix", G_ECHO, PK_NUM, PF_INT, 0, 100, 5, 20, "%", NULL, "DRY TO ALL ECHO" },
     [P_SPACE]   = { "SPACE", "spce", G_SPACE, PK_NUM, PF_INT, 0, 100, 5, 25, "%", NULL, "HOW MUCH HALL" },
     [P_TAIL]    = { "TAIL", "tail", G_SPACE, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "A SMALL ROOM TO ENDLESS" },
+    [P_FBMODE]  = { "FEEDBACK", "fbmd", G_FB, PK_ENUM, 0, 0, 3, 1, FB_OFF, "", fbmode_l, "AIR: SPEAKER AND ROOM" },
+    [P_FEEDBACK]= { "LOOP", "fbgn", G_FB, PK_NUM, PF_INT, 0, 100, 5, 55, "%", NULL, "HOW CLOSE TO HOWLING" },
+    [P_TOFB]    = { "TO LOOP", "tofb", G_FB, PK_NUM, PF_INT, 0, 100, 5, 60, "%", NULL, "MOVING TIPS IT INTO A HOWL" },
+    [P_FBLEVEL] = { "HOWL LEVEL", "fblv", G_FB, PK_NUM, PF_INT | PF_SIGNED, -36, -6, 1, -18, "dB", NULL, "THE LOUDEST A HOWL GETS" },
+    [P_FBRING]  = { "NARROW", "fbrg", G_FB, PK_NUM, PF_LOG, 10.0f, 200.0f, 1.12f, 60.0f, "", NULL, "HOW NARROW EACH NOTE IS" },
+    [P_FBSWELL] = { "SWELL", "fbsw", G_FB, PK_NUM, PF_LOG, 0.3f, 20.0f, 1.15f, 3.0f, "s", NULL, "HOW SLOWLY A HOWL GROWS" },
+    [P_SHROOT]  = { "SHARE ROOT", "shrt", G_TOG, PK_ENUM, PF_SYS, 0, 1, 1, 1, "", off_on, "A KNOCK MOVES BOTH BOXES" },
+    [P_SHENERGY]= { "ENERGY", "shen", G_TOG, PK_ENUM, PF_SYS, 0, 2, 1, SH_OWN, "", share_l, "PUMP ONE: BOTH, OR TURNS" },
+    [P_NEARFAR] = { "NEAR FAR", "nrfr", G_TOG, PK_ENUM, PF_SYS, 0, 1, 1, 1, "", off_on, "APART, THEY BEAT" },
+    [P_FARBEAT] = { "FAR BEATS", "frbt", G_TOG, PK_NUM, PF_LOG | PF_SYS, 0.2f, 8.0f, 1.12f, 2.0f, "Hz", NULL, "THE BEATING ACROSS A ROOM" },
+    [P_FIFTH]   = { "FIFTH", "ffth", G_TOG, PK_ENUM, PF_SYS, 0, 2, 1, FIFTH_OFF, "", fifth_l, "THIS BOX A FIFTH AWAY" },
+    [P_SPREAD]  = { "SPREAD", "sprd", G_TOG, PK_ENUM, PF_SYS, 0, 1, 1, 0, "", off_on, "EACH BOARD ONE TONE" },
     [P_RADIO]   = { "RADIO", "radi", G_RADIO, PK_ENUM, 0, 0, 3, 1, RAD_OFF, "", radio_l, "THE AIR'S TRAFFIC AS NOISE" },
     [P_ZAP]     = { "INTERFERE", "zap ", G_RADIO, PK_NUM, PF_INT, 0, 100, 5, 60, "%", NULL, "HOW HARD THE AIR CUTS IN" },
     [P_CHAN]    = { "CHANNEL", "chan", G_RADIO, PK_NUM, PF_INT | PF_SYS, 1, 13, 1, 1, "", NULL, "WI-FI CHANNEL, LINK OFF" },
@@ -87,7 +109,7 @@ static const param_t params[P_N] = {
     [P_KEY]     = { "KEY", "skey", G_SONG, PK_ENUM, PF_SYS, 0, 11, 1, 0, "", key_l, "1/1 IS THIS NOTE" },
     [P_SCALE]   = { "SCALE", "sscl", G_SONG, PK_ENUM, PF_SYS, 0, NSCALES - 1, 1, 0, "", scale_l, "FOR CHORDS FROM THE LINK" },
     [P_FOLLOW]  = { "FOLLOW", "folw", G_SONG, PK_ENUM, PF_SYS, 0, 1, 1, 1, "", off_on, "A LINKED CHORD MOVES 1/1" },
-    [P_SPREAD]  = { "SPREAD", "sprd", G_SONG, PK_ENUM, PF_SYS, 0, 1, 1, 0, "", off_on, "EACH BOARD ONE TONE" },
+
     [P_LINK]    = { "LINK", "nlnk", G_SONG, PK_ENUM, SYS, 0, 1, 1, 1, "", off_on, "SYNC WITH BOARDS NEARBY" },
     [P_GROUP]   = { "GROUP", "ngrp", G_SONG, PK_NUM, SYS | PF_INT, 1, 8, 1, 1, "", NULL, "SAME GROUP: THEY SYNC" },
     [P_RANGE]   = { "RANGE", "npow", G_SONG, PK_ENUM, SYS, 0, 2, 1, 1, "", range_l, "HOW FAR THE RADIO REACHES" },
@@ -100,7 +122,11 @@ static const preset_t presets[] = {
     { "DRUMM",          "srce=2 dens=30 copy=8 beat=0.2 brit=70 voic=3 root=1 rstl=-30 clmb=20 fall=45 tdns=100 tdrv=100 drve=30 tone=60 echo=0.7 efb=60 emix=30 spce=50 tail=80 body=60" },
     { "MIASMA",         "srce=5 dens=60 voic=4 rstl=-20 clmb=6 fall=15 drve=70 tdrv=100 tone=90 shak=100 echo=0.12 efb=80 emix=40 spce=30" },
     { "IMPERIAL",       "srce=1 dens=15 voic=5 rstl=-24 clmb=30 fall=60 tdrv=30 drve=0 tone=30 echo=1.2 efb=50 emix=25 spce=70 tail=90" },
-    { "BOWED BY HAND",  "srce=2 hand=100 clmb=3 fall=6 rstl=-6 dens=40 tdrv=40 voic=3 body=70" },
+    { "BOWED BY HAND",  "srce=2 hand=100 axes=1 ring=0.6 pres=60 bchg=50 clmb=3 fall=6 rstl=-6 dens=40 tdrv=40 voic=3 body=70" },
+    { "ONE BOW",        "srce=2 hand=100 axes=0 ring=1.2 pres=40 bchg=30 clmb=5 fall=10 rstl=-8 dens=30 tdrv=30 voic=4 body=60 spce=40" },
+    { "GROWL",          "srce=5 hand=100 axes=1 ring=0.3 pres=100 bchg=80 drve=30 tdrv=60 dens=50 voic=3 rstl=-6" },
+    { "THE ROOM SINGS", "fbmd=1 fbgn=60 tofb=80 fblv=-16 fbrg=60 srce=0 dens=10 voic=3 rstl=-14 tdrv=20 spce=20" },
+    { "HOWL HOME",      "fbmd=2 fbgn=55 tofb=100 fblv=-18 fbrg=90 srce=1 dens=20 voic=4 rstl=-20 tdrv=30" },
     { "NIBLOCK",        "dens=80 copy=8 beat=0.3 srce=2 brit=60 voic=3 root=0 spce=30 levl=85 body=60 rstl=-10 drve=15" },
     { "ADNOS",          "dens=30 srce=1 move=1 drft=90 voic=4 beat=0.12 brit=30 spce=40 tail=60 rstl=-12 fall=40 tdrv=10 emix=10 fade=30" },
     { "IN A ROOM",      "srce=7 pass=12 plen=4 voic=2 dens=20 spce=10 tdrv=40" },
@@ -119,12 +145,13 @@ static const preset_t presets[] = {
 };
 #define NPRESETS ((int)(sizeof presets / sizeof presets[0]))
 
-enum { L_ROLL = LEARN_INST, L_KNOCK, L_REST, L_ROOM, L_ENERGY, L_SHAKE };
+enum { L_ROLL = LEARN_INST, L_KNOCK, L_REST, L_ROOM, L_ENERGY, L_SHAKE, L_BOW };
 static const hint_t hints[] = {
     { "SWING IT ABOUT: IT GROWS", L_ENERGY },
     { "TIP IT AWAY FROM YOU: UP THE FIFTHS", LEARN_TILT },
     { "KNOCK ONCE: A NEW ROOT FADES IN", L_KNOCK },
     { "SHAKE IT: DIRT AND ECHO", L_SHAKE },
+    { "BOWED BY HAND: TWIST, SWING, ROCK", L_BOW },
     { "ROLL IT RIGHT: UP THE SEVENTHS", L_ROLL },
     { "TURN THE KNOB: PURE TO DENSE", LEARN_TURN },
     { "HOLD REC AND SING ONE NOTE", LEARN_REC },
@@ -172,6 +199,14 @@ static int    root_b[2], root_c[2];        // each layer's fundamental, as a cel
 static bool   next_queued;
 
 static int my_rank;
+// BOW: three groups (the lead, the chord, the root), each its speed, accent and the way it last moved
+static float bow_sp[3], bow_acc[3], bow_sign[3], bow_pos, roll_avg, roll_ref;
+static bool  bowing;
+// TOGETHER: the root's number (a knock anywhere moves it on), the other DWELL's energy, the distance
+static uint8_t root_seq;
+static float peer_energy, rssi_s = -50.0f, near_s = -1.0f;
+static bool  pend_abs; static int pend_b, pend_c;   // a root heard from the other box while a fade ran
+static float energy_eff;                            // the energy after SHARE ENERGY
 
 static float hz_midi_f(float hz) { return 69.0f + 12.0f * log2f(hz / 440.0f); }
 static int   eidx(int layer, int i) { return layer * NVL + i; }
@@ -343,18 +378,19 @@ static void slots_tick(float dt)
 }
 
 // ---------------------------------------------------------------- the next root: the other layer fades in on it
-static void root_next(int sb, int sc)
+// local: this board's own knock (or HOME): the root's number goes up, so a linked DWELL follows (SHARE ROOT)
+static void root_goto(int nb, int nc, bool local)
 {
-    if (fading()) { next_queued = true; return; }                     // one at a time: this one waits for the fade
-    int O = 1 - CL;
-    int nb = root_b[CL] + sb, nc = root_c[CL] + sc;
+    if (nb == root_b[CL] && nc == root_c[CL]) return;
+    if (fading()) { pend_abs = true; pend_b = nb; pend_c = nc; if (local) { root_seq++; link_poke(); } return; }   // after this fade
     if (abs(nb) > 12 || abs(nc) > 6) { toast("AS FAR AS IT GOES: HOME", 1200); nb = 0; nc = 0; }
+    int O = 1 - CL;
     root_b[O] = nb; root_c[O] = nc;
     for (int i = 0; i < NVL; i++) {                                    // the same chord on the new root
-        slot_t s = sl[CL][i];
-        if (s.pend) { s.pend = false; s.b = s.pb; s.c = s.pc; }
-        s.age = 0.0f;
-        sl[O][i] = s;
+        slot_t sl1 = sl[CL][i];
+        if (sl1.pend) { sl1.pend = false; sl1.b = sl1.pb; sl1.c = sl1.pc; }
+        sl1.age = 0.0f;
+        sl[O][i] = sl1;
     }
     // its targets first, then the switch: the new layer is silent until then, so its voices start where they belong
     CL = O;
@@ -362,10 +398,16 @@ static void root_next(int sb, int sc)
     eng_fade_s = pv[P_FADE];
     __atomic_store_n(&eng_layer, O, __ATOMIC_RELEASE);
     midi_lead();
+    if (local) { root_seq++; link_poke(); }
     char nm[12], b[32];
     root_label(O, nm, sizeof nm);
     snprintf(b, sizeof b, nm[0] ? "ROOT %s" : "HOME", nm);
     toast(b, 900);
+}
+static void root_next(int sb, int sc)
+{
+    if (fading()) { next_queued = true; return; }                     // one at a time: this one waits for the fade
+    root_goto(root_b[CL] + sb, root_c[CL] + sc, true);
 }
 static void root_step(void)
 {
@@ -602,8 +644,8 @@ static uint32_t my_id(void)
 }
 static void fund_update(void)
 {
-    int oct = clampi((int)pv[P_OCTAVE], 1, 4);
-    fund_hz = midi_hz((float)(12 * (oct + 1) + (int)pv[P_KEY]));
+    int oct = clampi((int)pv[P_OCTAVE], 1, 4), f = (int)pv[P_FIFTH];
+    fund_hz = midi_hz((float)(12 * (oct + 1) + (int)pv[P_KEY])) * (f == FIFTH_UP ? 1.5f : f == FIFTH_DOWN ? 2.0f / 3.0f : 1.0f);
 }
 static void link_follow(void)
 {
@@ -642,6 +684,119 @@ static void link_follow(void)
     D.follow = pv[P_FOLLOW] >= 1.0f && h->live >= 0;
 }
 
+// ---------------------------------------------------------------- BOW: played by hand
+// Three ways of moving, three voices (AXES SPLIT): twisting the box flat bows the lead, swinging it forward and back
+// bows the chord (the trail), rocking it side to side bows the root (or the chord too, with ROOT off). AXES ONE: any
+// movement bows them all. The speed of each is the bow's (15 deg/s to 315); turning back the other way is a bow
+// change (an accent); a circle never turns back, so it sustains. PRESSURE: speed brightens, and pressed past 85 % the
+// string growls an octave down. The bow's place on the string: the roll held while bowing (averaged, so a swing does not
+// move it): towards one side dark, the other glassy. RING: how long a tone rings once the bow leaves it (the engine's).
+static void bow_tick(const ctl_t *c)
+{
+    float hand = pv[P_HAND] * 0.01f, press = pv[P_PRESS] * 0.01f, bch = pv[P_BCHANGE] * 0.01f;
+    bool split = pv[P_AXES] >= 1.0f;
+    float g[3] = { 0.0f, 0.0f, 0.0f };
+    if (c->has_imu && !c->frozen) { g[0] = c->gyro.z; g[1] = c->gyro.x; g[2] = c->gyro.y; }
+    if (!split) {                                                      // ONE: the whole movement, its strongest axis's turn
+        int k = fabsf(g[0]) > fabsf(g[1]) ? (fabsf(g[0]) > fabsf(g[2]) ? 0 : 2) : (fabsf(g[1]) > fabsf(g[2]) ? 1 : 2);
+        float m = copysignf(c->has_imu && !c->frozen ? c->gyro_mag : 0.0f, g[k]);
+        g[0] = g[1] = g[2] = m;
+    }
+    for (int k = 0; k < 3; k++) {
+        float a = fabsf(g[k]);
+        float t = clampf((a - 15.0f) / 300.0f, 0.0f, 1.3f);
+        bow_sp[k] += (t - bow_sp[k]) * (t > bow_sp[k] ? 0.6f : 0.3f);
+        float sg = g[k] > 40.0f ? 1.0f : g[k] < -40.0f ? -1.0f : 0.0f;
+        if (sg != 0.0f && bow_sign[k] != 0.0f && sg != bow_sign[k]) bow_acc[k] = 1.2f * bch;   // the bow turns back
+        if (sg != 0.0f) bow_sign[k] = sg;
+        else if (a < 10.0f) bow_sign[k] = 0.0f;                        // stopped: the next stroke is no change
+        bow_acc[k] *= 0.8f;                                            // about 45 ms
+    }
+    // the bow's place: the roll, averaged over half a second, against where it was when the bowing began
+    roll_avg += (c->lean_x - roll_avg) * 0.05f;
+    if (!bowing && motion > 0.15f) { bowing = true; roll_ref = roll_avg; }
+    if (motion < 0.05f) bowing = false;
+    bow_pos = bowing ? clampf((roll_avg - roll_ref) / 30.0f, -1.0f, 1.0f) : bow_pos * 0.95f;
+    bool root_on = pv[P_ROOT] >= 1.0f;
+    for (int layer = 0; layer < 2; layer++)
+        for (int i = 0; i < NVL; i++) {
+            const slot_t *s = &sl[layer][i];
+            int e = eidx(layer, i), k = s->lead ? 0 : s->root ? 2 : 1;
+            float sp = bow_sp[k], ac = bow_acc[k];
+            if (k == 1 && split && !root_on && bow_sp[2] > sp) { sp = bow_sp[2]; ac = fmaxf(ac, bow_acc[2]); }
+            eng_slot_hand[e] = clampf(sp * (1.0f + ac), 0.0f, 1.6f);
+            eng_slot_bright[e] = clampf(press * 0.8f * sp + 0.6f * ac + 0.6f * bow_pos, -1.0f, 1.5f);
+            eng_slot_sub[e] = press * clampf((sp - 0.85f) * 4.0f, 0.0f, 1.0f);
+        }
+    eng_hand = hand;
+    eng_ring_s = pv[P_RING];
+    if (hand > 0.5f && motion > 0.3f) coach_done(L_BOW);
+}
+
+// ---------------------------------------------------------------- TOGETHER: two (or more) DWELLs in one room
+// Each board sends 12 bytes of its own with the link's packets (link_set_app): 1 (the format), the root's number, the
+// root (fifths, the prime), its own energy (0..255), its FIFTH, and its six cells (bit 7 sounding, bit 6 the lead, bits
+// 3..5 c + 2, bits 0..2 b + 3). From the other DWELLs it takes: the root (SHARE ROOT: a higher number, or the same from a
+// higher id, moves this board's root too, fading at its own FADE), their energy (SHARE ENERGY: SHARED, pump one and both
+// swell; TRADED, as one swells the other falls back), their distance from the radio's strength (NEAR FAR: held together,
+// unison; apart, the boxes' tones beat, up to FAR BEATS across a room), and their cells (drawn hollow here).
+static int fifth_steps(int f) { return f == FIFTH_UP ? 1 : f == FIFTH_DOWN ? -1 : 0; }
+static void together_tick(void)
+{
+    uint8_t app[12] = { 1, root_seq, (uint8_t)(int8_t)root_b[CL], (uint8_t)(int8_t)root_c[CL],
+                        (uint8_t)clampi((int)(energy * 255.0f + 0.5f), 0, 255), (uint8_t)pv[P_FIFTH], 0, 0, 0, 0, 0, 0 };
+    for (int i = 0; i < NVL; i++) {
+        const slot_t *s = &sl[CL][i];
+        if (s->on && !s->pend) app[6 + i] = (uint8_t)(0x80 | (s->lead ? 0x40 : 0) | (((s->c + 2) & 7) << 3) | ((s->b + 3) & 7));
+    }
+    link_set_app(app, 12);
+    link_peer_t pr[LINK_PEERS_MAX];
+    int np = link_peers(pr, LINK_PEERS_MAX), dw = 0, best = -1;
+    uint32_t me = my_id();
+    float pe = 0.0f;
+    for (int i = 0; i < np; i++) {
+        const link_peer_t *p = &pr[i];
+        if (strncmp(p->name, "DWELL", 5) || p->app_n < 12 || p->app[0] != 1) continue;
+        dw++;
+        if (best < 0 || p->rssi > pr[best].rssi) best = i;
+        pe = fmaxf(pe, (float)p->app[4] / 255.0f);
+        // the root: a newer one, or the same number from a higher id, is taken
+        if (pv[P_SHROOT] >= 1.0f) {
+            int8_t d = (int8_t)(p->app[1] - root_seq);
+            int rb = (int8_t)p->app[2], rc = (int8_t)p->app[3];
+            int cb = pend_abs ? pend_b : root_b[CL], cc = pend_abs ? pend_c : root_c[CL];
+            if (d > 0 || (d == 0 && (rb != cb || rc != cc) && p->id > me)) { root_seq = p->app[1]; root_goto(rb, rc, false); }
+        }
+    }
+    D.dwells = dw;
+    peer_energy += ((dw ? pe : 0.0f) - peer_energy) * 0.3f;
+    int sh = (int)pv[P_SHENERGY];
+    energy_eff = !dw || sh == SH_OWN ? energy : sh == SH_SHARED ? fmaxf(energy, 0.85f * peer_energy) : energy * (1.0f - 0.7f * peer_energy);
+    // NEAR FAR: the strongest DWELL's signal, smoothed over about half a second: -38 dBm together, -73 across a room
+    if (best >= 0) {
+        rssi_s += ((float)pr[best].rssi - rssi_s) * 0.02f;
+        float nr = clampf((rssi_s + 73.0f) / 35.0f, 0.0f, 1.0f);
+        near_s = near_s < 0.0f ? nr : near_s + (nr - near_s) * 0.05f;
+    } else near_s = -1.0f;
+    float apart = near_s >= 0.0f && pv[P_NEARFAR] >= 1.0f ? (1.0f - near_s) * pv[P_FARBEAT] : 0.0f;
+    eng_detune_hz = (my_rank == 0 ? -0.5f : 0.5f) * apart;            // the two boxes detuned half each, opposite ways
+    D.near = pv[P_NEARFAR] >= 1.0f ? near_s : -1.0f; D.apart_hz = apart; D.peer_energy = peer_energy; D.fifth = (int)pv[P_FIFTH];
+    // its cells, placed on this lattice (its root and its fifth against ours)
+    D.npeer = 0;
+    if (best >= 0) {
+        const link_peer_t *p = &pr[best];
+        int db = (int8_t)p->app[2] - root_b[CL] + fifth_steps(p->app[5]) - fifth_steps((int)pv[P_FIFTH]);
+        int dc = (int8_t)p->app[3] - root_c[CL];
+        for (int i = 0; i < NVL; i++) {
+            uint8_t x = p->app[6 + i];
+            if (!(x & 0x80)) continue;
+            int b = (x & 7) - 3 + db, c = ((x >> 3) & 7) - 2 + dc;
+            if (abs(b) > LAT_B || abs(c) > LAT_C) continue;
+            D.peer_b[D.npeer] = (int8_t)b; D.peer_c[D.npeer] = (int8_t)c; D.npeer++;
+        }
+    }
+}
+
 // ---------------------------------------------------------------- the LED
 static void led_tick(const ctl_t *c)
 {
@@ -666,13 +821,10 @@ static void led_tick(const ctl_t *c)
 // ---------------------------------------------------------------- the core's calls
 static void controls(void)
 {
-    float E = energy, sk = shake_s * pv[P_SHAKE] * 0.01f;
+    float E = energy_eff, sk = shake_s * pv[P_SHAKE] * 0.01f;
     eng_glide_s = pv[P_DRIFT];
     // the energy: the VCA from REST LEVEL to full, HAND multiplying by the movement itself
-    float vca = expf(0.1151293f * pv[P_REST] * (1.0f - E));           // dB to gain
-    float hand = pv[P_HAND] * 0.01f;
-    vca *= (1.0f - hand) + hand * clampf(mfast * 1.6f, 0.0f, 1.0f);
-    eng_vca = vca;
+    eng_vca = expf(0.1151293f * pv[P_REST] * (1.0f - E));            // dB to gain (HAND is per voice: bow_tick)
     float dense = pv[P_DENSE] * 0.01f, td = pv[P_TODENSE] * 0.01f;
     eng_dense = dense + (1.0f - dense) * E * td;
     eng_copies = clampi((int)pv[P_COPIES], 1, NCOPY);
@@ -700,7 +852,14 @@ static void controls(void)
     eng_drive = drive;
     eng_tone = pv[P_TONE] * 0.01f;
     eng_dmix = pv[P_DMIX] * 0.01f;
-    eng_grit = sk;
+    eng_grit = sk * pv[P_GRIT] * 0.01f;
+    // the room's feedback: off while a room pass listens; the energy tips the loop over into a howl
+    eng_fb_mode = eng_room_state == ROOM_PASSING ? FB_OFF : (int)pv[P_FBMODE];
+    float fd = 1.4f * pv[P_FEEDBACK] * 0.01f;
+    eng_fb_drive = fd + (1.5f - fd) * E * pv[P_TOFB] * 0.01f;
+    eng_fb_level = pv[P_FBLEVEL];
+    eng_fb_ring = pv[P_FBRING];
+    eng_fb_swell = pv[P_FBSWELL];
     // the echo: its time (or on the beat), its feedback swelling with a shake
     int es = clampi((int)pv[P_ESYNC], 0, 4);
     eng_echo_s = es && D.bpm > 0.0f ? clampf(esync_beats[es] * 60.0f / D.bpm, 0.02f, 1.6f) : pv[P_ECHO];
@@ -732,7 +891,9 @@ static void ui_fill(void)
     D.rec = R.recording; D.rec_s = (float)eng_take_frames / (float)AUDIO_SR; D.analysing = R.analysing; D.wave_hz = eng_wave_hz;
     D.room_state = eng_room_state; D.room_pass = eng_room_pass; D.room_passes = eng_room_passes;
     D.room_frac = eng_room_frames ? (float)eng_room_pos / (float)eng_room_frames : 0.0f; D.room_peak = eng_room_peak;
-    D.energy = energy; D.motion = motion; D.shake = shake_s;
+    D.energy = energy_eff; D.motion = motion; D.shake = shake_s;
+    D.fb_mode = (int)pv[P_FBMODE];
+    D.howl = eng_fb_env / expf(0.1151293f * pv[P_FBLEVEL]);
     D.fade = fading() ? (CL ? eng_layer_x : 1.0f - eng_layer_x) : -1.0f;
     D.root_b = root_b[CL]; D.root_c = root_c[CL];
     float rr = root_ratio(CL);
@@ -749,9 +910,14 @@ static void tick(const ctl_t *c)
     fund_update();
     if (!booted) { booted = true; slots_shape(); }
     energy_tick(c);
+    together_tick();
+    bow_tick(c);
     cursor_tick(c);
     slots_shape();
-    if (next_queued && !fading()) { next_queued = false; root_step(); }
+    if (!fading()) {
+        if (pend_abs) { pend_abs = false; root_goto(pend_b, pend_c, false); }
+        else if (next_queued) { next_queued = false; root_step(); }
+    }
     slots_tick(c->dt);
     knock_tick(c);
     rec_logic(c);
@@ -786,7 +952,7 @@ static void action(int p)
     switch (p) {
     case P_PASS: room_start(); break;
     case P_HOME:
-        if (root_b[CL] || root_c[CL]) root_next(-root_b[CL], -root_c[CL]);
+        if (root_b[CL] || root_c[CL]) root_goto(0, 0, true);
         else toast("ALREADY HOME", 800);
         menu_leave();
         break;

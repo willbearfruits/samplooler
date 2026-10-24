@@ -13,6 +13,7 @@
 #define JUMP_FRAMES  64                 // the mapping is off by more than 2 ms: jump instead of slewing
 #define SLEW_MAX     (65536 / 20)       // 0.05 frame per tick, 5 frames per second: 156 ppm, far below hearing
 #define FX           65536              // fixed point for frames: 1/65536 frame
+#define APP_MARK     0xA5               // after the echoes: APP_MARK, length, the instrument's bytes (link_set_app)
 
 typedef struct __attribute__((packed)) { uint32_t to; int64_t t1, t2; } echo_t;
 typedef struct __attribute__((packed)) {
@@ -44,6 +45,7 @@ typedef struct {
     samp_t   s[NSAMP];
     int      ns, si;
     float    rtt_ms;
+    uint8_t  app[LINK_APP_MAX], app_n;
 } peer_t;
 
 struct link_state {
@@ -68,6 +70,7 @@ struct link_state {
     float    send_ms, err_ms;
     bool     send_now;
     uint32_t rnd;
+    uint8_t  app[LINK_APP_MAX], app_n;  // the instrument's own bytes, sent after the echoes
     link_rxq_t q;
     // for the audio task (seqlock)
     volatile uint32_t pub_seq, pub_origin, pub_fpb;
@@ -285,6 +288,7 @@ int link_peers(link_peer_t *out, int max)
         memcpy(o->name, p->name, sizeof o->name);
         o->id = p->id; o->rssi = p->rssi; o->prio = p->prio; o->flags = p->flags; o->clock = p->id == L->clock;
         o->age_s = p->age; o->rtt_ms = p->rtt_ms; o->heard = p->heard; o->lost = p->lost;
+        memcpy(o->app, p->app, LINK_APP_MAX); o->app_n = p->app_n;
     }
     return n;
 }
@@ -335,6 +339,14 @@ static void handle(const rxpkt_t *r)
     p->prio = k.prio; p->flags = k.flags; p->rssi = r->rssi; p->age = 0; p->epoch = k.epoch; p->ref = k.ref;
     p->ping_t1 = k.t_send; p->ping_t2 = r->t; p->ping = true;
     if (fresh) { app_log("link: %s joined", p->name); L->send_now = true; }
+    // the instrument's own bytes, when the packet carries them (an older core's never does)
+    {
+        int used = PKT_HEAD + nech * (int)sizeof(echo_t);
+        if (r->n >= used + 2 && r->b[used] == APP_MARK && r->b[used + 1] <= LINK_APP_MAX && used + 2 + r->b[used + 1] <= r->n) {
+            p->app_n = r->b[used + 1];
+            memcpy(p->app, &r->b[used + 2], p->app_n);
+        }
+    }
     // our ping, answered: an NTP sample (their clock minus ours, and the round trip without their wait)
     for (int i = 0; i < nech; i++) {
         if (k.ech[i].to != L->id) continue;
@@ -436,8 +448,8 @@ static void send(void)
     memcpy(k.name, L->name, LINK_NAME_LEN);
     k.id = L->id; k.seq = ++L->seq; k.ref = L->tl_local ? 0xFFFFFFFFu : L->clock;   // an origin not yet in network frames is not to be taken
     k.tl = L->tl; k.hm = L->hm;
-    int n = 0;
-    for (int i = 0; i < LINK_PEERS_MAX; i++) {
+    int n = 0, nmax = L->app_n ? LINK_PEERS_MAX - 1 : LINK_PEERS_MAX;   // with bytes of our own, one echo waits a packet
+    for (int i = 0; i < LINK_PEERS_MAX && n < nmax; i++) {
         peer_t *p = &L->p[i];
         if (!p->used || !p->ping) continue;
         k.ech[n++] = (echo_t){ .to = p->id, .t1 = p->ping_t1, .t2 = p->ping_t2 };
@@ -446,8 +458,24 @@ static void send(void)
     k.nech = (uint8_t)n;
     k.epoch = plat_link_epoch();
     k.t_send = plat_link_us();
-    plat_link_send(&k, PKT_HEAD + n * (int)sizeof(echo_t));
+    int size = PKT_HEAD + n * (int)sizeof(echo_t);
+    if (L->app_n && size + 2 + L->app_n <= (int)sizeof(pkt_t)) {      // after the echoes: an older core reads past it
+        uint8_t *raw = (uint8_t *)&k;
+        raw[size] = APP_MARK; raw[size + 1] = L->app_n;
+        memcpy(raw + size + 2, L->app, L->app_n);
+        size += 2 + L->app_n;
+    }
+    plat_link_send(&k, size);
 }
+
+void link_set_app(const void *b, int n)
+{
+    if (n < 0) n = 0;
+    if (n > LINK_APP_MAX) n = LINK_APP_MAX;
+    memcpy(L->app, b, (size_t)n);
+    L->app_n = (uint8_t)n;
+}
+void link_poke(void) { L->send_now = true; }
 
 void link_tick(float dt)
 {

@@ -1,7 +1,7 @@
 # DWELL manual
 
-Version 0.2. Checked in the host simulator (`tools/sim`, 191 checks). Version 0.1 started on a board (13 % CPU on
-DREAM HOUSE) and was heard; 0.2 has not been on a board yet.
+Version 0.3. Checked in the host simulator (`tools/sim`, 223 checks). 0.2 runs on a board (19 % CPU on DREAM HOUSE,
+82 KB free, 44 KB with both radios); 0.3 has not been on a board yet.
 
 ## The lattice
 
@@ -83,8 +83,7 @@ swings with a pause between leave more than one. The energy:
 - raises DENSE towards 100 % by TO DENSE (60 %), and the harmonics with it;
 - raises the overdrive towards 100 % by TO DIRT (50 %).
 
-ENERGY > HAND multiplies the voices by the movement itself, as it is now (a quick follower, about 0.1 s): at 100 the
-drone sounds only while the box moves, like a bow; at 0 it is a drone you push. While the box swings the lattice does
+BOW > HAND (its own page below) bows each voice by the movement itself instead. While the box swings the lattice does
 not move: a cell counts only once the box is calm (under 60 degrees a second) for DWELL.
 
 Measured in the simulator: four seconds of swinging with CLIMB 4 s and REST LEVEL -20 dB took the drone up by 19.4 dB;
@@ -94,9 +93,25 @@ five seconds still with FALL 10 s, half way back down; ten, at rest again.
 
 A shake is jolt after jolt: the acceleration changing by more than 0.35 g from one hundredth of a second to the next,
 for a while (it takes about 0.15 s to count fully, so one knock does not; it dies away in about 0.7 s). ENERGY > SHAKE
-sets how much it throws in: grit (noise into the overdrive), the overdrive itself up by half, the copies beating up to
-six times faster, the echo's feedback up to 95 % (it saturates as it comes round, so it surges but stays bounded), and
-a kick to the energy.
+sets how much it throws in: the overdrive up by half, the copies beating up to six times faster, the echo's feedback up
+to 95 % (it saturates as it comes round, so it surges but stays bounded), and a kick to the energy. ENERGY > GRIT is
+its sizzle: noise rung through narrow band passes an octave over the tones that sound, into the overdrive, so even the
+grit is in tune (measured: 3 % of it falls between the harmonics; 0.2's white noise was gone with it).
+
+## BOW: played by hand
+
+BOW > HAND mixes from the drone as it is (0) to one bowed by your movement (100): at 100 a tone sounds only while it is
+bowed. BOW > AXES: SPLIT (each way of moving bows its own voice: twisting the box flat the lead, swinging it forward and
+back the chord, rocking it side to side the root, or the chord too with ROOT off) or ONE (any movement bows them all).
+The bow's speed is the rotation's, from 15 degrees a second to 315.
+
+- A bow change: turning back the other way gives the stroke an accent (BOW > BOW CHANGE); a circle never turns back,
+  so it sustains, as the hurdy-gurdy's wheel does.
+- BOW > PRESSURE: faster is brighter (measured: the overtones 10 dB up from 60 to 250 degrees a second), and past 85 %
+  of full speed the string growls an octave down.
+- The bow's place on the string: the roll held while bowing, averaged over half a second (so a swing does not move it):
+  tipped one way darker, the other glassier.
+- BOW > RING: how long a tone rings on once the bow leaves it (0.05 to 5 s).
 
 ## TAP: a knock
 
@@ -132,6 +147,37 @@ After the overdrive: an echo of ECHO > ECHO seconds (20 ms to 1.6 s; or ECHO SYN
 flock's tempo), its time gliding like tape when it changes. What comes round is a little darker each time and
 saturates, never above half scale: ECHO > FEEDBACK (0 to 95 %) can run long without blowing up. ECHO > ECHO MIX is the
 wet and dry (equal power). Then the hall (SPACE, TAIL), with its own wet and dry.
+
+## FEEDBACK: the room
+
+HOWL's loop, tuned to the drone. The mic goes through narrow band passes on the tones that sound (each as strong as its
+tone and its bow), and back out; only those notes can build up, so the room howls in just intonation. FEEDBACK >
+FEEDBACK: AIR (through the speaker and the room: two DWELLs in one room feed each other), INNER (inside the box, one
+sample later, with a little of the drone in it: it howls on headphones), BOTH, or OFF.
+
+- LOOP: how close to howling (the inner loop howls from about 70); the energy pushes it further (TO LOOP), so a
+  crescendo ends with the room taking over.
+- HOWL LEVEL: the loudest a howl gets. A governor brings the loop's gain down fast whenever the howl passes it and up
+  no faster than SWELL allows; the loop saturates at 1.3 times the level at every instant; what leaves the box rises
+  at most 120 dB a second and never passes 1.25 times the level. Measured in the simulator: a room four times louder
+  than one that just howls stays at HOWL LEVEL, its peaks under the ceiling.
+- NARROW: the band passes' Q (10 to 200). SWELL: how slowly a howl may grow.
+- A room pass turns the feedback off while it listens.
+
+## TOGETHER: two DWELLs
+
+Each DWELL sends twelve bytes of its own with the link's packets: its root and the root's number, its energy, its
+FIFTH and its sounding cells. A board on an older core ignores them (they ride after the clock's data).
+
+- SHARE ROOT: a knock (or HOME) gives the root a new number; a DWELL that hears a newer number fades to that root at
+  its own FADE (the same number with a different root: the higher id wins). A board switched on late takes the room's.
+- ENERGY: OWN, SHARED (this box's energy is at least 85 % of the other's: pump one, both swell) or TRADED (this box's
+  falls by up to 70 % of the other's: they take turns).
+- NEAR FAR: the other box's radio strength, smoothed over about half a second: -38 dBm (held together) is unison,
+  -73 dBm (across a room) puts the two FAR BEATS apart (each half of it, opposite ways), so their tones beat. RSSI
+  indoors jumps with how the boxes face; the smoothing keeps it slow, which suits a drone.
+- FIFTH: UP or DOWN puts this box's 1/1 a just fifth (3/2 or 2/3) from the key; set it on one box.
+- SPREAD: each DWELL sounds one tone of its own chord.
 
 ## RADIO: interference
 
@@ -174,7 +220,11 @@ IS THERE lists the boards heard.
 | DRUMM | from near silence (REST -30 dB) into a bowed, driven wall: CLIMB 20 s, FALL 45 s, a long echo |
 | MIASMA | a hurdy-gurdy, harsh from the start (DRIVE 70), shaking throws it to pieces, a short hard echo |
 | IMPERIAL | a quiet reed (REST -24 dB), slow to build (30 s), barely driven, a 1.2 s echo, a long hall |
-| BOWED BY HAND | it sounds only while you move it (HAND 100) |
+| BOWED BY HAND | it sounds only while you move it: twist, swing and rock bow the lead, the chord and the root |
+| ONE BOW | any movement bows every voice, a long ring |
+| GROWL | a hurdy-gurdy bowed hard: bow changes bite, flat out it growls an octave down |
+| THE ROOM SINGS | FEEDBACK AIR: swing it and the room howls on the chord, held at -16 dB |
+| HOWL HOME | FEEDBACK INNER: a reed whose own tones howl inside the box (headphones) |
 | NIBLOCK | a bowed wall: DENSE 80, eight copies beating at 0.3 Hz, no root |
 | ADNOS | a reed that slides: GLIDE, DRIFT 90 s |
 | IN A ROOM | the ROOM source, 12 passes of 4 s set: run ROOM > ROOM PASS |
@@ -216,99 +266,130 @@ Every setting is on MIDI CC 20 + its number (the table says which) both ways; pr
 | REST LEVEL | 28 | How quiet it is unmoved (-40..0 dB) |
 | TO DENSE | 29 | Moving thickens it (0..100 %) |
 | TO DIRT | 30 | Moving drives it (0..100 %) |
-| HAND | 31 | 100: it sounds as you move (0..100 %) |
-| SHAKE | 32 | What a shake throws in (0..100 %) |
+| SHAKE | 31 | What a shake throws in (0..100 %) |
+| GRIT | 32 | A shake's sizzle, in tune (0..100 %) |
+
+### BOW
+
+| Setting | CC | |
+| - | - | - |
+| HAND | 33 | 100: it sounds as you move (0..100 %) |
+| AXES | 34 | Each motion its voice: ONE, SPLIT |
+| RING | 35 | It rings on after the bow (0.05..5.0 s) |
+| PRESSURE | 36 | Fast: bright, then a growl (0..100 %) |
+| BOW CHANGE | 37 | A turn back: an accent (0..100 %) |
 
 ### TAP
 
 | Setting | CC | |
 | - | - | - |
-| KNOCK | 33 | A strum, or a new root: OFF, STRUM, NEXT ROOT |
-| NEXT ROOT | 34 | The step to the new root: LEAN, 3/2, 4/3, 7/4, 8/7, 9/8 |
-| FADE | 35 | The new root fades in (0.5..60.0 s) |
-| STRUM | 36 | How long a strum rings (0.2..8.0 s) |
-| SENSE | 37 | How easily a knock counts (0..100 %) |
+| KNOCK | 38 | A strum, or a new root: OFF, STRUM, NEXT ROOT |
+| NEXT ROOT | 39 | The step to the new root: LEAN, 3/2, 4/3, 7/4, 8/7, 9/8 |
+| FADE | 40 | The new root fades in (0.5..60.0 s) |
+| STRUM | 41 | How long a strum rings (0.2..8.0 s) |
+| SENSE | 42 | How easily a knock counts (0..100 %) |
 | HOME |  | Fade back to the key |
 
 ### LATTICE
 
 | Setting | CC | |
 | - | - | - |
-| LIMIT | 39 | The primes the ratios use: 7 (YOUNG), 5, 3 |
-| OCTAVE | 40 | Where 1/1 sits (1..4) |
-| TILT STEP | 41 | Degrees per cell (6..20) |
-| DWELL | 42 | Stay on a cell this long (0.1..2.0 s) |
+| LIMIT | 44 | The primes the ratios use: 7 (YOUNG), 5, 3 |
+| OCTAVE | 45 | Where 1/1 sits (1..4) |
+| TILT STEP | 46 | Degrees per cell (6..20) |
+| DWELL | 47 | Stay on a cell this long (0.1..2.0 s) |
 
 ### CLUSTER
 
 | Setting | CC | |
 | - | - | - |
-| COPIES | 43 | Copies per tone at dense (1..8) |
-| BEAT | 44 | How fast the copies beat (0.05..8.0 Hz) |
-| BEAT SYNC | 45 | Beats at the flock's tempo: OFF, TEMPO |
-| BRIGHT | 46 | Harmonics (0..100 %) |
-| DIFF TONE | 47 | A sub at the difference (0..100 %) |
+| COPIES | 48 | Copies per tone at dense (1..8) |
+| BEAT | 49 | How fast the copies beat (0.05..8.0 Hz) |
+| BEAT SYNC | 50 | Beats at the flock's tempo: OFF, TEMPO |
+| BRIGHT | 51 | Harmonics (0..100 %) |
+| DIFF TONE | 52 | A sub at the difference (0..100 %) |
 
 ### SOURCE
 
 | Setting | CC | |
 | - | - | - |
-| SOURCE | 48 | What each tone is: SINE, REED, BOW, TANPURA, SHRUTI, GURDY, WAVE, ROOM |
-| PLUCK | 49 | Tanpura: plucks this often (0.2..4.0 s) |
-| JAWARI | 50 | Tanpura: the bridge's buzz (0..100 %) |
-| WHEEL | 51 | Gurdy: the wheel's turn (0.3..4.0 Hz) |
-| BREATH | 52 | Shruti: the bellows (0..100 %) |
-| BODY | 53 | Bow, reed: its wooden box (0..100 %) |
+| SOURCE | 53 | What each tone is: SINE, REED, BOW, TANPURA, SHRUTI, GURDY, WAVE, ROOM |
+| PLUCK | 54 | Tanpura: plucks this often (0.2..4.0 s) |
+| JAWARI | 55 | Tanpura: the bridge's buzz (0..100 %) |
+| WHEEL | 56 | Gurdy: the wheel's turn (0.3..4.0 Hz) |
+| BREATH | 57 | Shruti: the bellows (0..100 %) |
+| BODY | 58 | Bow, reed: its wooden box (0..100 %) |
 
 ### DIRT
 
 | Setting | CC | |
 | - | - | - |
-| DRIVE | 54 | Overdrive: more overtones (0..100 %) |
-| TONE | 55 | Dark to bright after it (0..100 %) |
-| DIRT MIX | 56 | Clean to driven (0..100 %) |
+| DRIVE | 59 | Overdrive: more overtones (0..100 %) |
+| TONE | 60 | Dark to bright after it (0..100 %) |
+| DIRT MIX | 61 | Clean to driven (0..100 %) |
 
 ### ECHO
 
 | Setting | CC | |
 | - | - | - |
-| ECHO | 57 | The echo's time (0.02..1.6 s) |
-| ECHO SYNC | 58 | On the flock's beat: OFF, 1 BEAT, 3/4, 1/2, 1/4 |
-| FEEDBACK | 59 | How often it comes back (0..95 %) |
-| ECHO MIX | 60 | Dry to all echo (0..100 %) |
+| ECHO | 62 | The echo's time (0.02..1.6 s) |
+| ECHO SYNC | 63 | On the flock's beat: OFF, 1 BEAT, 3/4, 1/2, 1/4 |
+| FEEDBACK | 70 | How often it comes back (0..95 %) |
+| ECHO MIX | 71 | Dry to all echo (0..100 %) |
 
 ### SPACE
 
 | Setting | CC | |
 | - | - | - |
-| SPACE | 61 | How much hall (0..100 %) |
-| TAIL | 62 | A small room to endless (0..100 %) |
+| SPACE | 72 | How much hall (0..100 %) |
+| TAIL | 73 | A small room to endless (0..100 %) |
+
+### FEEDBACK
+
+| Setting | CC | |
+| - | - | - |
+| FEEDBACK | 74 | Air: speaker and room: OFF, AIR, INNER, BOTH |
+| LOOP | 75 | How close to howling (0..100 %) |
+| TO LOOP | 76 | Moving tips it into a howl (0..100 %) |
+| HOWL LEVEL | 77 | The loudest a howl gets (-36..-6 dB) |
+| NARROW | 78 | How narrow each note is (10.0..200.0) |
+| SWELL | 79 | How slowly a howl grows (0.3..20.0 s) |
+
+### TOGETHER
+
+| Setting | CC | |
+| - | - | - |
+| SHARE ROOT | 80 | A knock moves both boxes: OFF, ON |
+| ENERGY | 81 | Pump one: both, or turns: OWN, SHARED, TRADED |
+| NEAR FAR | 82 | Apart, they beat: OFF, ON |
+| FAR BEATS | 83 | The beating across a room (0.2..8.0 Hz) |
+| FIFTH | 84 | This box a fifth away: OFF, UP, DOWN |
+| SPREAD | 85 | Each board one tone: OFF, ON |
 
 ### RADIO
 
 | Setting | CC | |
 | - | - | - |
-| RADIO | 63 | The air's traffic as noise: OFF, WI-FI, BLUETOOTH, BOTH |
-| INTERFERE | 70 | How hard the air cuts in (0..100 %) |
-| CHANNEL | 71 | Wi-fi channel, link off (1..13) |
+| RADIO | 86 | The air's traffic as noise: OFF, WI-FI, BLUETOOTH, BOTH |
+| INTERFERE | 87 | How hard the air cuts in (0..100 %) |
+| CHANNEL | 88 | Wi-fi channel, link off (1..13) |
 
 ### ROOM
 
 | Setting | CC | |
 | - | - | - |
-| PASSES | 72 | Times through the room (1..30) |
-| PASS LEN | 73 | Seconds per pass (2..ROOM_MAX_S s) |
+| PASSES | 89 | Times through the room (1..30) |
+| PASS LEN | 90 | Seconds per pass (2..ROOM_MAX_S s) |
 | ROOM PASS |  | Play, record, again, again |
 
 ### SONG
 
 | Setting | CC | |
 | - | - | - |
-| TEMPO | 75 | Shared with linked boards (50..200) |
-| KEY | 76 | 1/1 is this note: C, C#, D, D#, E, F, F#, G, G#, A, A#, B |
-| SCALE | 77 | For chords from the link: MAJOR, MINOR, DORIAN, MIXOLYDIAN, PHRYGIAN, HARM MINOR |
-| FOLLOW | 78 | A linked chord moves 1/1: OFF, ON |
-| SPREAD | 79 | Each board one tone: OFF, ON |
+| TEMPO | 92 | Shared with linked boards (50..200) |
+| KEY | 93 | 1/1 is this note: C, C#, D, D#, E, F, F#, G, G#, A, A#, B |
+| SCALE | 94 | For chords from the link: MAJOR, MINOR, DORIAN, MIXOLYDIAN, PHRYGIAN, HARM MINOR |
+| FOLLOW | 95 | A linked chord moves 1/1: OFF, ON |
 | LINK |  | Sync with boards nearby: OFF, ON |
 | GROUP |  | Same group: they sync (1..8) |
 | RANGE |  | How far the radio reaches: NEAR, ROOM, FAR |

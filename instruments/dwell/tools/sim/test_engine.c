@@ -6,6 +6,7 @@
 #include "sim.h"
 #include "inst_dwell.h"
 #include "dsp.h"
+#include "link.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +26,7 @@ static void plain(void)
     set("copy", 6); set("beat", 0.5f); set("bsyn", 0); set("knck", 0); set("sprd", 0);
     // no dynamics, no dirt, no echo, no radio: the voices as they are (ENERGY and the rest have their own sections)
     set("rstl", 0); set("tdns", 0); set("tdrv", 0); set("hand", 0); set("shak", 0); set("drve", 0); set("emix", 0); set("radi", RAD_OFF);
+    set("fbmd", FB_OFF); set("ffth", FIFTH_OFF); set("nrfr", 0);
     tilt_cells(0, 0); run(2.0f);
 }
 static float f11(void) { return D.fund_hz; }
@@ -452,7 +454,7 @@ static void energy_sec(void)
     check(eng_dense > 0.95f && eng_drive > 0.95f && eng_copies_now == 8, "TO DENSE and TO DIRT 100: at full energy every copy and the full drive (dense %.2f, drive %.2f, %d copies)", (double)eng_dense, (double)eng_drive, eng_copies_now);
     move_box(0.0f); run(12.0f);
     // HAND: it sounds only while the box moves
-    set("tdns", 0); set("tdrv", 0); set("rstl", 0); set("hand", 100);
+    set("tdns", 0); set("tdrv", 0); set("rstl", 0); set("hand", 100); set("axes", AX_ONE); set("ring", 0.1f);
     run(1.0f);
     float rh0 = m_rms(sim_t - 0.5f, sim_t);
     move_box(200.0f); run(1.0f);
@@ -460,7 +462,7 @@ static void energy_sec(void)
     move_box(0.0f); run(1.0f);
     float rh2 = m_rms(sim_t - 0.5f, sim_t);
     check(rh0 < rh1 * 0.02f && rh2 < rh1 * 0.05f, "HAND 100: silent on a still box, sounding as it moves, silent again (%.4f, %.4f, %.4f)", (double)rh0, (double)rh1, (double)rh2);
-    set("hand", 0);
+    set("hand", 0); set("ring", 0.6f);
     // the lattice does not move while the box swings
     tilt_cells(1, 0); move_box(300.0f); run(1.5f);
     bool stayed = !strcmp(D.lead_name, "1/1");
@@ -473,7 +475,7 @@ static void shake_sec(void)
 {
     section("shake: grit, faster beats, the echo surging");
     plain();
-    set("shak", 100); set("knck", KN_NEXT); set("dens", 50); set("beat", 0.5f); set("efb ", 30); set("emix", 30); set("drve", 0);
+    set("shak", 100); set("grit", 100); set("knck", KN_NEXT); set("dens", 50); set("beat", 0.5f); set("efb ", 30); set("emix", 30); set("drve", 0);
     run(1.0f);
     float b0 = eng_beat_hz, f0 = eng_echo_fb, d0 = eng_drive;
     float t = sim_t;
@@ -577,7 +579,7 @@ static void echo_sec(void)
 {
     section("echo");
     plain();
-    set("hand", 100); set("emix", 50); set("efb ", 0); set("echo", 0.6f);
+    set("hand", 100); set("axes", AX_ONE); set("ring", 0.05f); set("emix", 50); set("efb ", 0); set("echo", 0.6f);
     run(2.0f);
     move_box(400.0f); run(0.06f); move_box(0.0f);
     float t0 = sim_t - 0.06f;
@@ -593,7 +595,7 @@ static void echo_sec(void)
     sim_wav("-echo", t0 - 0.2f, sim_t);
     float pk = m_peak(t0, sim_t);
     check(pk < 0.9f, "bounded (peak %.2f)", (double)pk);
-    set("hand", 0); set("efb ", 35); set("emix", 0);
+    set("hand", 0); set("ring", 0.6f); set("efb ", 35); set("emix", 0);
 }
 
 static void radio_sec(void)
@@ -642,6 +644,227 @@ static void radio_sec(void)
     air_sim_busy = 0.5f;
 }
 
+
+// ---------------------------------------------------------------- the third round: the bow, tuned grit, feedback, two boxes
+static float env_peak_ratio(float t0, float t1)                       // max / min of the 20 ms rms between t0 and t1
+{
+    float mx = 0.0f, mn = 1e9f;
+    for (float t = t0; t + 0.02f <= t1; t += 0.02f) { float r = m_rms(t, t + 0.02f); if (r > mx) mx = r; if (r < mn) mn = r; }
+    return mn > 0.0f ? mx / mn : 1e9f;
+}
+
+static void bow_sec(void)
+{
+    section("bow: each way of moving bows its own voice");
+    plain();
+    set("hand", 100); set("axes", AX_SPLIT); set("rstl", 0); set("voic", 2); set("root", 1); set("ring", 0.3f); set("pres", 0); set("bchg", 0);
+    tilt_cells(1, 0); run(3.0f);
+    float f = f11();
+    static const char *const what[3] = { "twisting it flat bows the lead (3/2)", "swinging it forward and back bows the chord (1/1)", "rocking it side to side bows the root" };
+    vec3_t gy[3] = { { 0, 0, 250 }, { 250, 0, 0 }, { 0, 250, 0 } };
+    float fr[3] = { 1.5f, 1.0f, 0.5f };
+    for (int k = 0; k < 3; k++) {
+        SI.gyro = gy[k]; run(1.0f);
+        float t = sim_t; run(1.0f);
+        float p[3]; for (int j = 0; j < 3; j++) p[j] = m_goertzel(t, sim_t, f * fr[j]);
+        float other = 0.0f; for (int j = 0; j < 3; j++) if (j != k) other = fmaxf(other, p[j]);
+        check(p[k] > 30.0f * other, "%s (x%.0f over the others)", what[k], (double)(p[k] / (other + 1e-20f)));
+        SI.gyro = (vec3_t){ 0, 0, 0 }; run(1.0f);
+    }
+    float rs = m_rms(sim_t - 0.3f, sim_t);
+    check(rs < 0.002f, "still: silent (rms %.4f)", (double)rs);
+    // a circle never turns back: it sustains; back and forth turns back: each turn an accent
+    set("bchg", 100); set("voic", 1); set("root", 0);
+    SI.gyro = (vec3_t){ 0, 0, 200 }; run(1.0f);
+    float t = sim_t; run(2.0f);
+    float steady = env_peak_ratio(t, sim_t);
+    for (int i = 0; i < 8; i++) { SI.gyro = (vec3_t){ 0, 0, (i & 1) ? -200.0f : 200.0f }; run(0.25f); }
+    float strokes = env_peak_ratio(sim_t - 1.75f, sim_t);
+    note("the envelope's swing: a steady twist x%.2f, strokes back and forth x%.2f", (double)steady, (double)strokes);
+    check(strokes > steady * 1.3f, "turning the bow back gives each stroke an accent; a steady motion sustains");
+    SI.gyro = (vec3_t){ 0, 0, 0 }; run(1.0f);
+    // PRESSURE: faster is brighter, and past 85 % it growls an octave down (the bowed string, as the hand presets have it)
+    set("pres", 100); set("bchg", 0); set("brit", 0); tilt_cells(0, 0); run(2.0f);
+    float fl = f11(), ov[3], sub[3], fund[3];
+    float speed[3] = { 60.0f, 250.0f, 380.0f };
+    for (int k = 0; k < 3; k++) {
+        SI.gyro = (vec3_t){ 0, 0, speed[k] }; run(1.0f); t = sim_t; run(1.0f);
+        fund[k] = m_goertzel(t, sim_t, fl); sub[k] = m_goertzel(t, sim_t, fl * 0.5f);
+        ov[k] = 0.0f; for (int h = 2; h <= 6; h++) ov[k] += m_goertzel(t, sim_t, fl * (float)h);
+    }
+    note("overtones against the fundamental: %.0f dB at 60 deg/s, %.0f at 250, %.0f at 380; an octave down: %.0f, %.0f, %.0f dB",
+         (double)(10.0f * log10f(ov[0] / fund[0])), (double)(10.0f * log10f(ov[1] / fund[1])), (double)(10.0f * log10f(ov[2] / fund[2])),
+         (double)(10.0f * log10f(sub[0] / fund[0] + 1e-12f)), (double)(10.0f * log10f(sub[1] / fund[1] + 1e-12f)), (double)(10.0f * log10f(sub[2] / fund[2] + 1e-12f)));
+    check(ov[1] / fund[1] > 4.0f * ov[0] / fund[0], "PRESSURE: a faster bow is brighter (its overtones up %.0f dB)", (double)(10.0f * log10f((ov[1] / fund[1]) / (ov[0] / fund[0]))));
+    check(sub[2] > fund[2] * 0.01f && sub[1] < fund[1] * 0.001f, "and only pressed past 85 %% does it growl an octave down");
+    sim_wav("-bow", t - 4.0f, sim_t);
+    // RING: how long a tone rings once the bow leaves
+    for (int k = 0; k < 2; k++) {
+        set("ring", k ? 3.0f : 0.2f); set("pres", 0);
+        SI.gyro = (vec3_t){ 0, 0, 250 }; run(1.0f);
+        float r0 = m_rms(sim_t - 0.2f, sim_t);
+        SI.gyro = (vec3_t){ 0, 0, 0 }; run(0.5f);
+        float r1 = m_rms(sim_t - 0.1f, sim_t);
+        if (k) check(r1 > 0.4f * r0, "RING 3 s: half a second after the bow leaves it still rings (%.0f %%)", (double)(100.0f * r1 / r0));
+        else check(r1 < 0.05f * r0, "RING 0.2 s: it stops (%.1f %% left)", (double)(100.0f * r1 / r0));
+        run(3.0f);
+    }
+    set("hand", 0); set("ring", 0.6f); set("pres", 60); set("bchg", 50); set("srce", SRC_SINE);
+}
+
+static void grit_sec(void)
+{
+    section("shake: the grit is in tune");
+    plain();
+    set("voic", 1); set("root", 0); set("shak", 100); set("drve", 0); set("tdrv", 0);
+    float f = f11();
+    float on2[2], off[2];
+    for (int k = 0; k < 2; k++) {
+        set("grit", k ? 100.0f : 0.0f);
+        run(3.0f);
+        float t = sim_t;
+        shake_box(1.0f);
+        on2[k] = m_goertzel(t + 0.3f, sim_t, 2.0f * f);
+        off[k] = m_goertzel(t + 0.3f, sim_t, 2.5f * f) + m_goertzel(t + 0.3f, sim_t, 3.5f * f) + m_goertzel(t + 0.3f, sim_t, 6000.0f);
+        if (k) sim_wav("-grit", t - 0.5f, sim_t + 0.5f);
+    }
+    note("an octave over the tone: x%.1f with GRIT 100; between the harmonics x%.1f", (double)(on2[1] / (on2[0] + 1e-20f)), (double)(off[1] / (off[0] + 1e-20f)));
+    check(on2[1] > 3.0f * on2[0], "GRIT: a shake sizzles an octave over the tones");
+    check(off[1] < 0.2f * on2[1], "and not between them: no white noise (x%.2f of the octave)", (double)(off[1] / on2[1]));
+    run(3.0f);
+}
+
+static float flat_gain = 1.0f;
+static float flat_mic(float t, void *u)                                 // a room with no colour: the speaker, 30 ms later
+{
+    (void)u;
+    int k = (int)(t * AUDIO_SR + 0.5f) - 960;
+    return flat_gain * 0.3f * (k >= 0 && k < sim_n ? sim_out[k] : 0.0f) + 0.0008f * sim_noise();
+}
+
+static void feedback_sec(void)
+{
+    section("feedback: the room howls on the chord, and never blows up");
+    plain();
+    set("rstl", -40); set("voic", 2); set("root", 1); set("fbsw", 1.0f); set("fblv", -18); set("fbrg", 60);
+    tilt_cells(1, 0); run(3.0f);
+    float f = f11(), target = powf(10.0f, -18.0f / 20.0f);
+    // INNER, below the threshold: quiet; above it: a howl at FB LEVEL, on the chord's notes
+    set("fbmd", FB_INNER); set("fbgn", 40); set("tofb", 0);
+    run(4.0f);
+    check(eng_fb_env < 0.05f * target, "INNER, LOOP 40: under the threshold, no howl (%.4f)", (double)eng_fb_env);
+    set("fbgn", 90);
+    run(8.0f);
+    float t = sim_t; run(1.0f);
+    float on = m_goertzel(t, sim_t, f * 0.5f) + m_goertzel(t, sim_t, f * 1.5f), between = m_goertzel(t, sim_t, f * 0.75f) + m_goertzel(t, sim_t, f * 1.25f);
+    check(fabsf(20.0f * log10f(eng_fb_env / target)) < 3.0f, "LOOP 90: it howls, held at HOWL LEVEL (%.1f dB against -18)", (double)(20.0f * log10f(eng_fb_env)));
+    check(on > 100.0f * between, "on the tones that sound (x%.0f against between them)", (double)(on / (between + 1e-20f)));
+    sim_wav("-howl-inner", t - 4.0f, sim_t);
+    // the energy tips it in: LOOP 40 with TO LOOP 100, then swing the box
+    set("fbgn", 40); set("tofb", 100); set("clmb", 3); set("fall", 30);
+    run(6.0f);
+    float quiet = eng_fb_env;
+    move_box(400.0f); run(4.0f); move_box(0.0f);
+    run(3.0f);
+    check(quiet < 0.05f * target && eng_fb_env > 0.5f * target, "LOOP 40, still: no howl (%.4f); swung into full energy: it howls (%.3f)", (double)quiet, (double)eng_fb_env);
+    set("fall", 20); set("tofb", 60); run(1.0f);
+    // AIR through a plain room loud enough to howl, then a speaker four times louder: held all the same
+    set("fbmd", FB_AIR); set("fbgn", 100);
+    SI.mic = flat_mic; flat_gain = 10.0f;
+    for (int i = 0; i < 2000 && eng_fb_env < 0.5f * target; i++) sim_tick();   // a loop through the air grows from the drone: wait for it
+    run(3.0f);
+    t = sim_t; run(1.0f);
+    float e1 = eng_fb_env, p1 = m_peak(t, sim_t);
+    flat_gain = 40.0f;
+    run(8.0f);
+    t = sim_t; run(2.0f);
+    float e4 = eng_fb_env, p4 = m_peak(t, sim_t);
+    note("AIR: howl %.3f, peak %.3f; four times the speaker: %.3f, %.3f (the ceiling is %.3f)", (double)e1, (double)p1, (double)e4, (double)p4, (double)(1.25f * target));
+    check(e1 > 0.5f * target && p1 < 1.4f * target, "AIR: the loop through the room howls, under the ceiling");
+    check(p4 < 1.4f * target && fabsf(20.0f * log10f(e4 / target)) < 3.0f, "a speaker four times too loud: still at HOWL LEVEL, never over");
+    sim_wav("-howl-air", t - 6.0f, sim_t);
+    set("fbmd", FB_OFF); SI.mic = quiet_mic; run(4.0f);
+    check(eng_fb_env < 0.01f * target, "FEEDBACK OFF: gone (%.5f)", (double)eng_fb_env);
+    check(m_bad() == 0, "no NaN");
+    tilt_cells(0, 0); run(1.0f);
+}
+
+static void peer_app(int k, uint8_t seq, int rb, int rc, int energy, int fifth, int nb, const int8_t *cb, const int8_t *cc)
+{
+    uint8_t a[12] = { 1, seq, (uint8_t)(int8_t)rb, (uint8_t)(int8_t)rc, (uint8_t)energy, (uint8_t)fifth, 0, 0, 0, 0, 0, 0 };
+    for (int i = 0; i < nb && i < 6; i++) a[6 + i] = (uint8_t)(0x80 | (((cc[i] + 2) & 7) << 3) | ((cb[i] + 3) & 7));
+    sim_peer_use(k); link_set_app(a, 12); link_poke(); sim_peer_use(-1);
+}
+static const uint8_t *app_of_me(int k)                                   // what the pretend board hears from the one under test
+{
+    static link_peer_t pr[LINK_PEERS_MAX];
+    sim_peer_use(k);
+    int n = link_peers(pr, LINK_PEERS_MAX);
+    sim_peer_use(-1);
+    for (int i = 0; i < n; i++) if (!strncmp(pr[i].name, "DWELL", 5) && pr[i].app_n >= 12) return pr[i].app;
+    return NULL;
+}
+
+static void together_sec(void)
+{
+    section("together: two DWELLs");
+    plain();
+    set("rstl", 0); set("voic", 2); set("root", 1); set("fade", 1.0f); set("knck", KN_NEXT); set("next", NX_FIFTH);
+    set("shrt", 1); set("shen", SH_OWN); set("nrfr", 1); set("frbt", 2.0f); set("ffth", FIFTH_OFF);
+    INST.action(P_HOME); run(2.0f);
+    sim_link_rssi = -40;
+    int pk = sim_peer_add("DWELL", 1, 8.0, 0.0);
+    int8_t cb[2] = { 0, 1 }, cc[2] = { 0, 1 };
+    peer_app(pk, 0, 0, 0, 0, FIFTH_OFF, 2, cb, cc);
+    run(3.0f);
+    check(D.dwells == 1, "another DWELL is heard (%d)", D.dwells);
+    // its cells, hollow on this lattice
+    bool seen = false; for (int i = 0; i < D.npeer; i++) if (D.peer_b[i] == 1 && D.peer_c[i] == 1) seen = true;
+    check(seen, "its sounding cells arrive (21/16 among %d)", D.npeer);
+    // SHARE ROOT: its knock moves this board's root (its number one above this board's)
+    const uint8_t *m0 = app_of_me(pk);
+    uint8_t sq = m0 ? m0[1] : 0;
+    peer_app(pk, (uint8_t)(sq + 1), 1, 0, 0, FIFTH_OFF, 2, cb, cc);
+    run(0.5f);
+    check(!strcmp(D.root_name, "3/2") && D.fade >= 0.0f, "the other box knocks to 3/2: this one fades there too (%s)", D.root_name);
+    run(1.5f);
+    // and this board's knock goes the other way
+    knock_box(); run(1.5f);
+    const uint8_t *a = app_of_me(pk);
+    check(a && a[1] == (uint8_t)(sq + 2) && (int8_t)a[2] == 2 && (int8_t)a[3] == 0 && !strcmp(D.root_name, "9/8"), "a knock here: 9/8, and the other box hears its root and the next number (%s)", D.root_name);
+    // SHARE ROOT OFF: its changes are not taken
+    set("shrt", 0);
+    peer_app(pk, (uint8_t)(sq + 3), 0, 1, 0, FIFTH_OFF, 2, cb, cc);
+    run(2.0f);
+    check(!strcmp(D.root_name, "9/8"), "SHARE ROOT OFF: it stays (%s)", D.root_name);
+    set("shrt", 1); run(2.0f);
+    check(!strcmp(D.root_name, "7/4"), "ON again: it takes the other's newer root (%s)", D.root_name);
+    // SHARE ENERGY
+    peer_app(pk, (uint8_t)(sq + 3), 0, 1, 255, FIFTH_OFF, 2, cb, cc);
+    set("shen", SH_SHARED); run(1.0f);
+    check(D.energy > 0.8f, "SHARED: the other box pumped full, this one swells with it (%.2f)", (double)D.energy);
+    set("clmb", 2.0f); move_box(400.0f); set("shen", SH_TRADED); run(2.5f);
+    check(D.energy < 0.4f, "TRADED: this one pumped full while the other is full too: it gives way (%.2f)", (double)D.energy);
+    move_box(0.0f); set("shen", SH_OWN); set("clmb", 8.0f); run(1.0f);
+    peer_app(pk, (uint8_t)(sq + 3), 0, 1, 0, FIFTH_OFF, 2, cb, cc);
+    run(20.0f);
+    // NEAR FAR: held together, unison; across the room, the two detuned to beat at FAR BEATS
+    sim_link_rssi = -38; run(6.0f);
+    float near_det = eng_detune_hz;
+    check(D.near > 0.9f && fabsf(near_det) < 0.15f, "held together (-38 dBm): near %.2f, detune %.2f Hz", (double)D.near, (double)near_det);
+    sim_link_rssi = -75; run(8.0f);
+    check(D.near < 0.1f && fabsf(fabsf(eng_detune_hz) - 1.0f) < 0.1f, "across the room (-75 dBm): near %.2f, this box %+.2f Hz, the other the opposite: they beat at 2 Hz", (double)D.near, (double)eng_detune_hz);
+    sim_link_rssi = -45;
+    // FIFTH: this box a fifth up
+    float f0 = f11();
+    set("ffth", FIFTH_UP); run(0.5f);
+    check(fabsf(f11() / f0 - 1.5f) < 0.001f, "FIFTH UP: this box a just fifth over the other (%.1f Hz from %.1f)", (double)f11(), (double)f0);
+    set("ffth", FIFTH_OFF);
+    sim_peer_power(pk, false); run(3.0f);
+    check(D.dwells == 0 && fabsf(eng_detune_hz) < 0.01f, "the other box gone: no detune");
+    set("nrfr", 1); INST.action(P_HOME); run(2.0f);
+}
+
 // DWELL_ENGINE=tanpura (or pure, drift, clusters, diff, sources, wave, room, strum, cost) runs only that section
 static bool want(const char *name) { const char *e = getenv("DWELL_ENGINE"); return !e || !*e || strstr(e, name); }
 void test_engine(void)
@@ -663,6 +886,10 @@ void test_engine(void)
     if (want("dirt")) dirt_sec();
     if (want("echo")) echo_sec();
     if (want("radio")) radio_sec();
+    if (want("bow")) bow_sec();
+    if (want("grit")) grit_sec();
+    if (want("feedback")) feedback_sec();
+    if (want("together")) together_sec();
     section("engine: health");
     check(m_bad() == 0, "no NaN or inf");
     float pk = m_peak(t0, sim_t);

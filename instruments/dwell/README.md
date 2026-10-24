@@ -18,14 +18,22 @@ faster beating and a surge of echo. Knock once on the box and the whole drone fa
 The voices then go through an overdrive, an echo and a hall, each with its own wet and dry. Optionally the Wi-Fi and
 Bluetooth traffic around you crackles into it, as a phone does near a speaker.
 
+Played by hand (BOW > HAND), it sounds only while it moves, and each way of moving bows its own voice: twisting the box
+bows the lead, swinging it forward and back the chord, rocking it side to side the root. Turning back is a bow change,
+pressing faster brightens it and then growls an octave down. FEEDBACK lets the room howl on the drone's own notes, held
+at a level so it never blows up, as HOWL does. Two DWELLs in one room play as one: a knock on either moves both to the
+new root, their energy can be shared or traded, held together they are in unison and pulled apart they beat, and one
+can sit a just fifth away.
+
 Eight sources: sines, a harmonium reed, a bowed string, a tanpura whose curved bridge buzzes so its overtones bloom
 after each pluck, a shruti box with its bellows, a hurdy-gurdy with the wheel's rumble, your own tone, and the room.
 
-Firmware for the Samplooler Stack (ESP32-S3). Version 0.2, built 2026-10-24, checked in the host simulator
-(`tools/sim`, 191 checks). Version 0.1 started on a board (13 % of the processor on the first sound) and its drones
-were heard; 0.2 (the energy, the shake, the knock's new root, the overdrive, the echo, the radios) has not been on a
-board yet. Its busiest case takes 12 to 13 microseconds per audio block on a computer, which should be about 45 % of
-the board's processor; that is still to be measured, as is the memory with Bluetooth on.
+Firmware for the Samplooler Stack (ESP32-S3). Version 0.3, built 2026-10-24, checked in the host simulator
+(`tools/sim`, 223 checks). Version 0.2 runs on a board: 19 % of the processor on the first sound, 82 KB of memory free
+(44 KB with both radios listening); playing it by hand, the shake and the pumping were tried and liked. 0.3 (the bow,
+the room's feedback, two boxes together, the grit in tune) has not been on a board yet. Its busiest case takes 12 to 13
+microseconds per audio block on a computer, which should be about 45 % of the board's processor; that is still to be
+measured.
 
 > VIDEO: DWELL on a table, tilted one step every half minute, the room pass.
 
@@ -50,7 +58,14 @@ the board's processor; that is still to be measured, as is the memory with Bluet
 8. Press the knob, ROOM > ROOM PASS. Let it run (twelve passes of four seconds). The room sings back through the
    lattice afterwards (the source turns to ROOM). It needs the speaker on and a room; on headphones it stops by itself.
 9. Tap REC: the drone rests. Tap again: it returns.
-10. RADIO > RADIO: WI-FI, BLUETOOTH or BOTH. Every frame the antenna hears crackles into the overdrive and chops the
+10. BOW > HAND 100 (or the sound BOWED BY HAND): it sounds only while you move it. Twist it flat for the lead, swing it
+    forward and back for the chord, rock it side to side for the root. Back and forth, each turn is a bow change; a
+    circle sustains. Faster is brighter; flat out it growls an octave down. Lean it to one side while bowing for a
+    darker tone, the other for a glassy one. BOW > RING: how long a tone rings once you stop.
+11. FEEDBACK > FEEDBACK: AIR (the speaker and the room), INNER (inside the box, for headphones) or BOTH. LOOP sets how
+    close it is to howling; swinging the box tips it over (TO LOOP). The howl lands on the drone's own ratios and is held
+    at HOWL LEVEL, whatever the room does. The sound THE ROOM SINGS starts you there.
+12. RADIO > RADIO: WI-FI, BLUETOOTH or BOTH. Every frame the antenna hears crackles into the overdrive and chops the
     drone; a router's beacons tick ten times a second, a phone's traffic bursts, Bluetooth adverts buzz. INTERFERE sets
     how hard. Nothing about who sent them is read or kept. With the link on, DWELL listens on the link's own channel.
 
@@ -76,11 +91,26 @@ the board's processor; that is still to be measured, as is the memory with Bluet
 
 DREAM HOUSE (pure sines, 7-limit), DRUMM (from near silence into a bowed, driven wall, slow to build and slower to
 fall), MIASMA (a hurdy-gurdy, harsh from the start, shaking throws it to pieces), IMPERIAL (a quiet reed with a long
-echo, barely driven), BOWED BY HAND (it sounds only while you move it), NIBLOCK (a bowed wall, eight copies), ADNOS (a slow glide on a reed), IN A ROOM
+echo, barely driven), BOWED BY HAND (it sounds only while you move it), ONE BOW, GROWL, THE ROOM SINGS (the room's
+feedback), HOWL HOME (feedback inside the box), NIBLOCK (a bowed wall, eight copies), ADNOS (a slow glide on a reed), IN A ROOM
 (the room source: run ROOM PASS first), TANPURA, SHRUTI BOX, HURDY GURDY, STRUMMING (long strums on sines),
 CONRAD (a bow in 5-limit), DAVACHI (a six-voice organ that slides), DEEP LISTENING (a reed in a long hall),
 INTERFERENCE (both radios cutting in), TEMPO BEATS (the clusters beat at the flock's tempo, the echo on the beat), YOUR TONE (the WAVE source), TARTINI (two tones and their
 difference tone), PYTHAGORAS (3-limit). Eight more places for your own, under SOUND > SAVE AS.
+
+## Two DWELLs
+
+Switch both on with LINK ON in the same GROUP. TOGETHER:
+
+- SHARE ROOT: a knock on either box moves both to the new root, each fading at its own FADE.
+- ENERGY: OWN (each its own crescendo), SHARED (pump one and both swell) or TRADED (as one swells, the other falls back).
+- NEAR FAR: the radio's strength between them is their distance. Held together they play in unison; carried apart
+  they drift so their tones beat, up to FAR BEATS (2 Hz) across a room. The screen says NEAR or how fast they beat.
+- FIFTH: UP or DOWN puts this box a just fifth from the other (set it on one of them).
+- SPREAD: each box sounds one tone of its chord.
+- With FEEDBACK on AIR, each box's mic hears the other's speaker too: one room, two howls on the same ratios.
+
+Each box's tones show on the other's screen as hollow cells.
 
 ## With other boards
 

@@ -12,3 +12,7 @@ extern volatile int dw_wave_want;          // the table to crossfade to (the UI 
 extern volatile int dw_wave_busy;          // a crossfade is on: the spare is still read, do not write it
 
 void dw_wave_default(float *t);            // the built-in table: a voice-like spectrum (init, UI task)
+
+// inst_howl.c: the room's feedback, called once a block from eng_audio
+void howl_init(void);
+void howl_run(const float *in, const float *self, float *out, int n, const float *hz, const float *wt, int nb);

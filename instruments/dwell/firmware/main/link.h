@@ -26,6 +26,7 @@
 #define LINK_PEERS_MAX 7
 #define LINK_NAME_LEN  8
 #define LINK_PERIOD_MS 100
+#define LINK_APP_MAX   16    // bytes of the instrument's own state each packet can carry (link_set_app)
 
 typedef struct {
     uint32_t ver, owner;     // the change's number and the board that made it (the highest pair wins)
@@ -56,6 +57,8 @@ typedef struct {
     float    age_s;          // since its last packet
     float    rtt_ms;         // the best round trip lately (0 until measured)
     uint32_t heard, lost;    // packets heard, and missed by its sequence numbers
+    uint8_t  app[LINK_APP_MAX];   // its instrument's own bytes (link_set_app), the latest heard
+    uint8_t  app_n;          // how many; 0: it sends none (another instrument, or an older core)
 } link_peer_t;
 
 // ---------------------------------------------------------------- the instrument's side (UI task)
@@ -79,6 +82,12 @@ void  link_set_harm(int key, int scale, int prog, int hold, int bars, int live);
 void  link_boot_time(uint32_t fpb, uint32_t origin_local, int bar);
 void  link_boot_harm(int key, int scale, int prog, int hold, int bars);
 void  link_set_flags(uint8_t flags);
+// The instrument's own state, a few bytes, sent with every packet after the clock's echoes (where a board on an older
+// core ignores them, so mixed flocks keep working). Each peer's latest arrive in link_peer_t.app. What the bytes mean
+// is the instrument's: look at the peer's name first. link_poke() sends a packet at the next tick (a change that
+// should travel at once).
+void  link_set_app(const void *b, int n);
+void  link_poke(void);
 uint8_t link_flags_any(void);                  // our flags or'ed with every peer's
 bool  link_time_news(void);                    // the session's time came from another board since the last call
 bool  link_harm_news(void);

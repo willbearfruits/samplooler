@@ -168,7 +168,10 @@ the packets lost and 8 ms queues).
 An instrument calls `link_init(name, priority)`, `link_boot_time()` and `link_boot_harm()` once, `link_enable()` from
 its settings, `link_tick()` every tick, and reads `link_origin()` / `link_fpb()` (beat 0 in its own frames and the
 frames per beat) and `link_harm()`; it sets the session with `link_set_time()`, `link_set_harm()` and
-`link_set_flags(LINKF_LOOP)`. It adds `link.c link_esp.c` to its sources and `esp_wifi esp_event` to its
+`link_set_flags(LINKF_LOOP)`. An instrument can also send a few bytes of its own state with every packet
+(`link_set_app()`, up to `LINK_APP_MAX`, 16; `link_poke()` sends at the next tick) and read each peer's latest in
+`link_peer_t.app` (DWELL shares its root, its energy and its lit cells this way). They ride after the clock's echoes,
+where a board on an older core does not look, so mixed flocks keep working. It adds `link.c link_esp.c` to its sources and `esp_wifi esp_event` to its
 `INSTRUMENT_REQUIRES`, and the simulator builds `link` and `link_sim` (a pretend room: `sim_peer_add()` and friends in
 `sim.h`). Packets go out at low power (2, 8 or 14 dBm: every one is a burst of current from the DAC's supply).
 

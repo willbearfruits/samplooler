@@ -46,6 +46,7 @@ volatile int   eng_layer;
 volatile float eng_fade_s = 8.0f, eng_vca = 1.0f, eng_drive, eng_tone = 0.6f, eng_dmix = 1.0f, eng_grit;
 volatile float eng_echo_s = 0.45f, eng_echo_fb, eng_echo_mix, eng_zap_gate;
 volatile float eng_layer_x, eng_zap_env, eng_drive_now;
+volatile float eng_slot_hand[NV], eng_slot_bright[NV], eng_slot_sub[NV], eng_hand, eng_ring_s = 0.5f, eng_detune_hz;
 
 int16_t *dw_take;
 float   *dw_wtab[2];
@@ -89,6 +90,7 @@ typedef struct {
     svf_t f1, f2;                      // REED / SHRUTI formants
     reso_t r1, r2;                     // BOW body
     float bow;                         // the bow's noise, slow
+    float hg, bri, sub, subg, psub;    // BOW: the hand's gain, its brightness push, the growl an octave down (gain, phase)
     // TANPURA
     float sd;                          // the string's delay, samples
     float slp, sdx, sdy, senv, spk, sg, srel, sexc_a, sexc_lp;
@@ -137,6 +139,9 @@ static float wave_xf;
 
 // the layers, the VCA, the dirt, the echo
 static float lay_x, lay_g[2] = { 1.0f, 0.0f };
+static float det_s;                    // NEAR FAR's detune, Hz, gliding
+static svf_t grit_bp[NVL];             // a shake's grit: noise rung through band passes an octave over the tones that sound
+static float grit_hz[NVL], grit_lv;
 static float vca_s = 1.0f, drive_s, dmix_s = 1.0f, grit_s, tone_k = 1.0f, tone_last = -1.0f;
 static float dr_u1, dr_dcx, dr_dcy, dr_lp, dr_G = 2.5f, dr_bias = 1.0f, dr_mix, dr_out = 1.0f;
 static float *echo_buf;
@@ -149,7 +154,7 @@ static zapq_t zq;
 typedef struct { uint32_t at; int k, len; float amp, ph, inc; int kind; bool on; } zv_t;
 static zv_t zv[NZAP];
 static slot_t BODY;                    // the reed's formants and the bow's box: the same filter for every voice, so run once on their sum
-static float zbuf[AUDIO_BLOCK], zenv[AUDIO_BLOCK];
+static float zbuf[AUDIO_BLOCK], zenv[AUDIO_BLOCK], hbuf[AUDIO_BLOCK];
 
 // the room pass
 static int   room_rec = -1, room_play = -1, room_loop = -1, room_len, room_len_seen;
@@ -246,9 +251,11 @@ void eng_init(void)
         s->cf[0] = s->cg[0] = 1.0f;
         formants_for(s, eng_source);
         reso_set(&s->r1, 280.0f, 0.06f); reso_set(&s->r2, 480.0f, 0.06f);
-        s->sd = 400.0f; s->srel = 1.1f;
+        s->sd = 400.0f; s->srel = 1.1f; s->hg = 1.0f;
     }
     formants_for(&BODY, eng_source);
+    for (int k = 0; k < NVL; k++) { grit_hz[k] = 260.0f; svf_set(&grit_bp[k], 260.0f, 14.0f); }
+    howl_init();
     reso_set(&BODY.r1, 280.0f, 0.06f); reso_set(&BODY.r2, 480.0f, 0.06f);
     svf_set(&buzz_bp, 1800.0f, 1.2f);
     svf_set(&air_bp, 1500.0f, 0.8f);
@@ -423,15 +430,14 @@ static inline float clipa(float u, float k) { return u >= 0.0f ? clip3(u) : clip
 static inline float clipa_F(float u, float k) { return u >= 0.0f ? clip3_F(u) : clip3_F(k * u) / (k * k); }
 // in place: in-gain (G), the asymmetric clip (k) with first-order ADAA, a DC blocker for what the asymmetry leaves, the
 // tone, the clean and the driven mixed; G, k, out-gain and mix ramp over the block from where they were
-static IRAM_ATTR __attribute__((noinline)) void drive_run(float *restrict x, int n, float G1, float k1, float o1, float m1, float grit, uint32_t *rs)
+static IRAM_ATTR __attribute__((noinline)) void drive_run(float *restrict x, int n, float G1, float k1, float o1, float m1)
 {
     if (m1 <= 0.0f && dr_mix <= 0.0f) { dr_G = G1; dr_bias = k1; dr_out = o1; return; }   // clean: nothing to do
     float G = dr_G, dG = (G1 - G) / (float)n, k = dr_bias, dk = (k1 - k) / (float)n, o = dr_out, dO = (o1 - o) / (float)n;
     float m = dr_mix, dm = (m1 - m) / (float)n, u1 = dr_u1, dcx = dr_dcx, dcy = dr_dcy, lp = dr_lp, tk = tone_k;
-    uint32_t r = *rs;
     for (int i = 0; i < n; i++) {
         float clean = x[i];
-        float u = (clean + grit * 0.04f * rng_bi(&r)) * G;
+        float u = clean * G;
         float du = u - u1, y;
         if (fabsf(du) > 1e-4f) y = (clipa_F(u, k) - clipa_F(u1, k)) / du;
         else y = clipa(0.5f * (u + u1), k);
@@ -442,7 +448,7 @@ static IRAM_ATTR __attribute__((noinline)) void drive_run(float *restrict x, int
         G += dG; k += dk; o += dO; m += dm;
     }
     dr_G = G1; dr_bias = k1; dr_out = o1; dr_mix = m1;
-    dr_u1 = u1; dr_dcx = flush(dcx); dr_dcy = flush(dcy); dr_lp = flush(lp); *rs = r;
+    dr_u1 = u1; dr_dcx = flush(dcx); dr_dcy = flush(dcy); dr_lp = flush(lp);
 }
 // in place: the echo. Its time glides (tape), what comes round is darkened and saturated, then mixed in (equal power)
 static IRAM_ATTR __attribute__((noinline)) void echo_run(float *restrict x, int n, float d1, float fb1, float wet1, float dry1)
@@ -662,11 +668,12 @@ static bool slot_render(slot_t *s, float *buf, int n, int src, float strum_mul)
     for (int c = 0; c < NCOPY; c++) if (s->cf[c] > 0.0f || s->cg[c] > 0.0f) any = true;
     if (!any || s->lv < 1e-4f) { for (int c = 0; c < NCOPY; c++) s->cg[c] = 0.0f; return false; }
     memset(buf, 0, (size_t)n * sizeof(float));
+    float hz = s->hz + det_s; if (hz < HZ_MIN) hz = HZ_MIN;              // NEAR FAR's detune on every voice
     float half = 0.5f * (float)(nc - 1);
     float wobble = 1.0f;
     if (src == SRC_GURDY) wobble = 1.0f + 0.003f * sin_turns(wheel_ph);
     if (src == SRC_TANPURA) {
-        float f = s->hz; while (f < 40.0f) f *= 2.0f; if (f > 2000.0f) f = 2000.0f;
+        float f = hz; while (f < 40.0f) f *= 2.0f; if (f > 2000.0f) f = 2000.0f;
         float d = (float)AUDIO_SR / f - (1.0f - STR_A) / STR_A;         // the loop's low pass delays the rest
         float d0 = s->sd; s->sd = d;
         // the decay: 6 s at the fundamental; the jawari's knee, relative to the string's own envelope, hardens as it decays
@@ -687,11 +694,11 @@ static bool slot_render(slot_t *s, float *buf, int n, int src, float strum_mul)
         if (room_loop < 0 || !eng_room_have || room_len < 4 * ROOM_XF) return false;
         int xfn = ROOM_XF;
         if (room_len != room_len_seen) { room_len_seen = room_len; for (int c = 0; c < NCOPY; c++) s->rpos[c] = (float)room_len * ((float)c + 0.37f * (float)(s - S)) * (1.0f / (float)NCOPY) * 0.9f; }
-        float base = eng_room_base_hz > HZ_MIN ? eng_room_base_hz : s->hz;
+        float base = eng_room_base_hz > HZ_MIN ? eng_room_base_hz : hz;
         for (int c = 0; c < NCOPY; c++) {
             float g1 = s->cf[c] * norm * room_norm;
             if (g1 <= 0.0f && s->cg[c] <= 0.0f) continue;
-            float f = s->hz * wobble + beat_s * ((float)c - half);
+            float f = hz * wobble + beat_s * ((float)c - half);
             float rate = f / base; if (rate < 0.05f) rate = 0.05f; if (rate > 8.0f) rate = 8.0f;
             if (s->rpos[c] >= (float)(room_len - 1)) s->rpos[c] = 0.0f;
             copy_room(buf, rbuf[room_loop], room_len, xfn, &s->rpos[c], rate, s->cg[c], g1, n);
@@ -707,7 +714,9 @@ static bool slot_render(slot_t *s, float *buf, int n, int src, float strum_mul)
         float wish = src == SRC_SINE ? bright_s * dense_s * 5.0f : 2.0f + bright_s * 3.0f;
         wish += 1.5f * strum_a;
         if (src == SRC_BOW) wish += 0.4f * s->bow;
-        float fmax = s->hz + beat_s * half; if (fmax < HZ_MIN) fmax = HZ_MIN;
+        wish += 3.5f * s->bri;                                         // BOW: pressure and the bow's place
+        if (wish < 0.0f) wish = 0.0f;
+        float fmax = hz + beat_s * half; if (fmax < HZ_MIN) fmax = HZ_MIN;
         float cap = log2_rough(14000.0f / fmax);
         if (cap < 0.0f) cap = 0.0f;
         if (wish > cap) wish = cap;
@@ -721,13 +730,16 @@ static bool slot_render(slot_t *s, float *buf, int n, int src, float strum_mul)
     for (int c = 0; c < NCOPY; c++) {
         float g1 = s->cf[c] * norm;
         if (g1 <= 0.0f && s->cg[c] <= 0.0f) continue;
-        float f = s->hz * wobble + beat_s * ((float)c - half);
+        float f = hz * wobble + beat_s * ((float)c - half);
         float inc = f * (1.0f / (float)AUDIO_SR); if (inc < 0.0f) inc = 0.0f; if (inc > 0.45f) inc = 0.45f;
         if (xf < 0.003f) copy_one(buf, ta, N, &s->ph[c], inc, s->cg[c], g1, n);
         else if (xf > 0.997f) copy_one(buf, tb, N, &s->ph[c], inc, s->cg[c], g1, n);
         else copy_two(buf, ta, tb, xf, N, &s->ph[c], inc, s->cg[c], g1, n);
         s->cg[c] = g1;
     }
+    // BOW: pressed too hard, the string growls an octave down
+    float gs1 = s->sub * norm * 0.8f;
+    if (gs1 > 1e-5f || s->subg > 1e-5f) { copy_one(buf, ta, N, &s->psub, 0.5f * hz * (1.0f / (float)AUDIO_SR), s->subg, gs1, n); s->subg = gs1; }
     (void)strum_mul;
     return true;
 }
@@ -814,6 +826,10 @@ void eng_audio(const float *in, float *out, int n)
     strum_a += 0.33f * (strum_env - strum_a);
     eng_strum_env = strum_env;
     float strum_mul = 1.0f + 1.5f * strum_a;
+    // BOW: the hand's gain follows fast and rings down over RING; NEAR FAR's detune glides over about 0.2 s
+    float hand = clampf(eng_hand, 0.0f, 1.0f);
+    float ka = kblock(0.01f, n), kr = kblock(fmaxf(eng_ring_s, 0.02f) / 3.0f, n);
+    det_s += 0.01f * (clampf(eng_detune_hz, -20.0f, 20.0f) - det_s);
     // the glide
     float gl = eng_glide_s; if (gl < 0.05f) gl = 0.05f;
     if (gl != glide_last) { glide_last = gl; kp = kblock(gl / 3.0f, n); }
@@ -856,7 +872,11 @@ void eng_audio(const float *in, float *out, int n)
         eng_slot_hz_now[v] = s->lv > 0.001f ? s->hz : 0.0f;
         eng_slot_lvl_now[v] = s->lv;
         lv_sum += s->lv;
-        float g1 = s->lv * V_GAIN * strum_mul * mute_s * lay_g[v / NVL];
+        float ht = (1.0f - hand) + hand * clampf(eng_slot_hand[v], 0.0f, 1.6f);
+        s->hg += (ht > s->hg ? ka : kr) * (ht - s->hg);
+        s->bri += 0.2f * (hand * clampf(eng_slot_bright[v], -1.0f, 1.5f) - s->bri);
+        s->sub += 0.1f * (hand * clampf(eng_slot_sub[v], 0.0f, 1.0f) - s->sub);
+        float g1 = s->lv * V_GAIN * strum_mul * mute_s * lay_g[v / NVL] * s->hg;
         if (src == SRC_GURDY) g1 *= 1.0f - 0.1f * (0.5f + 0.5f * sin_turns(wheel_ph));
         if (src == SRC_SHRUTI) g1 *= 1.0f - 0.35f * breath_s * (0.5f + 0.5f * sin_turns(swell_ph));
         if (src == SRC_BOW) { s->bow += 0.04f * (rng_bi(&s->rng) - s->bow); g1 *= 1.0f + 0.06f * s->bow; }
@@ -920,18 +940,34 @@ void eng_audio(const float *in, float *out, int n)
             for (int i = 0; i < n; i++) { bus[i] *= g; g += dv; }
         }
     }
+    // a shake's grit: noise rung through band passes an octave over the tones that sound, so even the grit is in tune
+    grit_s += 0.1f * (clampf(eng_grit, 0.0f, 1.0f) - grit_s);
+    if (grit_s > 0.001f || grit_lv > 1e-5f) {
+        int L = eng_layer & 1, nb = 0;
+        float hzs[NVL];
+        for (int k = 0; k < NVL; k++) { const slot_t *t = &S[L * NVL + k]; if (t->lv > 0.05f) hzs[nb++] = 2.0f * (t->hz + det_s); }
+        for (int k = 0; k < nb; k++) if (fabsf(hzs[k] - grit_hz[k]) > 0.5f) { grit_hz[k] = hzs[k]; svf_set(&grit_bp[k], hzs[k], 14.0f); }
+        float a0 = grit_lv, a1 = grit_s * 2.0f * (nb ? 1.0f / sqrtf((float)nb) : 0.0f), da = (a1 - a0) / (float)n;
+        for (int i = 0; i < n; i++) {
+            float x = rng_bi(&rng), y = 0.0f;
+            for (int k = 0; k < nb; k++) y += svf_bp(&grit_bp[k], x, NULL);
+            bus[i] += a0 * y;
+            a0 += da;
+        }
+        grit_lv = a1;
+        for (int k = 0; k < NVL; k++) { grit_bp[k].ic1 = flush(grit_bp[k].ic1); grit_bp[k].ic2 = flush(grit_bp[k].ic2); }
+    }
     // the dirt: up to +32 dB into the clip, the negative side clipping up to twice as late; the clip's ceiling holds the level, so a
     // crescendo into the dirt grows by about 10 dB, not 30
     {
         drive_s += 0.0392f * (clampf(eng_drive, 0.0f, 1.0f) - drive_s);
         dmix_s += 0.0392f * (clampf(eng_dmix, 0.0f, 1.0f) - dmix_s);
-        grit_s += 0.1f * (clampf(eng_grit, 0.0f, 1.0f) - grit_s);
         float tn = clampf(eng_tone, 0.0f, 1.0f);
         if (fabsf(tn - tone_last) > 0.002f) { tone_last = tn; tone_k = onepole_hz(800.0f * fast_exp2(tn * 4.32f)); }
         float pre = 1.0f + 40.0f * drive_s * drive_s, G = 2.5f * pre;
         float o = 0.4f * (1.0f + 0.25f * drive_s);                   // unity while it is clean; flat out, peaks near 0.5
         float m = dmix_s * smoothstep(0.0f, 0.12f, drive_s + 0.5f * grit_s);
-        drive_run(bus, n, G, 1.0f - 0.5f * drive_s, o, m, grit_s, &rng);
+        drive_run(bus, n, G, 1.0f - 0.5f * drive_s, o, m);
         eng_drive_now = drive_s;
     }
     // the echo
@@ -953,13 +989,19 @@ void eng_audio(const float *in, float *out, int n)
     float dg0 = dry_g, wg0 = wet_g;
     xfade_gains(space_s, &dry_g, &wet_g);
     hall_run(bus, wet, wg0 * wet_norm, wet_g * wet_norm, n);
+    // the room's feedback: the mic through band passes on the tones that sound (each as loud as its tone and its bow)
+    {
+        float fhz[NVL], fwt[NVL]; int nb = 0, L = eng_layer & 1;
+        for (int k = 0; k < NVL; k++) { const slot_t *t = &S[L * NVL + k]; if (t->lv > 0.05f && t->hz > HZ_MIN) { fhz[nb] = t->hz + det_s; fwt[nb] = t->lv * t->hg; nb++; } }
+        howl_run(in, bus, hbuf, n, fhz, fwt, nb);
+    }
     // out: dry + wet, LEVEL x REST x the duck, then the room pass's playback already in out[]
     float og1 = level_s * rest_s * sw_g, og0 = out_g; out_g = og1;
     {
         float d = dg0, dd = (dry_g - dg0) / (float)n, g = og0, dgg = (og1 - og0) / (float)n;
         float swp = sw_g_prev, dsw = (sw_g - sw_g_prev) / (float)n;
         (void)swp; (void)dsw;
-        for (int i = 0; i < n; i++) { out[i] += (d * bus[i] + wet[i]) * g; d += dd; g += dgg; }
+        for (int i = 0; i < n; i++) { out[i] += (d * bus[i] + wet[i] + hbuf[i]) * g; d += dd; g += dgg; }
     }
     float pk = 0.0f;
     for (int i = 0; i < n; i++) { float a = fabsf(out[i]); if (a > pk) pk = a; }

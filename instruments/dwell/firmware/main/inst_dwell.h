@@ -49,7 +49,9 @@ enum {
     // DRONE
     P_DENSE, P_VOICES, P_ROOT, P_DRIFT, P_MOVE, P_LEVEL,
     // ENERGY
-    P_CLIMB, P_FALL, P_REST, P_TODENSE, P_TODRIVE, P_HAND, P_SHAKE,
+    P_CLIMB, P_FALL, P_REST, P_TODENSE, P_TODRIVE, P_SHAKE, P_GRIT,
+    // BOW
+    P_HAND, P_AXES, P_RING, P_PRESS, P_BCHANGE,
     // TAP
     P_KNOCK, P_NEXT, P_FADE, P_STRUM, P_SENSE, P_HOME,
     // LATTICE
@@ -64,14 +66,21 @@ enum {
     P_ECHO, P_ESYNC, P_EFB, P_EMIX,
     // SPACE
     P_SPACE, P_TAIL,
+    // FEEDBACK
+    P_FBMODE, P_FEEDBACK, P_TOFB, P_FBLEVEL, P_FBRING, P_FBSWELL,
+    // TOGETHER
+    P_SHROOT, P_SHENERGY, P_NEARFAR, P_FARBEAT, P_FIFTH, P_SPREAD,
     // RADIO
     P_RADIO, P_ZAP, P_CHAN,
     // ROOM
     P_PASSES, P_PASSLEN, P_PASS,
     // SONG
-    P_TEMPO, P_KEY, P_SCALE, P_FOLLOW, P_SPREAD, P_LINK, P_GROUP, P_RANGE, P_PEERS,
+    P_TEMPO, P_KEY, P_SCALE, P_FOLLOW, P_LINK, P_GROUP, P_RANGE, P_PEERS,
     P_N
 };
+enum { AX_ONE, AX_SPLIT };
+enum { SH_OWN, SH_SHARED, SH_TRADED };
+enum { FIFTH_OFF, FIFTH_UP, FIFTH_DOWN };
 enum { KN_OFF, KN_STRUM, KN_NEXT };
 enum { NX_LEAD, NX_FIFTH, NX_FOURTH, NX_SEVENTH, NX_SEPTIMAL, NX_TONE, NNX };
 enum { RAD_OFF, RAD_WIFI, RAD_BLE, RAD_BOTH };
@@ -135,6 +144,22 @@ extern volatile float eng_echo_s;              // the echo's time, 0.02..1.6 s; 
 extern volatile float eng_echo_fb;             // 0..0.97
 extern volatile float eng_echo_mix;            // 0..1, equal power
 extern volatile float eng_zap_gate;            // 0..1: how far each interference burst chops the drone
+// BOW (HAND), per slot, what the hand does now (UI -> audio, every tick): the bow's level 0..1.6 (a bow change's
+// accent over 1), a brightness push -1..1.5 (pressure, the bow's place on the string), the growl an octave down 0..1.
+// The engine follows the level in about 10 ms and lets it ring down over eng_ring_s; eng_hand (HAND) mixes from the
+// drone as it is (0) to the bowed one (1), brightness and growl with it.
+extern volatile float eng_slot_hand[NV], eng_slot_bright[NV], eng_slot_sub[NV];
+extern volatile float eng_hand, eng_ring_s;
+extern volatile float eng_detune_hz;           // NEAR FAR: added to every voice's frequency (glides over about 0.2 s)
+// FEEDBACK (inst_howl.c, HOWL's loop): the mic through narrow band passes on the tones that sound, back out, held at a
+// level by a governor. The bank follows the layer that sounds; each band weighs as its tone (and its bow) does.
+enum { FB_OFF, FB_AIR, FB_INNER, FB_BOTH };
+extern volatile int   eng_fb_mode;
+extern volatile float eng_fb_drive;            // the loop gain asked for (0.92 howls in the inner loop), the energy's push in it
+extern volatile float eng_fb_level;            // dB: the loudest a howl gets (the ceiling is 1.25 x that)
+extern volatile float eng_fb_ring;             // the band passes' Q
+extern volatile float eng_fb_swell;            // s: how slowly a howl may grow
+extern volatile float eng_fb_env, eng_fb_gov;  // reported: the howl's level, the governor's gain in dB
 // An interference burst: at audio frame `at` (late ones play at once), `len` frames, `amp` 0..1; kind 0 Wi-Fi (a
 // noise crackle), 1 Bluetooth (a short buzz). UI task; false when the queue is full.
 enum { ZAP_WIFI, ZAP_BLE };
@@ -238,6 +263,16 @@ typedef struct {
     char  root_name[12];       // "3/2", "" when it is 1/1, "+702C" when too far for a name
     int   radio;               // RAD_*
     float zap;                 // interference now, 0..1
+    // TOGETHER and FEEDBACK
+    int   dwells;              // other DWELLs heard
+    float near;                // NEAR FAR: 1 held together .. 0 across the room; -1 with no DWELL heard
+    float apart_hz;            // how fast this box's tones beat against the other's now
+    float peer_energy;         // the other DWELL's energy, 0..1
+    int   fifth;               // FIFTH_*
+    int   npeer;               // the other DWELL's sounding cells, placed on this lattice
+    int8_t peer_b[NVL], peer_c[NVL];
+    float howl;                // the room's howl now, as a share of FB LEVEL (0..1.25)
+    int   fb_mode;             // FB_*
 } dw_ui_t;
 extern dw_ui_t D;
 

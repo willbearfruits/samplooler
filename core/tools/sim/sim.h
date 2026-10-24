@@ -91,3 +91,4 @@ void   sim_peer_power(int k, bool on);         // its radio
 double sim_peer_beats(int k);                  // where board k is in the session's beats now
 float  sim_peer_gap_ms(int k);                 // board k's beat against the board under test's, ms
 extern double sim_link_loss;
+extern int    sim_link_rssi;                    // the signal strength packets arrive with, dBm (-45)

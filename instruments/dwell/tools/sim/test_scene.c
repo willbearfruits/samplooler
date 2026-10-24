@@ -132,6 +132,26 @@ void test_scene(void)
     INST.action(P_HOME); run(4.0f);
     param_set(P_REST, -14.0f);
 
+    // the third round: another DWELL in the room, sharing; the room howling
+    {
+        int pk = sim_peer_add("DWELL", 1, 5.0, 0.0);
+        uint8_t a[12] = { 1, 0, 0, 0, 120, 0, 0x80 | (2 << 3) | 4, 0x80 | 0x40 | (3 << 3) | 4, 0, 0, 0, 0 };   // 1/1 and 21/16
+        sim_peer_use(pk); link_set_app(a, 12); sim_peer_use(-1);
+        sim_link_rssi = -40; run(4.0f);
+        sim_shot("together");
+        sim_link_rssi = -70;
+        sim_gif_begin("together");
+        run(6.0f);
+        sim_gif_end();
+        sim_shot("apart");
+        check(D.npeer >= 2, "the other box's cells arrive (%d)", D.npeer);
+        sim_peer_power(pk, false); sim_link_rssi = -45; run(2.0f);
+    }
+    param_set(P_FBMODE, FB_INNER); param_set(P_FEEDBACK, 90.0f);
+    run(8.0f);
+    sim_shot("howl");
+    param_set(P_FBMODE, FB_OFF); run(2.0f);
+
     // the splash and the saver as stills (the sim's boot made the splash animation)
     oled_clear(); scene_splash(30); sim_shot("splash_open");
     oled_clear(); scene_splash(85); sim_shot("splash");

@@ -22,6 +22,8 @@
 //   the splash    DWELL opens out from a point while a lattice of dots spreads from the centre; the figure lies down;
 //                 the tagline
 //   the saver     the sounding ratios drifting across a dark screen
+//   third round   the other DWELL's sounding cells framed hollow on this lattice; how far apart the boxes are by the lamps
+//                 (NEAR, or how fast they beat; nothing with NEAR FAR off); FB in the strip's corner, lit while the room howls
 //   second round  the energy as a bar along the bottom row (the figure sits up as it climbs), a shake jitters the
 //                 lattice, the radios' interference as static over it (and RF in the strip's corner), a new root's
 //                 fade as a dotted line along the strip's top, "TO 3/2" while it fades, "ON 3/2" after
@@ -191,6 +193,8 @@ static void lattice(void)
                 oled_rect(cx - 1, cy - 1, 2, 2, true);              // too long for this far: a dot (its name when you reach it)
             }
             if (lead_cell) oled_rframe(px - 2, py - 1, pw + 4, PILL_H + 2, 4);
+            if (!s) for (int k = 0; k < D.npeer; k++)                  // the other box sounds it: a hollow pill
+                if (D.peer_b[k] == b && D.peer_c[k] == c) { if (tw <= cw - 1) oled_rframe(px, py, pw, PILL_H, 3); else oled_frame(cx - 2, cy - 2, 5, 5); break; }
             if (b == 0 && c == 0 && D.root_on) oled_rect(cx - 5, cy + 6, 11, 1, true);   // the root's base line under 1/1
         }
     }
@@ -234,7 +238,13 @@ static void lamps(int x, int y)
         bool lit = !D.spread || i == D.rank;
         if (lit) oled_rect(x + i * 5, y, 3, 3, true); else oled_frame(x + i * 5, y, 3, 3);
     }
-    if (D.follow) oled_ftext_ex(F_TINY, x + n * 5 + 2, y - 1, "FOLLOW", 0);
+    char b[16];
+    const char *t = NULL;
+    if (D.dwells > 0 && D.near >= 0.0f) {                            // another DWELL: together, or how fast the two beat
+        if (D.apart_hz < 0.1f) t = "NEAR";
+        else { snprintf(b, sizeof b, "%.1fHZ", (double)D.apart_hz); t = b; }
+    } else if (D.follow) t = "FOLLOW";
+    if (t) oled_ftext_ex(F_TINY, x + n * 5 + 2, y - 1, t, 0);
 }
 
 static void ribbon(int x0, int x1, int cy, float amp, float lam, float stand)
@@ -280,6 +290,10 @@ static void floor_strip(const view_t *v)
     if (D.radio) {                                                  // RF, lit while the air cuts in
         oled_ftext_ex(F_TINY, 2, 48, "RF", 0);
         if (D.zap > 0.15f) oled_invert(1, 47, 9, 7);
+    }
+    if (D.fb_mode) {                                                // FB, lit while the room howls
+        oled_ftext_ex(F_TINY, 13, 48, "FB", 0);
+        if (D.howl > 0.4f) oled_invert(12, 47, 9, 7);
     }
     bool sit = D.rec || D.analysing;
     if (sit) {
