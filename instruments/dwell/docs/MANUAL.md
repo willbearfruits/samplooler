@@ -1,6 +1,6 @@
 # DWELL manual
 
-Version 0.1. Checked in the host simulator (`tools/sim`, 156 checks). Not on a board yet.
+Version 0.1. Checked in the host simulator (`tools/sim`, 156 checks). Started on a board (13 % CPU on DREAM HOUSE); not played yet.
 
 ## The lattice
 

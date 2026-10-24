@@ -14,7 +14,7 @@
   ],
   "hardware_note": "ROOM PASS plays through the speaker and listens with the mic: it needs the speaker on (or the line out into a real speaker) and a room; on headphones it stops after the first pass. The root sits low (65 Hz at OCTAVE 3): the small speaker loses it, the line out has it.",
   "status": "simulator",
-  "status_note": "Built 2026-10-24, checked in the host simulator. Not on a board yet.",
+  "status_note": "Built 2026-10-24 and checked in the host simulator (156 checks). Started on a board the same day: 13 % CPU on the first sound with the radio on. Not played yet.",
   "listed": false,
   "image": "images/dwell-walk.gif",
   "more": [

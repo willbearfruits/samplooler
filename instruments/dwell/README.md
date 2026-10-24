@@ -16,9 +16,10 @@ Eight sources: sines, a harmonium reed, a bowed string, a tanpura whose curved b
 after each pluck, a shruti box with its bellows, a hurdy-gurdy with the wheel's rumble, your own tone, and the room.
 
 Firmware for the Samplooler Stack (ESP32-S3). Version 0.1, built 2026-10-24, checked in the host simulator
-(`tools/sim`, 156 checks). Not on a board yet. Its busiest case (six tones of eight copies each, the hall, the
-difference tone) takes 11.7 microseconds per audio block on a computer, which should be about 40 % of the board's
-processor. That is still to be measured on a board.
+(`tools/sim`, 156 checks). It has started on a board (24 Oct): 13 % of the processor on the first sound, with the
+radio on. It has not been played yet. Its busiest case (six tones of eight copies each, the hall, the difference
+tone) takes 11.7 microseconds per audio block on a computer, which should be about 40 % of the board's processor;
+that is still to be measured on the board.
 
 > VIDEO: DWELL on a table, tilted one step every half minute, the room pass.
 
