@@ -217,4 +217,8 @@ Every setting before the device's own is on MIDI CC 20 and up, in this order.
 
 ## Levels
 
-To be measured on the engine's final sound.
+Measured in the simulator with the default bus. The drums peak between -9 and -3 dBFS at full velocity: the KICK and
+SUB loudest, the HAT quietest. A swing at about a third of full strength is some 17 dB down. SQUEEZE at 100 stays under
+-1 dBFS. A heavy strike on the material peaks near -12 dBFS. A PUMP drone moved to full energy is about 37 dB over the
+same drone at rest with REST LEVEL at -24 dB. The kick sits between 44 and 82 Hz: the small speaker loses most of it,
+the line out has it.

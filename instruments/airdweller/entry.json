@@ -13,9 +13,16 @@
   ],
   "hardware_note": "Made for two boards, one in each hand, linked by radio; one board alone plays a mixed kit. Swing the board on a short arm: the stroke detector wants a fast turn and a jolt.",
   "status": "simulator",
-  "status_note": "0.1 passes the simulator and has not been on a board.",
+  "status_note": "0.1 passes the simulator (138 checks; the busiest block's cost is still to be measured on a quiet machine) and has not been on a board.",
   "listed": false,
-  "image": "images/airdweller-play.gif",
-  "more": [],
+  "image": "images/airdweller-pair.gif",
+  "more": [
+    "images/airdweller-drum.gif",
+    "images/airdweller-paint.gif",
+    "images/airdweller-pump.gif",
+    "images/airdweller-loop.gif",
+    "images/airdweller-cut.gif",
+    "images/airdweller-splash.gif"
+  ],
   "added": "2026-10-25"
 }
