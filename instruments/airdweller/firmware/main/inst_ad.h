@@ -98,7 +98,10 @@ void     eng_get_grid(grid_t *g);            // any task
 int64_t  eng_tick_at(const grid_t *g, uint32_t frame);   // the tick at a frame, rounded down
 uint32_t eng_frame_of(const grid_t *g, int64_t tick);    // the frame a tick falls on
 int64_t  eng_floor_div(int64_t a, int64_t b);
-typedef struct { uint16_t tick; uint8_t pad, vel; int32_t born; } hit_t;   // born: the cycle it sounded live in
+// born: the cycle it sounded live in. pad >= NOTE_HIT: a NOTES note (pad - NOTE_HIT: the MIDI note), played by the UI
+// (instrument.c), which the engine's loop playback skips; len: such a note's length in ticks (0: NOTE LENGTH).
+#define NOTE_HIT 0x80
+typedef struct { uint16_t tick; uint8_t pad, vel; int32_t born; uint16_t len; } hit_t;
 typedef struct {
     hit_t hits[LOOP_HITS];
     volatile int n;

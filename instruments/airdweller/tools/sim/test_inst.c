@@ -1,10 +1,10 @@
-// AIRDWELLER on the host: the host's own scenarios. The strokes (four ways, the return that is not a hit, a turn with
-// no jolt, the grid), the hands' kits, the loops (a hold of two bars, replayed, toggled, stopped, erased), CUT (a hard
-// stop, back in on the beat), the roles (PAINT strikes the material with the swings, PUMP takes the movement as
-// energy), the hand on the material (tilt, twist, roll, shake), and two boxes: who is LEFT, the hits this box sends
-// (their ticks, their voices, a loop's hits a quarter of a beat ahead), the other box's hits striking this one on the
-// same tick, two DRUM boxes keeping their own drums, the other's kick tuning this box's material. Then the engine's
-// checks (test_engine.c) and the screens (test_scene.c), when they are there.
+// AIRDWELLER on the host: the host's own scenarios. The strokes (a hit is a stroke that stops: four ways against
+// gravity however the box is held, the hand coming back, a sweep, a twist, no jolt, fast series, a hat and a snare
+// together, back and forth, a shake's roll, the latency, the grid), the drag (pulled back slowly, a quick return, a
+// twist), the loops, CUT, the roles (PAINT, PUMP, the hand on the material), NOTES (the tilt is the note, a flick, a held
+// slide, a shake, MIDI), EASY (STEP in order whatever the way, a shake on free lines, GROOVE, NOTES), two boxes (who is
+// LEFT, hits sent with their ticks, struck on the same tick, two DRUMs, SHAPE both ways), the loops' notes, every
+// sound. Then the engine's checks (test_engine.c) and the screens (test_scene.c).
 #include "sim.h"
 #include "inst_ad.h"
 #include "link.h"
@@ -19,11 +19,22 @@ void  st_swing(float t, vec3_t dir, float peak);
 void  st_stroke(float t, vec3_t dir, float peak, float dur, float ret);
 void  st_hold(vec3_t dir, float dps);
 void  st_flat_acc(int on);
+void  st_strike(float t, vec3_t dir, float peak, float rise, float stop, float ret, float ret_s);
+void  st_glide(float t, vec3_t dir, float dps, float dur);
+void  st_shake(float t, vec3_t dir, float hz, float dps, float dur);
+void  st_pose(float pitch, float roll);
 extern const vec3_t ST_FRONT, ST_BACK, ST_LEFT, ST_RIGHT, ST_TWIST;
+extern uint32_t ad_hit_frame; extern int ad_hit_pad; extern float ad_hit_peak, ad_hit_rise, ad_hit_fall;
 extern uint32_t ad_strike_at; extern int64_t ad_strike_tick; extern int ad_strikes; extern uint32_t ad_played_frame;
 int64_t ad_now_tick(void);
 void test_engine(void) __attribute__((weak));
 void test_scene(void) __attribute__((weak));
+
+// until the engine has the drag and the notes (weak: the engine's own take over)
+__attribute__((weak)) volatile int eng_drag_gid, eng_note_voice;
+__attribute__((weak)) volatile float eng_drag_amt, eng_drag_hold, eng_drag_bend, eng_drag_depth, eng_note_glide, eng_note_lvl;
+__attribute__((weak)) void eng_note(const nev_t *e) { (void)e; }
+extern nev_t ad_nev[64]; extern int ad_nevs;
 
 const char *const inst_click_skip[] = { "nlnk", "ngrp", "npow", NULL };   // the radio's switches, not the sound
 
@@ -45,6 +56,23 @@ static int notes_since(int from, int note)
     return n;
 }
 static int last_note_since(int from) { int nt = -1; for (int i = from; i < midi_n; i++) if (midi_log[i].st == 0x99 && midi_log[i].d2 > 0) nt = midi_log[i].d1; return nt; }
+// the drum notes since `from`, in order (up to max); and the shortest time between two of them
+static int drum_seq(int from, int *out, int max, float *min_gap)
+{
+    int n = 0; float last = -1.0f; *min_gap = 1e9f;
+    for (int i = from; i < midi_n; i++) if (midi_log[i].st == 0x99 && midi_log[i].d2 > 0) {
+        if (n < max) out[n] = midi_log[i].d1;
+        n++;
+        if (last >= 0.0f && midi_log[i].t - last < *min_gap) *min_gap = midi_log[i].t - last;
+        last = midi_log[i].t;
+    }
+    return n;
+}
+// the note events this box sent the engine since `from` (ad_nevs then), the newest 64 at most
+static const nev_t *nev_at(int k) { return &ad_nev[k & 63]; }
+static int nev_from(int from) { return ad_nevs - from > 64 ? ad_nevs - 64 : from; }
+static int first_on(int from) { for (int k = nev_from(from); k < ad_nevs; k++) if (nev_at(k)->on && !nev_at(k)->legato) return k; return -1; }
+static uint32_t frame_at(float t) { return (uint32_t)(t * (float)AUDIO_SR + 0.5f); }
 
 static void quiet(void)
 {
@@ -58,8 +86,9 @@ static void quiet(void)
 // ---------------------------------------------------------------- the strokes
 static void strokes(void)
 {
-    section("strokes: four ways, four pads");
+    section("strokes: a hit is a stroke that stops");
     quiet();
+    set("qant", 0);
     static const char *const way[NPAD] = { "forward", "left", "right", "back" };
     const vec3_t dir[NPAD] = { ST_FRONT, ST_LEFT, ST_RIGHT, ST_BACK };
     static const int gm[NPAD] = { 42, 36, 38, 49 };                   // ONE kit: HAT, KICK, SNAP, CLANG (GM notes)
@@ -75,34 +104,134 @@ static void strokes(void)
     }
     check(ok == 4, "a swing each way is one hit on its pad, with its voice (%d of 4)", ok);
     check(D.pad_voice[PD_LEFT] == DV_KICK && D.pad_voice[PD_FRONT] == DV_HAT, "one box alone: the mixed kit (left KICK, forward HAT)");
-    // the return is not a hit; a slow turn is not a hit; a turn with no jolt (CONFIRM) is not a hit
+    // the same four however the box is held: the directions are the room's
+    static const struct { float p, r; } poses[] = { { 40, 0 }, { -35, 0 }, { 0, 30 }, { 75, 0 } };
+    int okp = 0, tot = 0;
+    for (int k = 0; k < 4; k++) {
+        st_reset(); st_pose(poses[k].p, poses[k].r); run(0.5f);
+        for (int p = 0; p < NPAD; p++) {
+            int m0 = midi_n;
+            st_swing(sim_t + 0.05f, dir[p], 650.0f);
+            run(0.7f);
+            bool good = D.last_pad == p && notes_since(m0, -1) == 1;
+            if (!good) note("held at %.0f / %.0f, %s: pad %d, %d hits", (double)poses[k].p, (double)poses[k].r, way[p], D.last_pad, notes_since(m0, -1));
+            okp += good; tot++;
+        }
+    }
+    check(okp == tot, "tipped up 40, down 35, rolled 30 or nearly upright: each way still its own pad (%d of %d)", okp, tot);
+    st_reset(); sim_tilt(0, 0); run(0.5f);
+    // what is not a hit
     int m0 = midi_n;
-    st_stroke(sim_t + 0.05f, ST_LEFT, 650.0f, 0.12f, 0.7f);
+    st_strike(sim_t + 0.05f, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.8f, 0.0f);
     run(0.8f);
-    check(notes_since(m0, -1) == 1, "a swing and the hand coming back: one hit (%d)", notes_since(m0, -1));
+    check(notes_since(m0, -1) == 1, "a hit and the hand coming back at 0.8 of its speed: one hit (%d)", notes_since(m0, -1));
+    m0 = midi_n;
+    st_stroke(sim_t + 0.05f, ST_LEFT, 650.0f, 0.25f, 0.0f);
+    run(0.8f);
+    check(notes_since(m0, -1) == 0, "a fast sweep that slows down by itself: no hit (%d)", notes_since(m0, -1));
     m0 = midi_n;
     st_stroke(sim_t + 0.05f, ST_RIGHT, 250.0f, 0.5f, 0.0f);
     run(1.0f);
     check(notes_since(m0, -1) == 0, "a slow turn: no hit");
+    m0 = midi_n;
+    st_strike(sim_t + 0.05f, ST_TWIST, 700.0f, 0.07f, 0.015f, 0.3f, 0.0f);
+    run(0.8f);
+    check(notes_since(m0, -1) == 0, "a sharp twist of the wrist: no hit (%d)", notes_since(m0, -1));
     m0 = midi_n;
     st_flat_acc(1);
     st_swing(sim_t + 0.05f, ST_RIGHT, 700.0f);
     run(0.8f);
     st_flat_acc(0);
     check(notes_since(m0, -1) == 0, "CONFIRM: a fast turn with no jolt is no hit");
-    // on the grid: a hit placed just before a sixteenth line waits for it and sounds on it. The swing is timed so it is
-    // caught (peak, then 15 % down, at the next 10 ms tick: 80 to 95 ms in; its meant moment HIT_LEAD before that) before
-    // the line.
+    // fast: eight kicks, each 50 ms up and stopped in 12 ms, the hand back at 0.7 of the speed in between
+    int seq[16]; float gap;
+    m0 = midi_n;
+    float t0 = sim_t + 0.05f;
+    for (int i = 0; i < 8; i++) st_strike(t0 + 0.16f * (float)i, ST_LEFT, 600.0f, 0.05f, 0.012f, 0.7f, 0.0f);
+    run(1.6f);
+    int nk = notes_since(m0, 36);
+    check(nk == 8 && notes_since(m0, -1) == 8, "eight kicks in 1.2 s: eight hits, all kicks (%d of %d)", nk, notes_since(m0, -1));
+    // a hat and a snare right after each other
+    m0 = midi_n; t0 = sim_t + 0.05f;
+    st_strike(t0, ST_FRONT, 600.0f, 0.05f, 0.012f, 0.0f, 0.0f);
+    st_strike(t0 + 0.08f, ST_RIGHT, 600.0f, 0.05f, 0.012f, 0.0f, 0.0f);
+    run(0.6f);
+    int n = drum_seq(m0, seq, 16, &gap);
+    check(n == 2 && seq[0] == 42 && seq[1] == 38, "a hat, then a snare 80 ms later: both (%d hits)", n);
+    // back and forth, each stroke stopped hard: every one a hit, in turn
+    m0 = midi_n; t0 = sim_t + 0.05f;
+    for (int i = 0; i < 6; i++) st_strike(t0 + 0.1f * (float)i, (i & 1) ? ST_RIGHT : ST_LEFT, 600.0f, 0.05f, 0.012f, 0.0f, 0.0f);
+    run(1.0f);
+    n = drum_seq(m0, seq, 16, &gap);
+    int alt = n == 6;
+    for (int i = 0; alt && i < 6; i++) alt = seq[i] == ((i & 1) ? 38 : 36);
+    check(alt, "left and right in turn, each stopped hard, 100 ms apart: six hits, kick and snare in turn (%d)", n);
+    // a shake (a sine back and forth): the last pad rolls on the sixteenths
+    st_swing(sim_t + 0.05f, ST_LEFT, 650.0f); run(0.6f);
+    m0 = midi_n;
+    st_shake(sim_t + 0.05f, ST_LEFT, 7.0f, 500.0f, 1.5f);
+    run(1.8f);
+    n = drum_seq(m0, seq, 16, &gap);
+    int same = n > 0;
+    for (int i = 0; same && i < n && i < 16; i++) same = seq[i] == 36;
+    check(n >= 8 && same && gap > 0.11f, "a shake: the kick rolls, one to a sixteenth (%d hits in 1.5 s, at least %.0f ms apart)", n, (double)(gap * 1000.0f));
+    run(0.5f);
+    // the latency: the sound 12 ms after the stop (QUANTIZE OFF): the stop's half speed is 77.5 ms into this one
+    t0 = sim_t + 0.05f;
+    st_strike(t0, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f);
+    run(0.5f);
+    uint32_t want = frame_at(t0 + 0.0775f + 0.012f);
+    int32_t err = (int32_t)(ad_played_frame - want);
+    check(abs(err) <= 48, "QUANTIZE OFF: it sounds 12 ms after the stop (%.1f ms off)", (double)err * 1000.0 / AUDIO_SR);
+    // on the grid: stopped 15 ms before a sixteenth line, it waits for the line and sounds on it
+    set("qant", 2);
     grid_t g; eng_get_grid(&g);
     uint32_t nowf = audio_frames();
     int64_t line = (eng_tick_at(&g, nowf) / (PPB / 4) + 3) * (PPB / 4);
     float line_t = sim_t + (float)(int32_t)(eng_frame_of(&g, line) - nowf) / (float)AUDIO_SR;
     m0 = midi_n;
-    st_swing(line_t - 0.110f, ST_LEFT, 700.0f);
+    st_strike(line_t - 0.015f - 0.0775f, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f);
     run(0.6f);
     eng_get_grid(&g);
-    uint32_t want = eng_frame_of(&g, line);
-    check(notes_since(m0, -1) == 1 && ad_played_frame == want, "QUANTIZE 1/16: a hit just before a line sounds on it (frame %u, the line's %u)", (unsigned)ad_played_frame, (unsigned)want);
+    want = eng_frame_of(&g, line);
+    check(notes_since(m0, -1) == 1 && ad_played_frame == want, "QUANTIZE 1/16: stopped just before a line, it sounds on it (frame %u, the line's %u)", (unsigned)ad_played_frame, (unsigned)want);
+}
+
+// ---------------------------------------------------------------- the drag
+static void drag(void)
+{
+    section("drag: after a hit, the hand pulls the sound");
+    quiet(); set("qant", 0); set("rech", 60); set("drag", 70); set("dbnd", 5);
+    // a kick, then pulled back slowly at 60 degrees a second for 1.2 s (about 69 degrees)
+    float t0 = sim_t + 0.05f;
+    st_strike(t0, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f);
+    st_glide(t0 + 0.15f, ST_RIGHT, 60.0f, 1.2f);
+    run(0.14f);
+    int gid = eng_drag_gid;
+    float a0 = eng_drag_amt;
+    run(0.55f);
+    float hold_mid = eng_drag_hold, amt_mid = eng_drag_amt;
+    run(0.6f);
+    float amt_end = eng_drag_amt;
+    run(0.6f);
+    check(gid != 0 && a0 < 0.05f, "a hit starts a gesture for the drag (%d), at nothing (%.2f)", gid, (double)a0);
+    check(hold_mid > 0.9f && amt_mid > 0.3f && amt_mid < 0.8f, "pulled back slowly: held (%.2f), part way (%.2f)", (double)hold_mid, (double)amt_mid);
+    run(0.2f); amt_end = eng_drag_amt;
+    check(amt_end > 0.9f, "past REACH (60 degrees): a full drag (%.2f)", (double)amt_end);
+    check(eng_drag_hold < 0.05f && eng_drag_amt > 0.9f && eng_drag_gid == gid, "still: it lets go (%.2f), the amount stays with that hit (%.2f)", (double)eng_drag_hold, (double)eng_drag_amt);
+    // the hand coming back by itself, quickly: a new gesture, not dragged
+    st_swing(sim_t + 0.05f, ST_LEFT, 650.0f);
+    run(0.8f);
+    check(eng_drag_gid != gid && eng_drag_amt < 0.1f && eng_drag_hold < 0.05f, "a hit and a quick return: a new gesture, no drag (%.2f)", (double)eng_drag_amt);
+    // a twist while dragging bends it
+    t0 = sim_t + 0.05f;
+    st_strike(t0, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f);
+    st_glide(t0 + 0.15f, ST_TWIST, 90.0f, 0.6f);
+    run(0.8f);
+    check(eng_drag_bend > 4.0f, "twisted about 50 degrees while dragging: bent up to DRAG BEND (%.1f of 5 st)", (double)eng_drag_bend);
+    set("drag", 0); run(0.05f);
+    check(eng_drag_depth == 0.0f, "DRAG 0: the drag does nothing");
+    set("drag", 70); run(1.0f);
 }
 
 // ---------------------------------------------------------------- the loops
@@ -335,6 +464,7 @@ void inst_tests(void)
     check(m_bad() == 0 && D.role == ROLE_DRUM && D.hand == HAND_AUTO, "it starts as one box, a drummer");
     sim_shot("boot");
     strokes();
+    drag();
     loops();
     cut();
     roles();
