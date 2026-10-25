@@ -9,6 +9,8 @@
 #include "inst_ad.h"
 #include "link.h"
 #include "dsp.h"
+#include "take.h"
+#include <dirent.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +25,10 @@ void  st_strike(float t, vec3_t dir, float peak, float rise, float stop, float r
 void  st_glide(float t, vec3_t dir, float dps, float dur);
 void  st_shake(float t, vec3_t dir, float hz, float dps, float dur);
 void  st_pose(float pitch, float roll);
+void  st_motion(float t);
 extern const vec3_t ST_FRONT, ST_BACK, ST_LEFT, ST_RIGHT, ST_TWIST;
+extern int ad_pad_hits[NPAD], ad_drags;
+extern int ad_strokes; extern float ad_st_peak, ad_st_rise, ad_st_fall; extern int ad_st_why;
 extern uint32_t ad_hit_frame; extern int ad_hit_pad; extern float ad_hit_peak, ad_hit_rise, ad_hit_fall;
 extern uint32_t ad_strike_at; extern int64_t ad_strike_tick; extern int ad_strikes; extern uint32_t ad_played_frame;
 int64_t ad_now_tick(void);
@@ -436,6 +441,269 @@ static void pair(void)
     check(!D.paired && D.hand == HAND_AUTO, "the other box gone: one box again");
 }
 
+// ---------------------------------------------------------------- NOTES
+// A minor from A2: the notes over SPAN 8 are A2 B2 C3 D3 E3 F3 G3 A3 (45 47 48 50 52 53 55 57)
+static void notes_role(void)
+{
+    section("NOTES: the tilt is the note");
+    quiet();
+    set("role", ROLE_NOTES); set("skey", 9); set("sscl", 1); set("noct", 2); set("nspn", 8); set("nlen", 0.15f); set("qant", 0); set("easy", 0);
+    run(0.3f);
+    // the tilt when the stroke begins picks it (a sweep round does not tip the box)
+    static const struct { float p, r; int want; const char *what; } T[] = {
+        { -40, 0, 45, "tipped down 40: A2" }, { 0, 0, 52, "level: E3" }, { 33, 0, 57, "tipped up 33: A3" }, { 0, 45, 64, "level, rolled right: E4" },
+    };
+    int ok = 0;
+    for (int k = 0; k < 4; k++) {
+        st_reset(); st_pose(T[k].p, T[k].r); run(0.5f);
+        int n0 = ad_nevs;
+        st_swing(sim_t + 0.05f, ST_LEFT, 650.0f);
+        run(0.5f);
+        int f = first_on(n0);
+        int got = f >= 0 ? nev_at(f)->note : -1;
+        if (got != T[k].want) note("%s: got %d", T[k].what, got);
+        ok += got == T[k].want;
+    }
+    check(ok == 4, "the tilt picks the note: down 40, level, up 33, rolled 45: A2 E3 A3 E4 (%d of 4)", ok);
+    // a flick: NOTE LENGTH
+    st_reset(); st_pose(0, 0); run(0.5f);
+    int n0 = ad_nevs, m0 = midi_n;
+    st_swing(sim_t + 0.05f, ST_LEFT, 650.0f);
+    run(0.6f);
+    int f = first_on(n0);
+    int32_t len = -1;
+    if (f >= 0) for (int k = f + 1; k < ad_nevs; k++) if (!nev_at(k)->on && nev_at(k)->gid == nev_at(f)->gid) { len = (int32_t)(nev_at(k)->at - nev_at(f)->at); break; }
+    check(f >= 0 && abs(len - (int32_t)(0.15f * AUDIO_SR)) <= 2, "a flick: one note, NOTE LENGTH long (%.1f ms)", (double)len * 1000.0 / AUDIO_SR);
+    int mn = 0;
+    for (int i = m0; i < midi_n; i++) if (midi_log[i].st == 0x90 && midi_log[i].d2 > 0 && midi_log[i].d1 == 52) mn++;
+    check(mn == 1, "and the note goes out on MIDI (channel 1, note 52: %d)", mn);
+    // held: a hit, then the front edge brought up slowly: it holds and slides up the scale, and ends when still
+    n0 = ad_nevs;
+    float t0 = sim_t + 0.05f;
+    st_strike(t0, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f);
+    st_glide(t0 + 0.15f, ST_BACK, 40.0f, 1.0f);
+    run(1.3f);
+    int slides = 0, last = -1, rising = 1;
+    int32_t off_at = -1;
+    f = first_on(n0);
+    for (int k = nev_from(n0); f >= 0 && k < ad_nevs; k++) {
+        const nev_t *e = nev_at(k);
+        if (e->gid != nev_at(f)->gid) continue;
+        if (e->on && e->legato) { slides++; if (last >= 0 && e->note <= last) rising = 0; last = e->note; }
+        if (!e->on) off_at = (int32_t)(e->at - nev_at(f)->at);
+    }
+    run(0.6f);
+    for (int k = nev_from(n0); f >= 0 && k < ad_nevs; k++) if (!nev_at(k)->on && nev_at(k)->gid == nev_at(f)->gid) off_at = (int32_t)(nev_at(k)->at - nev_at(f)->at);
+    check(slides >= 3 && rising && last == 57, "held and tipped up: it slides up the scale (%d steps, up to %d)", slides, last);
+    check(off_at > (int32_t)(1.1f * AUDIO_SR), "it ends only once the hand is still (after %.2f s)", (double)off_at / AUDIO_SR);
+    // a shake, held level again: the note (E3) repeats on the sixteenths
+    st_reset(); st_pose(0, 0); run(0.5f);
+    st_swing(sim_t + 0.05f, ST_LEFT, 650.0f); run(0.6f);
+    n0 = ad_nevs;
+    st_shake(sim_t + 0.05f, ST_LEFT, 7.0f, 500.0f, 1.2f);
+    run(1.5f);
+    int reps = 0, same = 1;
+    for (int k = nev_from(n0); k < ad_nevs; k++) if (nev_at(k)->on && !nev_at(k)->legato) { reps++; if (nev_at(k)->note != 52) same = 0; }
+    check(reps >= 6 && same, "a shake: the note repeats (%d times)", reps);
+    run(0.5f);
+    set("role", ROLE_DRUM); set("qant", 2); run(0.3f);
+}
+
+// ---------------------------------------------------------------- EASY
+static void easy(void)
+{
+    section("EASY: any swing, the next step");
+    quiet();
+    set("easy", EASY_STEP); set("patt", 0); set("qant", 2); run(0.3f);
+    // eight swings any way at all: FOUR's steps in order (one box: KICK HAT SNAP HAT ...)
+    const vec3_t dirs[8] = { ST_BACK, ST_TWIST, ST_LEFT, ST_FRONT, ST_RIGHT, ST_TWIST, ST_BACK, ST_LEFT };
+    int seq[32]; float gap;
+    int m0 = midi_n;
+    for (int i = 0; i < 8; i++) { st_swing(sim_t + 0.05f, dirs[i], 650.0f); run(0.35f); }
+    run(0.3f);
+    int n = drum_seq(m0, seq, 32, &gap);
+    static const int four[8] = { 36, 42, 38, 42, 36, 42, 38, 42 };
+    int inorder = n == 8;
+    for (int i = 0; inorder && i < 8; i++) inorder = seq[i] == four[i];
+    check(inorder, "STEP: eight swings, back, twisted, left, forward...: FOUR's steps in order (%d)", n);
+    // a shake: one step to each free sixteenth
+    m0 = midi_n;
+    st_shake(sim_t + 0.05f, ST_LEFT, 7.0f, 500.0f, 1.0f);
+    run(1.4f);
+    n = drum_seq(m0, seq, 32, &gap);
+    check(n >= 6 && gap > 0.11f, "STEP: a shake steps on, one to a sixteenth (%d steps, at least %.0f ms apart)", n, (double)(gap * 1000.0f));
+    // GROOVE: a swing sets the pattern going for a bar; still, it stops
+    set("easy", EASY_GROOVE); run(3.0f);
+    m0 = midi_n; run(1.0f);
+    int before = notes_since(m0, -1);
+    m0 = midi_n;
+    st_swing(sim_t + 0.05f, ST_LEFT, 650.0f);
+    run(2.0f);
+    int during = notes_since(m0, -1);
+    run(1.0f);
+    m0 = midi_n; run(2.0f);
+    int after = notes_since(m0, -1);
+    check(before == 0 && during >= 6 && after == 0, "GROOVE: quiet (%d); one swing, the pattern for a bar (%d); still, it stops (%d)", before, during, after);
+    // NOTES with STEP: BREAK's notes (0 2 4 7 of the scale) from where the tilt points (level: E3)
+    set("role", ROLE_NOTES); set("easy", EASY_STEP); set("patt", 2); set("skey", 9); set("sscl", 1); set("noct", 2); set("nspn", 8);
+    st_reset(); st_pose(0, 0); run(0.5f);
+    int n0 = ad_nevs;
+    for (int i = 0; i < 4; i++) { st_swing(sim_t + 0.05f, ST_LEFT, 650.0f); run(0.4f); }
+    static const int brk[4] = { 52, 55, 59, 64 };
+    int k = 0, okn = 1;
+    for (int j = nev_from(n0); j < ad_nevs; j++) if (nev_at(j)->on && !nev_at(j)->legato) { if (k < 4 && nev_at(j)->note != brk[k]) okn = 0; k++; }
+    check(okn && k == 4, "NOTES and STEP: the pattern's notes from the tilt's (E3 G3 B3 E4: %d notes)", k);
+    set("easy", EASY_OFF); set("role", ROLE_DRUM); run(1.0f);
+}
+
+// ---------------------------------------------------------------- SHAPE
+static void shape(void)
+{
+    section("SHAPE: one hand hits, the other drags");
+    quiet();
+    INST.action(P_ERASE_ALL);
+    peer_k = sim_peer_add("AIRDWELL", 1, 6.0, 0.0);
+    peer_bytes(ROLE_DRUM, HAND_LEFT, 36, 0, NULL, NULL);
+    run(3.0f);
+    // this box SHAPE: the other box's hit, then this hand pulled slowly; the drag goes back with the hit's number
+    set("role", ROLE_SHAPE); run(0.3f);
+    int64_t tk = (ad_now_tick() / (PPB / 4) + 2) * (PPB / 4);
+    int v = DV_KICK;
+    peer_bytes(ROLE_DRUM, HAND_LEFT, 36, 1, &tk, &v);
+    run(0.1f);
+    st_glide(sim_t + 0.05f, ST_RIGHT, 60.0f, 1.3f);
+    run(0.6f);
+    const link_peer_t *me = me_seen_by_peer();
+    int s5 = me ? me->app[5] : -1, a6 = me ? me->app[6] : -1, h7 = me ? me->app[7] : -1;
+    check(me && s5 == peer_seq && a6 > 50 && h7 > 200, "SHAPE: the other hand's hit (%d), pulled here: amount %d, held %d", s5, a6, h7);
+    run(1.0f);
+    me = me_seen_by_peer();
+    check(me && me->app[6] > 230 && eng_drag_gid == 0, "pulled on: a full drag (%d); this box plays nothing of its own", me ? me->app[6] : -1);
+    // this box DRUM, the other SHAPE: its drag reaches this box's last hit
+    set("role", ROLE_DRUM); run(0.5f);
+    st_swing(sim_t + 0.05f, ST_LEFT, 650.0f); run(0.5f);
+    me = me_seen_by_peer();
+    uint8_t mine = me ? me->app[4] : 0;
+    uint8_t a[16] = { 4, (uint8_t)(ROLE_SHAPE | HAND_RIGHT << 3), 0, 36, peer_seq, mine, 200, 255, (uint8_t)(int8_t)8 };
+    sim_peer_use(peer_k); link_set_app(a, 16); link_poke(); sim_peer_use(-1);
+    run(0.3f);
+    check(D.peer_shapes && eng_drag_amt > 0.75f && eng_drag_hold > 0.9f && fabsf(eng_drag_bend - 2.0f) < 0.3f,
+          "the other hand (SHAPE) drags this box's last hit: amount %.2f, held %.2f, bent %.1f st", (double)eng_drag_amt, (double)eng_drag_hold, (double)eng_drag_bend);
+    st_swing(sim_t + 0.05f, ST_LEFT, 650.0f); run(0.5f);
+    check(!D.peer_shapes && eng_drag_amt < 0.1f, "a new hit here: that drag was for the old one (%.2f)", (double)eng_drag_amt);
+    sim_peer_power(peer_k, false); run(2.5f);
+}
+
+// ---------------------------------------------------------------- the loops' notes
+static void note_loops(void)
+{
+    section("NOTES loops: the notes come back");
+    quiet();
+    INST.action(P_ERASE_ALL);
+    set("role", ROLE_NOTES); set("qant", 2); set("skey", 9); set("sscl", 1); set("noct", 2); set("nspn", 8);
+    st_reset(); st_pose(0, 0); run(0.5f);
+    SI.rec = true;
+    for (int b = 0; b < 5; b++) { st_swing(sim_t + 0.05f, ST_LEFT, 650.0f); run(0.5f); }
+    SI.rec = false;
+    run(2.5f);
+    int notes = 0;
+    for (int i = 0; i < eng_loops[0].n; i++) notes += eng_loops[0].hits[i].pad >= NOTE_HIT;
+    check(eng_loops[0].bars >= 1 && notes >= 3, "a loop of %d bar(s) holding %d notes", eng_loops[0].bars, notes);
+    int n0 = ad_nevs;
+    run(2.0f);
+    int back = 0, right = 1;
+    for (int k = nev_from(n0); k < ad_nevs; k++) if (nev_at(k)->on && nev_at(k)->gid >= 200) { back++; if (nev_at(k)->note != 52) right = 0; }
+    check(back >= 3 && right, "they come back by themselves, the same note (%d in 2 s)", back);
+    INST.action(P_ERASE_ALL);
+    set("role", ROLE_DRUM); run(1.0f);
+}
+
+// ---------------------------------------------------------------- recorded takes (tools/motion_rec.py)
+static const char *const pad_name[NPAD] = { "FRONT", "LEFT", "RIGHT", "BACK" };
+// one take through the detector and held to its label; false if it has none
+static bool take_check(const char *path, const char *name)
+{
+    take_t *t = take_load(path);
+    if (!t) return false;
+    quiet(); set("qant", 0); set("easy", 0); SI.mic = NULL; run(0.5f);
+    for (int p = 0; p < NPAD; p++) ad_pad_hits[p] = 0;
+    ad_drags = 0;
+    take_run(t);
+    run(0.5f);
+    int total = 0; for (int p = 0; p < NPAD; p++) total += ad_pad_hits[p];
+    note("%s: %.1f s, %d gaps; FRONT %d LEFT %d RIGHT %d BACK %d, dragged %d", name, (double)t->secs, t->gaps,
+         ad_pad_hits[PD_FRONT], ad_pad_hits[PD_LEFT], ad_pad_hits[PD_RIGHT], ad_pad_hits[PD_BACK], ad_drags);
+    char keys[8][24], only[24];
+    int nk = take_keys(t, "label.hits", keys, 8);
+    bool has_hits = take_get(t, "label.hits", only, sizeof only), labelled = true;
+    if (take_get(t, "label.only", only, sizeof only)) {
+        int want = -1; for (int p = 0; p < NPAD; p++) if (!strcmp(only, pad_name[p])) want = p;
+        check(want >= 0 && total > 0 && ad_pad_hits[want] == total, "%s: only %s (%d of %d)", name, only, want >= 0 ? ad_pad_hits[want] : 0, total);
+    } else if (has_hits) {
+        bool ok = true; int named = 0;
+        for (int k = 0; k < nk; k++) {
+            char pth[64]; snprintf(pth, sizeof pth, "label.hits.%s", keys[k]);
+            int want = (int)take_num(t, pth, -1), got = -1;
+            for (int p = 0; p < NPAD; p++) if (!strcmp(keys[k], pad_name[p])) got = ad_pad_hits[p];
+            ok &= got == want; named += got > 0 ? got : 0;
+        }
+        ok &= total - named <= (int)take_num(t, "label.others", 0);
+        ok &= ad_drags >= (int)take_num(t, "label.drags", 0);
+        check(ok, "%s: the hits it was recorded for (%d in all, %d dragged)", name, total, ad_drags);
+    } else if (take_num(t, "label.any", 0) > 0) check(total > 0, "%s: something plays (%d)", name, total);
+    else labelled = false;
+    take_free(t);
+    SI.mic = st_mic;
+    return labelled;
+}
+// the model's own strokes written as a take (the recorder's format), for the round trip
+static void write_model_take(const char *path)
+{
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    fprintf(f, "{\"instrument\": \"AIRDWELLER\", \"name\": \"model\", \"label\": {\"hits\": {\"LEFT\": 3}, \"drags\": 1, \"others\": 0}}\n");
+    st_reset();
+    st_swing(0.10f, ST_LEFT, 650.0f);
+    st_strike(0.60f, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f); st_glide(0.75f, ST_RIGHT, 60.0f, 1.0f);
+    st_swing(2.10f, ST_LEFT, 650.0f);
+    vec3_t acc0 = SI.acc;
+    for (int k = 0; k < 280; k++) {
+        SI.nburst = 0;
+        st_motion((float)k * 0.01f);
+        for (int i = 0; i < 10; i++) {
+            vec3_t a = SI.nburst ? SI.burst[i] : acc0, g = SI.nburst ? SI.gburst[i] : (vec3_t){ 0, 0, 0 };
+            fprintf(f, "%d %.5f %.5f %.5f %.3f %.3f %.3f %d\n", k * TICK_FRAMES + i * (AUDIO_SR / 1000), (double)a.x, (double)a.y, (double)a.z, (double)g.x, (double)g.y, (double)g.z, TAKE_GYRO);
+        }
+    }
+    SI.nburst = 0;
+    fclose(f);
+    st_reset();
+}
+// Every take recorded from a board under lab/takes/airdweller (or $TAKES) is played through the detector (DRUM, one
+// box, QUANTIZE off) and held to its label: {"hits": {"LEFT": 10}, "others": 0} (exactly those, nothing else beyond
+// "others"), {"only": "LEFT"} (at least one, all LEFT), {"hits": {}} (none), {"any": true} (at least one), "drags": n
+// (at least n dragged). First, the round trip: the model's own strokes written as a take and played back.
+static void takes(void)
+{
+    section("recorded takes");
+    write_model_take("out/model.take");
+    int before = ad_strokes;
+    check(take_check("out/model.take", "the model's own take") && ad_strokes > before, "a take written in the recorder's format plays back through the detector");
+    const char *dir = getenv("TAKES") ? getenv("TAKES") : "../../../../../lab/takes/airdweller";
+    DIR *d = opendir(dir);
+    int ntakes = 0;
+    struct dirent *e;
+    while (d && (e = readdir(d))) {
+        size_t L = strlen(e->d_name);
+        if (L < 6 || strcmp(e->d_name + L - 5, ".take")) continue;
+        char path[512]; snprintf(path, sizeof path, "%s/%s", dir, e->d_name);
+        ntakes++;
+        take_check(path, e->d_name);
+    }
+    if (d) closedir(d);
+    if (!ntakes) note("no takes recorded yet in %s: record them with tools/motion_rec.py guided --instrument airdweller", dir);
+}
+
 // ---------------------------------------------------------------- every sound
 static void sounds(void)
 {
@@ -468,7 +736,12 @@ void inst_tests(void)
     loops();
     cut();
     roles();
+    notes_role();
+    easy();
     pair();
+    shape();
+    note_loops();
+    takes();
     sounds();
     if (test_engine) test_engine();
     if (test_scene) test_scene();

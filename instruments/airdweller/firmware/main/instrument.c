@@ -165,6 +165,10 @@ static int led_flash_pad = -1; static float led_l;
 uint32_t ad_strike_at; int64_t ad_strike_tick; int ad_strikes; uint32_t ad_played_frame;
 // ... where the last hit was caught (the sample's frame), its pad, its peak, rise and fall
 uint32_t ad_hit_frame; int ad_hit_pad; float ad_hit_peak, ad_hit_rise, ad_hit_fall;
+// ... and every stroke that ended, hit or not: how many, the last one's peak, rise, fall, and why (bits: 1 not sharp,
+// 2 not strong, 4 no jolt, 8 a return, 16 a shake's, 32 EASY)
+int ad_strokes; float ad_st_peak, ad_st_rise, ad_st_fall; int ad_st_why;
+int ad_pad_hits[NPAD], ad_drags;   // hits per pad, and gestures dragged past 0.3 (for the recorded takes)
 int64_t ad_now_tick(void) { return now_tick; }
 // ... and every note event this side sent the engine (the last 64)
 nev_t ad_nev[64]; int ad_nevs;
@@ -400,7 +404,7 @@ static int pad_of(float p, float y)
 }
 
 // ---------------------------------------------------------------- the drag (the hand after a hit)
-typedef struct { bool on; uint8_t gid; float ang, roll, amt, hold, bend, still_ms, slow_ms; } drag_t;
+typedef struct { bool on, counted; uint8_t gid; float ang, roll, amt, hold, bend, still_ms, slow_ms, quiet_ms; } drag_t;
 static drag_t DG;
 static struct { bool on; uint8_t target; float amt, hold, bend; } RS;   // the other box (SHAPE) dragging this one's hit
 static uint8_t sh_target;                                                // SHAPE: the other box's hit this one drags
@@ -413,11 +417,13 @@ static void drag_sample(float gm, float wr, float dt_ms)
     if (gm > 12.0f && gm < 0.8f * TH.t_on) DG.slow_ms += dt_ms; else DG.slow_ms = 0.0f;
     if (DG.slow_ms >= 60.0f) { DG.ang += gm * dt_ms * 0.001f; DG.still_ms = 0.0f; }
     else DG.still_ms += dt_ms;
+    DG.quiet_ms = gm > 12.0f ? 0.0f : DG.quiet_ms + dt_ms;
     DG.roll += wr * dt_ms * 0.001f;
 }
 static void drag_tick(void)
 {
     DG.amt = clampf(DG.ang / pv[P_REACH], 0.0f, 1.0f);
+    if (DG.gid && !DG.counted && DG.amt > 0.3f) { DG.counted = true; ad_drags++; }
     float want = DG.on && DG.ang > 4.0f && DG.still_ms < 120.0f ? 1.0f : 0.0f;
     DG.hold += (want - DG.hold) * (want > DG.hold ? 0.5f : 0.065f);
     if (DG.hold < 1e-3f) DG.hold = 0.0f;
@@ -515,9 +521,10 @@ static void loops_ahead(void)
 
 // ---------------------------------------------------------------- NOTES
 // The tilt picks the note: the front edge from 40 degrees down to 40 up runs over SPAN notes of the scale from KEY in
-// OCTAVE; the roll past 35 degrees either way an octave down or up. A hit plays the note the tilt pointed at when the
-// stroke began. A flick: NOTE LENGTH. Moving on slowly after it (the drag's hold) holds it, and it slides to whatever
-// note the tilt points at; still, it ends. Pending note ends and MIDI note ons wait in PN until their frame is near.
+// OCTAVE (each note the middle of its own stretch: level is a note, not the edge between two); the roll past 35
+// degrees either way an octave down or up. A hit plays the note the tilt pointed at when the stroke began. A flick:
+// NOTE LENGTH. If the hand is moving on slowly when that runs out (a drag begun), it holds, and slides to whatever note
+// the tilt points at; once the hand has been still for 150 ms, it ends. Pending note ends and MIDI note ons wait in PN until their frame is near.
 static const int8_t scales[NSCALES][7] = { { 0, 2, 4, 5, 7, 9, 11 }, { 0, 2, 3, 5, 7, 8, 10 }, { 0, 2, 3, 5, 7, 9, 10 },
                                            { 0, 2, 4, 5, 7, 9, 10 }, { 0, 1, 3, 5, 7, 8, 10 }, { 0, 2, 3, 5, 7, 8, 11 } };
 static int tilt_idx_last = -1;
@@ -530,9 +537,9 @@ static int note_of(int idx, int oct)
 static int tilt_idx(float pitch, int last)                           // which note of the SPAN the tilt points at
 {
     int span = clampi((int)pv[P_SPAN], 1, 32);
-    float pos = clampf((pitch + 40.0f) / 80.0f, 0.0f, 0.9999f) * (float)span;
+    float pos = clampf((pitch + 40.0f) / 80.0f * (float)span + 0.5f, 0.0f, (float)span - 0.001f);   // level: a note's middle
     int idx = (int)pos;
-    if (last >= 0 && last < span && pos > (float)last - 0.3f && pos < (float)last + 1.3f) idx = last;   // a little sticky
+    if (last >= 0 && last < span && pos > (float)last - 0.2f && pos < (float)last + 1.2f) idx = last;   // a little sticky
     return idx;
 }
 static int oct_of(float roll) { return roll > 35.0f ? 1 : roll < -35.0f ? -1 : 0; }
@@ -587,8 +594,9 @@ static void notes_tick(void)
         note_t *n = &NT[i];
         if (!n->on) continue;
         bool dragged = DG.gid == n->gid && (int)pv[P_ROLE] == ROLE_NOTES;
-        float hold = dragged ? fmaxf(DG.hold, D.peer_shapes ? RS.hold : 0.0f) : 0.0f;
-        if (!n->held && hold > 0.3f) { n->held = true; pn_cancel_off(n->gid); }
+        bool remote = dragged && D.peer_shapes && RS.hold > 0.3f;     // the other hand (SHAPE) holding it
+        uint32_t due = n->at + (uint32_t)nlen_frames();
+        if (!n->held && dragged && (DG.slow_ms >= 20.0f || DG.hold > 0.3f || remote) && (int32_t)(due - now_frames) < AUDIO_SR * 20 / 1000) { n->held = true; pn_cancel_off(n->gid); }
         if (n->held) {
             int idx = tilt_idx(pitch, n->idx), oct = oct_of(roll);
             if (idx != n->idx || oct != n->oct) {                       // it slides to where the tilt points
@@ -596,7 +604,7 @@ static void notes_tick(void)
                 nev_t e = { .at = 0, .on = 1, .note = (uint8_t)n->note, .vel = 90, .gid = n->gid, .legato = 1 };
                 note_ev(&e);
             }
-            if (hold < 0.1f) note_off_now(n, now_frames);
+            if (!remote && DG.quiet_ms >= 150.0f) note_off_now(n, now_frames);
         }
     }
     // what is due within the next 15 ms goes now, with its own frame
@@ -797,11 +805,13 @@ static void stroke_end(uint32_t frame)
     int vel = velocity(S.peak), pad = pad_of(dp, dy);
     bool back = S.hit_pad >= 0 && S.since_hit_ms < 300.0f && (dp * S.hit_p + dy * S.hit_y) < -0.5f && S.peak < 0.8f * S.hit_peak;
     D.stop_ok = sharp && strong;
+    ad_strokes++; ad_st_peak = S.peak; ad_st_rise = rise; ad_st_fall = fall;
+    ad_st_why = (!sharp) | (!strong) << 1 | (!jolt) << 2 | back << 3 | S.shaking << 4 | easy << 5;
     if (S.shaking) { play_stroke(K_SHAKE, S.hit_pad >= 0 ? S.hit_pad : pad, vel, frame); return; }
     if (easy) { if (S.peak >= 0.8f * TH.t_hit) play_stroke(K_SWING, pad, vel, frame); return; }
     if (!(sharp && strong && jolt) || back) return;
     S.hit_p = dp; S.hit_y = dy; S.hit_peak = S.peak; S.since_hit_ms = 0.0f; S.hit_pad = pad;
-    ad_hit_frame = frame; ad_hit_pad = pad; ad_hit_peak = S.peak; ad_hit_rise = rise; ad_hit_fall = fall;
+    ad_hit_frame = frame; ad_hit_pad = pad; ad_pad_hits[pad]++; ad_hit_peak = S.peak; ad_hit_rise = rise; ad_hit_fall = fall;
     play_stroke(K_HIT, pad, vel, frame);
 }
 // one sample: a, g in the screen's axes (g, deg/s); frame: when it was taken; dt_ms: since the last
@@ -1104,6 +1114,7 @@ static void tick(const ctl_t *c)
 
 static void changed(int p)
 {
+    if (p == P_PATTERN || p == P_EASY || p == P_ROLE) step_i = 0;   // a new pattern starts at its first step
     if (applying) return;
     if (p >= P_LOOP1 && p <= P_LOOP4) {
         int k = p - P_LOOP1;

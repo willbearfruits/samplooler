@@ -66,6 +66,7 @@ tools/iram_lf.py
 tools/linktest/.gitignore
 tools/linktest/linktest.c
 tools/linktest/run.sh
+tools/motion_rec.py
 tools/sim/core_checks.c
 tools/sim/driver/i2c_master.h
 tools/sim/esp_log.h
@@ -77,4 +78,6 @@ tools/sim/render.py
 tools/sim/sdkconfig.h
 tools/sim/sim.c
 tools/sim/sim.h
+tools/sim/take.c
+tools/sim/take.h
 tools/sl_midi.py

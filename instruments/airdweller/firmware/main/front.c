@@ -458,6 +458,66 @@ static void telemetry(void)
     }
 }
 
+// ---------------------------------------------------------------- the motion stream (front.h; tools/motion_rec.py)
+#define MO_QUIET_TICKS 200                     // 2 s in which nothing went out: nobody reads, the stream stops
+static bool     mo_on;
+static uint8_t  mo_seq;
+static uint32_t mo_sent, mo_drops;
+static int      mo_fail;                       // ticks in a row that nothing went out
+
+bool front_motion_on(void) { return mo_on; }
+
+static int q14(float v, float scale, int lim)  // a signed 14-bit step count, clamped to +-lim
+{
+    uint32_t u; memcpy(&u, &v, 4);
+    if ((u & 0x7f800000u) == 0x7f800000u) return 0;            // NaN or inf (a bit test: -ffast-math drops v != v)
+    float s = v * scale;
+    if (s >= (float)lim) return lim;
+    if (s <= (float)-lim) return -lim;
+    return (int)(s + (s >= 0.0f ? 0.5f : -0.5f));
+}
+
+int front_motion_packet(uint8_t *m, uint8_t seq, uint32_t frames, uint8_t flags, const vec3_t *acc, const vec3_t *gyro, int n)
+{
+    if (n < 0) n = 0;
+    if (n > MOTION_MAX) n = MOTION_MAX;
+    int k = 0;
+    m[k++] = 0xF0; m[k++] = 0x7D; m[k++] = 'm';
+    m[k++] = seq & 0x7F;
+    for (int s = 28; s >= 0; s -= 7) m[k++] = (uint8_t)((frames >> s) & 0x7F);
+    m[k++] = flags & 0x7F;
+    m[k++] = (uint8_t)n;
+    for (int i = 0; i < n; i++) {
+        const vec3_t z = { 0, 0, 0 }, *a = &acc[i], *g = gyro ? &gyro[i] : &z;
+        int q[6] = { q14(a->x, 1024.0f, 8191), q14(a->y, 1024.0f, 8191), q14(a->z, 1024.0f, 8191),
+                     q14(g->x, 4.0f, 8000), q14(g->y, 4.0f, 8000), q14(g->z, 4.0f, 8000) };
+        for (int j = 0; j < 6; j++) { unsigned w = (unsigned)q[j] & 0x3FFFu; m[k++] = (uint8_t)(w >> 7); m[k++] = (uint8_t)(w & 0x7F); }
+    }
+    m[k++] = 0xF7;
+    return k;
+}
+
+static void motion_set(bool on)
+{
+    if (on && !INST.burst) { app_log("motion: %s has no 1 kHz motion (INST.burst): no stream", INST.name); on = false; }
+    if (on) { mo_seq = 0; mo_sent = mo_drops = 0; mo_fail = 0; app_log("motion: on"); }
+    else if (mo_on) app_log("motion: off, %lu sent, %lu dropped", (unsigned long)mo_sent, (unsigned long)mo_drops);
+    mo_on = on;
+}
+
+// One message a tick with what the instrument was just given (ctl), the raw REC and the knob. Never waits.
+static void motion_tick(bool rec, bool knob)
+{
+    if (!mo_on) return;
+    static UI_RAM uint8_t m[12 + MOTION_MAX * 12];
+    uint8_t fl = (uint8_t)((rec ? 1 : 0) | (knob ? 2 : 0) | (ctl.gburst ? 4 : 0));
+    int k = front_motion_packet(m, mo_seq, ctl.frames, fl, ctl.burst, ctl.gburst, ctl.nburst);
+    mo_seq = (uint8_t)((mo_seq + 1) & 0x7F);
+    if (plat_sysex_try(m, k)) { mo_sent++; mo_fail = 0; return; }
+    mo_drops++;
+    if (++mo_fail >= MO_QUIET_TICKS) { app_log("motion: nothing went out for 2 s, stream stopped"); motion_set(false); }
+}
+
 static void calib_tick(const front_in_t *in, bool hold)
 {
     if (hold) { scr = SCR_PLAY; if (!meta.calibrated) toast("TILT NOT SET: SYSTEM MENU", 2000); return; }
@@ -613,6 +673,7 @@ void front_tick(const front_in_t *in)
     }
     if (motion && (fabsf(lean_x) > 20.0f || fabsf(lean_y) > 20.0f)) coach_done(LEARN_TILT);
     INST.tick(&ctl);
+    motion_tick(in->rec || midi_rec, in->pressed);
     if (ticks % 2 == 0) telemetry();
 
     // timers
@@ -783,6 +844,7 @@ void front_sysex(uint8_t cmd, const uint8_t *body, int n)
     if (n > (int)sizeof t - 1) n = (int)sizeof t - 1;
     for (int i = 0; i < n; i++) t[i] = (char)body[i];
     t[n < 0 ? 0 : n] = 0;
+    if (cmd == 'M') { motion_set(n > 0 && body[0] == 1); return; }   // the motion stream (not the app's line)
     rm_quiet_ms = 0;
     if (cmd == 'I') {
         int shown = 0;

@@ -66,6 +66,10 @@ float sim_noise(void);                         // -1..1
 extern char sim_sysex[256][720];
 extern int  sim_sysex_n;
 extern bool sim_sysex_off;
+// the motion stream (plat_sysex_try): every message sent, raw, F0 .. F7 back to back, as the host would read them.
+// Full at 256 KB (about 20 s of the stream): then it takes nothing more, as a host that stopped reading.
+extern uint8_t sim_sx_raw[1 << 18];
+extern int     sim_sx_raw_n;
 
 // checks: printed, counted, and written to out/results.json with the section they ran in
 extern int checks_run, checks_failed;

@@ -1,15 +1,18 @@
 // The checks every instrument gets: its tables (tags, ranges, what fits on the screen), its sounds,
 // flash and MIDI round trips, a walk through the whole menu, the looper, tilt setup for all 24 ways the
-// IMU can sit, a factory reset, no NaN, nothing over full scale, and no click at any parameter's edge.
+// IMU can sit, a factory reset, no NaN, nothing over full scale, and no click at any parameter's edge. After the
+// instrument's own tests: the motion stream and takes (core_late_checks).
 #include "sim.h"
 #include "looper.h"
 #include "calib.h"
 #include "oled.h"
 #include "ui.h"
 #include "dsp.h"
+#include "take.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 // ---------------------------------------------------------------- menu navigation by the controls only
 static int group_list(int *g)                  // as front.c's build_groups: SOUND, the instrument's, LOOP, SYSTEM
@@ -268,6 +271,180 @@ static void app_line(void)
         check(sim_sysex_n == from, "a message that cannot go out quiets the line");
         param_set(p, param(p)->def);
     }
+}
+
+// ---------------------------------------------------------------- the motion stream and takes (front.h, take.c, motion_rec.py)
+static float comp(const vec3_t *v, int j) { return j == 0 ? v->x : j == 1 ? v->y : v->z; }
+// A synthetic take: a slow tilt and turn (gentle, so no instrument hears a hit), off the 14-bit grid on purpose;
+// 200 samples, 100 ms without any (a gap), 100 more
+static void synth_sample(int i, vec3_t *a, vec3_t *g)
+{
+    float t = (float)i * 0.001f;
+    *a = (vec3_t){ 0.1f * sinf(8.2f * t) + 0.00031f, 0.08f * cosf(4.4f * t) - 0.00017f, 1.0f + 0.02f * sinf(31.4f * t) };
+    *g = (vec3_t){ 25.0f * sinf(6.0f * t) + 0.061f, -15.0f * cosf(3.0f * t) - 0.033f, 30.0f * sinf(9.0f * t) + 0.07f };
+}
+static int synth_frame(int i) { return i < 200 ? 32 * i : 9600 + 32 * (i - 200); }
+static bool next_sx(const uint8_t *b, int n, int *pos, const uint8_t **m, int *len)   // the next F0 .. F7 from *pos
+{
+    while (*pos < n && b[*pos] != 0xF0) (*pos)++;
+    int s = *pos;
+    while (*pos < n && b[*pos] != 0xF7) (*pos)++;
+    if (*pos >= n) return false;
+    (*pos)++;
+    *m = b + s; *len = *pos - s;
+    return true;
+}
+
+static void motion_takes(void)
+{
+    section("motion stream and takes");
+    sim_in_t keep = SI;                        // whatever the instrument's tests left: a mic callback may write SI.burst
+    bool sysex_off = sim_sysex_off;
+    SI.mic = NULL; SI.imu = true; SI.rec = SI.pressed = SI.tap = false; SI.enc = 0; SI.nburst = 0;
+    sim_sysex_off = false;
+    // one message by hand: every field, the clamps, the flags
+    static const vec3_t a3[3] = { { 7.99f, -9.0f, 0.0004f }, { -1.2345f, 0.5f, 1.0f }, { 0.0f, -8.0f, 3.3333f } };
+    static const vec3_t g3[3] = { { 1999.9f, -2500.0f, 0.1f }, { -0.125f, 12.37f, -1000.0f }, { 0.0f, 0.0f, 2000.0f } };
+    static uint8_t m[12 + MOTION_MAX * 12];
+    static take_pkt_t pk;
+    int len = front_motion_packet(m, 0x55, 0xF2345678u, 7, a3, g3, 3);
+    bool ok = len == 48 && take_unpack(m, len, &pk) && pk.seq == 0x55 && pk.frames == 0xF2345678u && pk.flags == 7 && pk.n == 3;
+    float worst = 0;
+    for (int i = 0; ok && i < 3; i++)
+        for (int j = 0; j < 3; j++) {
+            float want = fmaxf(-8191.0f / 1024.0f, fminf(8191.0f / 1024.0f, comp(&a3[i], j)));
+            worst = fmaxf(worst, fabsf(comp(&pk.acc[i], j) - want) * 1024.0f);
+            want = fmaxf(-2000.0f, fminf(2000.0f, comp(&g3[i], j)));
+            worst = fmaxf(worst, fabsf(comp(&pk.gyro[i], j) - want) * 4.0f);
+        }
+    check(ok && worst <= 0.501f, "a motion message (%d bytes, 7-bit) unpacks to its seq, frames, flags and values within half a step "
+          "(worst %.3f), clamped at 8 g and 2000 deg/s", len, (double)worst);
+
+    // a synthetic take on file, read back
+    enum { N = 300 };
+    static vec3_t sa[N], sg[N];
+    FILE *f = fopen("out/motion-check.take", "w");
+    if (!f) { check(false, "out/motion-check.take could not be written"); SI = keep; sim_sysex_off = sysex_off; return; }
+    fprintf(f, "{\"format\": \"samplooler-take/1\", \"instrument\": \"%s\", \"take\": \"check\", \"rate\": 1000, \"axes\": \"screen\", "
+               "\"label\": {\"hits\": {\"LEFT\": 2, \"FRONT\": 1}, \"others\": 0}}\n", INST.name);
+    for (int i = 0; i < N; i++) {
+        synth_sample(i, &sa[i], &sg[i]);
+        fprintf(f, "%d %.6f %.6f %.6f %.6f %.6f %.6f %d\n", synth_frame(i), (double)sa[i].x, (double)sa[i].y, (double)sa[i].z,
+                (double)sg[i].x, (double)sg[i].y, (double)sg[i].z, TAKE_GYRO | (i == 200 ? TAKE_GAP : 0));
+    }
+    fclose(f);
+    take_t *t = take_load("out/motion-check.take");
+    char keys[4][24], v[32];
+    int nk = t ? take_keys(t, "label.hits", keys, 4) : 0;
+    check(t && t->n == N && t->gaps == 1 && fabsf(t->secs - 12768.0f / 32000.0f) < 1e-6f && take_num(t, "label.hits.LEFT", -1) == 2.0f
+          && take_num(t, "label.others", -1) == 0.0f && nk == 2 && !strcmp(keys[0], "LEFT") && !strcmp(keys[1], "FRONT")
+          && take_get(t, "take", v, sizeof v) && !strcmp(v, "check"),
+          "a take file loads: %d samples, one gap, %.3f s, and its label reads back", t ? t->n : 0, t ? (double)t->secs : 0.0);
+    if (!t) { SI = keep; sim_sysex_off = sysex_off; return; }
+
+    // replayed with the stream on: what the feeder gives, and what goes out of the instrument's ctl
+    bool motion_was = pv[CP(CP_MOTION)] >= 1.0f;
+    if (!motion_was) param_set(CP(CP_MOTION), 1);
+    bool want_gyro = INST.burst_gyro && !front_status()->frozen;
+    int raw0 = sim_sx_raw_n;
+    front_sysex('M', (const uint8_t *)"\x01", 1);
+    bool on = front_motion_on();
+    take_begin(t);
+    int ticks = 0, fed = 0;
+    float feed_err = 0;
+    static uint32_t tick_frames[64];
+    while (take_feed(t)) {
+        for (int k = 0; k < SI.nburst && fed < N; k++, fed++)
+            for (int j = 0; j < 3; j++) {
+                feed_err = fmaxf(feed_err, fabsf(comp(&SI.burst[k], j) - comp(&sa[fed], j)));
+                feed_err = fmaxf(feed_err, fabsf(comp(&SI.gburst[k], j) - comp(&sg[fed], j)));
+            }
+        sim_tick();
+        if (ticks < 64) tick_frames[ticks] = audio_frames();
+        ticks++;
+    }
+    front_sysex('M', (const uint8_t *)"\x00", 1);
+    bool off = !front_motion_on();
+    int raw1 = sim_sx_raw_n;
+    sim_tick();
+    bool quiet = sim_sx_raw_n == raw1;
+    check(fed == N && feed_err < 1e-5f && ticks == 40, "the feeder hands every sample over in its own tick, across the gap "
+          "(%d of %d in %d ticks, worst %.2g off the file)", fed, N, ticks, (double)feed_err);
+    if (!INST.burst) check(!on && raw1 == raw0 && quiet, "no INST.burst: 'M' 1 starts nothing, nothing goes out");
+    else {
+        int pos = raw0, msgs = 0, bad = 0, samples = 0, empty = 0, misplaced = 0, seq_bad = 0, frames_bad = 0, gyro_bad = 0;
+        float qa = 0, qg = 0;
+        const uint8_t *mm; int ml;
+        while (next_sx(sim_sx_raw, raw1, &pos, &mm, &ml)) {
+            if (!take_unpack(mm, ml, &pk)) { bad++; continue; }
+            if (pk.seq != (msgs & 0x7F)) seq_bad++;
+            if (msgs < 64 && pk.frames != tick_frames[msgs]) frames_bad++;
+            if ((pk.n && ((pk.flags & TAKE_GYRO) != 0) != want_gyro) || (pk.flags & (TAKE_REC | TAKE_KNOB))) gyro_bad++;   // no samples: no gyro
+            if (pk.n == 0) empty++;
+            for (int k = 0; k < pk.n && samples < N; k++, samples++) {
+                int64_t at = (int64_t)t->base + synth_frame(samples);     // where it belongs in the sim's frames
+                if (!(at < (int64_t)pk.frames && at >= (int64_t)pk.frames - TICK_FRAMES)) misplaced++;
+                for (int j = 0; j < 3; j++) {
+                    qa = fmaxf(qa, fabsf(comp(&pk.acc[k], j) - comp(&sa[samples], j)) * 1024.0f);
+                    if (want_gyro) qg = fmaxf(qg, fabsf(comp(&pk.gyro[k], j) - comp(&sg[samples], j)) * 4.0f);
+                }
+            }
+            msgs++;
+        }
+        check(on && msgs == ticks && bad == 0 && seq_bad == 0 && frames_bad == 0 && gyro_bad == 0,
+              "'M' 1 starts the stream: one whole message a tick (%d for %d ticks), seq counting up, the tick's frames, flags "
+              "(gyro %s)", msgs, ticks, want_gyro ? "on" : "off");
+        check(samples == N && qa <= 0.501f && qg <= 0.501f, "what the instrument was given goes out within half a 14-bit step "
+              "(%d samples, worst %.3f / %.3f steps)", samples, (double)qa, (double)qg);
+        check(empty == 10 && misplaced == 0, "the gap goes out as 10 ticks without samples, and every sample in its own tick "
+              "(%d empty, %d out of place)", empty, misplaced);
+        check(off && quiet, "'M' 0 stops it: nothing more goes out");
+        // the other end: tools/motion_rec.py's decoder on these very bytes
+        FILE *x = fopen("out/motion-check.syx", "wb");
+        if (x) { fwrite(sim_sx_raw + raw0, 1, (size_t)(raw1 - raw0), x); fclose(x); }
+        if (access("../motion_rec.py", R_OK) == 0) {
+            FILE *py = popen("python3 ../motion_rec.py verify out/motion-check.syx out/motion-check.take 2>&1", "r");
+            char line[256];
+            while (py && fgets(line, sizeof line, py)) { line[strcspn(line, "\n")] = 0; note("%s", line); }
+            int rc = py ? pclose(py) : -1;
+            check(rc == 0, "tools/motion_rec.py decodes the same bytes to the same take (verify: %s)", rc == 0 ? "ok" : "failed");
+        } else note("tools/motion_rec.py is not beside tools/sim: its decoder was not checked");
+    }
+    take_free(t);
+
+    // REC and the knob, at the feeder only (ticked, a REC or a knob press would play the instrument)
+    f = fopen("out/motion-flags.take", "w");
+    take_t *u = NULL;
+    if (f) {
+        fprintf(f, "{\"take\": \"flags\"}\n");
+        for (int i = 0; i < 1600; i++) {
+            int fl = (i >= 100 && i < 300 ? TAKE_REC : 0) | ((i >= 400 && i < 550) || (i >= 700 && i < 1500) ? TAKE_KNOB : 0);
+            fprintf(f, "%d 0 0 1 0 0 0 %d\n", 32 * i, fl);
+        }
+        fclose(f);
+        u = take_load("out/motion-flags.take");
+    }
+    int rec_ticks = 0, knob_ticks = 0, taps = 0, tap_tick = -1, k = 1;
+    bool let_go = false;
+    if (u) {
+        take_begin(u);
+        for (;; k++) {
+            SI.tap = false;
+            bool more = take_feed_at(u, u->base + (uint32_t)(TICK_FRAMES * k));
+            rec_ticks += SI.rec; knob_ticks += SI.pressed;
+            if (SI.tap) { taps++; tap_tick = k; }
+            if (!more) { let_go = !SI.rec && !SI.pressed; break; }
+        }
+    }
+    check(u && rec_ticks == 20 && knob_ticks == 95 && taps == 1 && tap_tick == 56 && let_go && k == 161,
+          "REC and the knob come back from the flags: REC 20 ticks, the knob 95, a 150 ms press also taps, a long one does not "
+          "(%d, %d, %d tap at tick %d)", rec_ticks, knob_ticks, taps, tap_tick);
+    take_free(u);
+    SI.nburst = 0; SI.tap = false; SI.rec = false; SI.pressed = false;
+    if (!motion_was) param_set(CP(CP_MOTION), 0);
+    sim_run(0.1f);
+    SI = keep; SI.nburst = 0; SI.tap = false; SI.enc = 0;
+    sim_sysex_off = sysex_off;
 }
 
 // With INST.knob the knob in play turns that param, and the sounds are walked in SOUND > SOUND instead.
@@ -560,5 +737,8 @@ void core_checks(void)
     screens();
     factory_reset();
 }
+
+// After the instrument's own tests, so the time and the motion it takes cannot change what they hear.
+void core_late_checks(void) { motion_takes(); }
 
 void core_health(void) { health(); }

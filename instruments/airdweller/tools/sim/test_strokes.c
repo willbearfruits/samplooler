@@ -188,7 +188,9 @@ static float st_last = -1.0f;
 float st_mic(float t, void *u)
 {
     (void)u;
-    uint32_t f = (uint32_t)(t * (float)AUDIO_SR + 0.5f);
-    if (f % TICK_FRAMES == 0 && (t > st_last || t < st_last - 0.001f)) { st_motion(t); st_last = t; }   // at each tick's first sample
+    // once a tick, at its first sample, counted in whole frames (a float time drifts off the tick after a minute)
+    static uint32_t tick_last = 0xFFFFFFFFu;
+    uint32_t tk = audio_frames() / TICK_FRAMES;
+    if (tk != tick_last) { tick_last = tk; st_motion((float)tk * 0.01f); st_last = t; }
     return 0.0008f * sim_noise();
 }

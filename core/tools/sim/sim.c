@@ -51,6 +51,16 @@ bool plat_sysex(const uint8_t *m, int n)
     sim_sysex_n++;
     return true;
 }
+uint8_t sim_sx_raw[1 << 18]; int sim_sx_raw_n;
+bool plat_sysex_try(const uint8_t *m, int n)
+{
+    if (sim_sysex_off) return false;
+    if (n < 3 || m[0] != 0xF0 || m[n - 1] != 0xF7) return false;
+    if (sim_sx_raw_n + n > (int)sizeof sim_sx_raw) return false;
+    memcpy(sim_sx_raw + sim_sx_raw_n, m, (size_t)n);
+    sim_sx_raw_n += n;
+    return true;
+}
 const char *plat_version(void) { return "0.1.0-sim"; }
 const char *plat_serial(void) { return "SM-00000000"; }
 int  plat_about(char l[][32], int max)

@@ -114,7 +114,8 @@ with the sound. The sim checks every one of these limits.
 
 Motion at 1 kHz: `INST.burst` fills `ctl.burst` (the accelerometer samples since the last tick, oldest first, screen axes);
 `INST.burst_gyro` adds `ctl.gburst`, the gyro at the same instants (°/s; NULL while frozen). The chip's FIFO then holds
-85 ms, so it is read every tick. The simulator's `SI.burst` and `SI.gburst` feed them.
+85 ms, so it is read every tick. The simulator's `SI.burst` and `SI.gburst` feed them. The motion stream records them
+from a board, and the simulator plays them back ("Motion takes" below).
 
 ## The coach
 
@@ -134,7 +135,8 @@ program change picks a sound, CC 64 (a sustain pedal) is REC, note 60 is REC and
 hold unless the instrument plays MIDI notes (`INST.midi_notes`: then every note goes to it), and the rest
 goes to `INST.midi_in`. One channel (SYSTEM > MIDI
 CH) for everything except what the instrument sends on purpose elsewhere (`midi_note_ch`, drums on 10).
-SysEx `F0 7D 52 F7` reboots into download mode, `F0 7D 53 F7` logs status and the last crash.
+SysEx `F0 7D 52 F7` reboots into download mode, `F0 7D 53 F7` logs status and the last crash, `F0 7D 4D 01 F7` and
+`F0 7D 4D 00 F7` start and stop the motion stream ("Motion takes" below).
 
 ## The app's line
 
@@ -195,7 +197,75 @@ flash and MIDI round trips, the whole menu, tilt setup for all 24 mountings, the
 edges for clicks, the screensaver, the factory reset, no NaN, nothing over full scale), then the
 instrument's own (`tools/sim/test_inst.c`). Out: `out/<name>.png` (every screen shot), `out/<name>-*.gif`
 (animations at 25 fps), `out/<name>.wav` (all of it), `out/results.json`. `./run.sh inst` runs only the
-instrument's own scenarios.
+instrument's own scenarios. `tools/sim/take.c` replays recorded motion (below): each instrument's `run.sh`
+compiles it with the sim's own files (`sim core_checks main take ...`).
+
+## Motion takes
+
+A player's real gestures, recorded from a board and replayed in the simulator as tests.
+
+**The stream** (`front.c`). SysEx `F0 7D 4D 01 F7` ('M' 1) starts it, `F0 7D 4D 00 F7` stops it; it is off at boot.
+While it is on, an instrument with `INST.burst` sends one message a tick with what the instrument was just given
+(`ctl.burst`, `ctl.gburst`, screen axes):
+
+| Bytes | |
+| - | - |
+| `F0 7D 6D` | 'm' |
+| 1 | a sequence number, 7 bits, wrapping |
+| 5 | `ctl.frames`, 7 bits each, most significant first |
+| 1 | flags: 1 REC down, 2 the knob down, 4 gyro present (none on a tick without samples, or while the motion is held) |
+| 1 | n, the tick's samples: about 10, at most 20 on the board |
+| 12 n | each sample's ax ay az gx gy gz, a signed 14-bit value each as two 7-bit bytes, high first: accel in 1/1024 g (clamped at 8 g), gyro in 1/4 deg/s (clamped at 2000) |
+| `F7` | |
+
+That is 12 + 12 n bytes: 132 for ten samples, 13.2 KB/s of SysEx. On USB it travels as 44 four-byte USB-MIDI packets a
+tick (17.6 KB/s), three 64-byte bulk transfers. TinyUSB starts the next transfer as soon as one ends; even one a
+1 ms USB frame would carry 64 KB/s, so the stream needs about a quarter of the slowest case, beside the sound card's
+isochronous streams. TinyUSB's MIDI buffer holds 1024 bytes, about 58 ms of the stream. Computed, not yet measured on
+a board: the first takes will show it (the sequence numbers and the board's drop count).
+
+The message goes out from the UI task and never waits (`plat_sysex_try` in `usb.c`): the MIDI lock is tried once (a
+log line from another task may hold it), and a message that does not fit in TinyUSB's buffer is dropped and counted.
+After 2 s in which nothing went out (nobody reads) the stream stops by itself. The log says `motion: on` and
+`motion: off, N sent, M dropped`. The stream carries the 1 kHz samples only: `ctl.acc` and `ctl.gyro` (the 100 Hz
+reading) come back in the simulator as each tick's last sample.
+
+**The recorder** (`tools/motion_rec.py`, Python, no packages; it finds boards by their MIDI port's name, never a
+TWOFOLD, and reads each in a thread of its own):
+
+    python3 tools/motion_rec.py list
+    python3 tools/motion_rec.py take left-x10 --secs 20 --label '{"hits": {"LEFT": 10}, "others": 0}'
+    python3 tools/motion_rec.py guided --instrument airdweller [--all] [--from drag]
+    python3 tools/motion_rec.py show ../../lab/takes/airdweller/*.take
+
+`take` starts the stream, counts down 3-2-1, records, stops the stream and saves. `guided` walks through
+`instruments/<id>/tools/takes.json`, a list of `{name, prompt, secs, label}`: Enter records, r redoes, s skips, q
+stops. `--all` records every board at once, each to its own file, with the same name and the same start. `stop`
+stops a stream left running; `convert` turns raw SysEx bytes (`amidi -r`) into a take.
+
+Takes go to `lab/takes/<instrument>/<YYYY-MM-DD>-<name>-<serial>.take` beside the repository (`MOTION_TAKES=<dir>`
+elsewhere). A take is a JSON header line (instrument, version, serial, date, take, prompt, label, rate, axes, units,
+ticks, gaps, the board's sent and dropped counts), then one line per sample: `frame ax ay az gx gy gz flags`. Frame is
+in audio frames from the first sample, accel in g, gyro in deg/s; the flags as above, plus 8 on the first sample
+after messages were lost. A tick's last sample sits at the tick's frame count, the others spread evenly back to the
+tick before (32 frames apart after a gap).
+
+A label says what the replay should find: `{"hits": {"LEFT": 10}, "others": 0}` exactly those hits and no others;
+`{"only": "LEFT"}` any number, all LEFT; `{"hits": {}}` none; `{"any": true}` anything, but no NaN and nothing stuck;
+`{}` nothing to check. An instrument may add keys of its own (AIRDWELLER's `drags`).
+
+**The replay** (`tools/sim/take.c`, `take.h`). `take_load()` reads a take whole. `take_begin()` then `take_feed()`
+before each `sim_tick()` puts each sample in the tick its frame falls in: `SI.burst`, `SI.gburst`, `SI.nburst`;
+`SI.acc` and `SI.gyro` from the tick's last sample; `SI.rec` and `SI.pressed` from the flags (a press of 40 to 500 ms
+also taps, as on the board). A gap is ticks without samples: time runs on, nothing is made up. `take_run()` plays a
+take to the end; `take_num(t, "label.hits.LEFT", -1)` and `take_keys(t, "label.hits", ...)` read the label. `lab/` is
+not in the repository, so a test that replays a take should skip it when the file is not there.
+
+The core's check ("motion stream and takes") runs for every instrument, after the instrument's own tests (so the time
+and the motion it takes cannot change what they hear): one message by hand (every field, the clamps),
+a synthetic take with a gap through the feeder, the instrument's `ctl` and the stream (back within half a 14-bit step,
+every sample in its tick), REC and the knob from the flags, and `motion_rec.py verify` on the same bytes (packed again
+byte for byte, the same take, three lost messages, the counters wrapping).
 
 ## Flashing
 
