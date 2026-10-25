@@ -36,7 +36,7 @@ static uint32_t ticks;
 static float  t_now;
 
 // ---------------------------------------------------------------- motion
-static vec3_t acc_s = { 0, 0, 1 }, gyro_s, burst_s[64];
+static vec3_t acc_s = { 0, 0, 1 }, gyro_s, burst_s[64], gburst_s[64];
 static vec3_t raw_avg = { 0, 0, 1 };
 static float  lean_x, lean_y;
 static ctl_t  ctl;
@@ -499,6 +499,8 @@ void front_tick(const front_in_t *in)
     }
     int nb = 0;
     if (INST.burst && motion) { nb = in->nburst > 64 ? 64 : in->nburst; for (int i = 0; i < nb; i++) burst_s[i] = to_screen(&in->burst_raw[i]); }
+    bool gb = INST.burst_gyro && nb > 0 && in->gburst_raw && !frozen;
+    if (gb) for (int i = 0; i < nb; i++) gburst_s[i] = to_screen(&in->gburst_raw[i]);
 
     // the knob: a hold fires once at HOLD_MS; the release after it is not a tap
     if (!in->pressed) hold_used = false;
@@ -594,7 +596,7 @@ void front_tick(const front_in_t *in)
         .rec = INST.looper ? false : rec_now, .rec_press = INST.looper ? false : rec_press,
         .rec_release = INST.looper ? false : rec_release, .rec_ms = rec_release ? rec_held : rec_ms,
         .has_imu = motion, .frozen = frozen, .acc = acc_s, .gyro = frozen ? (vec3_t){ 0, 0, 0 } : gyro_s,
-        .lean_x = lean_x, .lean_y = lean_y, .burst = burst_s, .nburst = nb,
+        .lean_x = lean_x, .lean_y = lean_y, .burst = burst_s, .nburst = nb, .gburst = gb ? gburst_s : NULL,
         .has_joy = in->joy_ok && pv[CP(CP_JOY)] >= 1.0f, .menu_open = mlev > 0,
         .knob = g_enc, .knob_tap = g_tap, .knob_hold = g_hold, .knob_down = grab && in->pressed, .knob_turned = grab && grab_turned,
     };

@@ -20,6 +20,7 @@ typedef struct {
     bool     imu_ok;           // there is an IMU
     vec3_t   acc_raw, gyro_raw;            // in the IMU's own axes
     const vec3_t *burst_raw;   int nburst; // ditto, 1 kHz (instruments with INST.burst)
+    const vec3_t *gburst_raw;              // the gyro at the same instants (INST.burst_gyro), or NULL
     bool     joy_ok;           // a joystick was found
     float    jx, jy;
     float    dt;

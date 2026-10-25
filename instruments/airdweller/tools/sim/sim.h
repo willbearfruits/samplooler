@@ -23,6 +23,7 @@ typedef struct {
     bool    imu;               // an IMU is fitted (true by default)
     vec3_t  acc, gyro;         // in screen axes (the sim's tilt setup is the identity)
     vec3_t  burst[64];         // 1 kHz accelerometer for this tick (INST.burst); nburst cleared after it
+    vec3_t  gburst[64];        // the gyro at the same instants (INST.burst_gyro), screen axes like gyro
     int     nburst;
     bool    joy;               // a joystick is fitted
     float   jx, jy;

@@ -149,7 +149,7 @@ void sim_wav(const char *suffix, float t0, float t1)
 // The sim's IMU is a right-handed one fitted with x to the right and z out of the screen, so its y points
 // to the top edge: screen y is its -y (meta.axis 1, -2, 3, what tilt setup finds for it).
 static vec3_t imu_axes(vec3_t s) { return (vec3_t){ s.x, -s.y, s.z }; }
-static vec3_t burst_raw[64];
+static vec3_t burst_raw[64], gburst_raw[64];
 
 __attribute__((weak)) void sim_tick_hook(void) { }
 
@@ -169,11 +169,11 @@ void sim_tick(void)
         frames_now += AUDIO_BLOCK;
     }
     sim_t = (float)frames_now / (float)AUDIO_SR;
-    for (int i = 0; i < SI.nburst && i < 64; i++) burst_raw[i] = imu_axes(SI.burst[i]);   // after the audio: a mic callback may have filled it
+    for (int i = 0; i < SI.nburst && i < 64; i++) { burst_raw[i] = imu_axes(SI.burst[i]); gburst_raw[i] = imu_axes(SI.gburst[i]); }   // after the audio: a mic callback may have filled them
     held_ms = SI.pressed ? held_ms + 10 : 0;
     front_in_t fi = {
         .enc = SI.enc, .tap = SI.tap, .pressed = SI.pressed, .held_ms = held_ms, .rec = SI.rec,
-        .imu_ok = SI.imu, .acc_raw = imu_axes(SI.acc), .gyro_raw = imu_axes(SI.gyro), .burst_raw = burst_raw, .nburst = SI.nburst,
+        .imu_ok = SI.imu, .acc_raw = imu_axes(SI.acc), .gyro_raw = imu_axes(SI.gyro), .burst_raw = burst_raw, .nburst = SI.nburst, .gburst_raw = gburst_raw,
         .joy_ok = SI.joy, .jx = SI.jx, .jy = SI.jy, .dt = 0.01f, .frames = frames_now,
     };
     front_tick(&fi);

@@ -6,7 +6,7 @@
 static const char *TAG = "imu";
 static i2c_master_dev_handle_t dev;
 static i2c_master_bus_handle_t bus_h;
-static bool present, burst;
+static bool present, burst, burst_g;
 static int  streak, fails_total;              // consecutive and total failed reads
 static int64_t t_next, t_fail_log;            // backed off: next read not before t_next
 static imu_vec_t last_a = { 0, 0, 1 }, last_g;
@@ -82,7 +82,7 @@ bool imu_read(imu_vec_t *a, imu_vec_t *g)
 
 static bool fifo_reset(void)
 {
-    return wr(R_FIFO_EN, 0) && wr(R_USER_CTRL, 0x04) && wr(R_USER_CTRL, 0x40) && wr(R_FIFO_EN, 0x08);
+    return wr(R_FIFO_EN, 0) && wr(R_USER_CTRL, 0x04) && wr(R_USER_CTRL, 0x40) && wr(R_FIFO_EN, burst_g ? 0x78 : 0x08);
 }
 
 void imu_burst(bool on)
@@ -91,26 +91,33 @@ void imu_burst(bool on)
     burst = on;
     if (on) { wr(R_CONFIG, DLPF_BURST); fifo_reset(); uint8_t s; rd(R_INT_STATUS, &s, 1); }
     else { wr(R_FIFO_EN, 0); wr(R_USER_CTRL, 0x04); wr(R_CONFIG, DLPF_CALM); }
-    ESP_LOGI(TAG, "burst %s", on ? "on: 1 kHz accelerometer FIFO" : "off");
+    ESP_LOGI(TAG, "burst %s", on ? (burst_g ? "on: 1 kHz accelerometer and gyro FIFO" : "on: 1 kHz accelerometer FIFO") : "off");
 }
 
-// Six bytes per sample (accelerometer only). The FIFO holds 1024 bytes, 170 ms: read at least every
-// 100 ms. An overflow leaves it misaligned (1024 is not a multiple of 6), so it is reset and the
-// samples in it dropped.
-int imu_burst_read(imu_vec_t *dst, int max)
+void imu_burst_gyro(bool on) { if (!burst) burst_g = on; }
+
+// Six bytes per sample (accelerometer only), or twelve with the gyro (the chip's order: accelerometer, then gyro).
+// The FIFO holds 1024 bytes, 170 ms of the accelerometer alone or 85 ms with the gyro: read it every control tick. An
+// overflow leaves it misaligned (1024 is not a multiple of 6 or 12), so it is reset and the samples in it dropped.
+int imu_burst_read(imu_vec_t *dst, int max) { return imu_burst_read2(dst, NULL, max); }
+int imu_burst_read2(imu_vec_t *dst, imu_vec_t *gyro, int max)
 {
     if (!present || !burst) return 0;
+    const int bps = burst_g ? 12 : 6;
     uint8_t c[2], st = 0;
     if (!rd(R_INT_STATUS, &st, 1) || !rd(R_FIFO_COUNT, c, 2)) { failed(esp_timer_get_time()); return 0; }
     int count = c[0] << 8 | c[1];
     if ((st & 0x10) || count >= 1020) { fifo_reset(); return 0; }
-    int n = count / 6;
+    int n = count / bps;
     if (n > max) n = max;
-    if (n > 40) n = 40;                       // one transfer of at most 240 bytes; the rest waits for the next call
+    if (n > 240 / bps) n = 240 / bps;         // one transfer of at most 240 bytes; the rest waits for the next call
     if (n <= 0) return 0;
     uint8_t b[240];
-    if (!rd(R_FIFO_RW, b, n * 6)) { failed(esp_timer_get_time()); fifo_reset(); return 0; }
-    for (int i = 0; i < n; i++)
-        dst[i] = (imu_vec_t){ s16(b + 6 * i) / ACC_LSB_G, s16(b + 6 * i + 2) / ACC_LSB_G, s16(b + 6 * i + 4) / ACC_LSB_G };
+    if (!rd(R_FIFO_RW, b, n * bps)) { failed(esp_timer_get_time()); fifo_reset(); return 0; }
+    for (int i = 0; i < n; i++) {
+        const uint8_t *p = b + bps * i;
+        dst[i] = (imu_vec_t){ s16(p) / ACC_LSB_G, s16(p + 2) / ACC_LSB_G, s16(p + 4) / ACC_LSB_G };
+        if (gyro) gyro[i] = burst_g ? (imu_vec_t){ s16(p + 6) / GYRO_LSB_DPS, s16(p + 8) / GYRO_LSB_DPS, s16(p + 10) / GYRO_LSB_DPS } : (imu_vec_t){ 0, 0, 0 };
+    }
     return n;
 }

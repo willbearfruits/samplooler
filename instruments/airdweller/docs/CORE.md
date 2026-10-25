@@ -112,6 +112,10 @@ with the sound. The sim checks every one of these limits.
 - A splash at boot (`INST.splash`, up to 4 s, skipped by any control) and, if you like, a screensaver.
 - Copy is short, plain and in caps on the screen.
 
+Motion at 1 kHz: `INST.burst` fills `ctl.burst` (the accelerometer samples since the last tick, oldest first, screen axes);
+`INST.burst_gyro` adds `ctl.gburst`, the gyro at the same instants (°/s; NULL while frozen). The chip's FIFO then holds
+85 ms, so it is read every tick. The simulator's `SI.burst` and `SI.gburst` feed them.
+
 ## The coach
 
 `INST.hints`: what to try, each tied to a LEARN bit. The core shows one at the bottom when the player has

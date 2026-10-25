@@ -197,7 +197,7 @@ void app_main(void)
     bool from_flash = settings_load(!safe) > 0;          // the tilt and the sound list are kept even in safe mode
     i2c_master_bus_handle_t bus = i2c_start();
     has_imu = imu_init(bus);
-    if (has_imu && INST.burst) imu_burst(true);
+    if (has_imu && INST.burst) { imu_burst_gyro(INST.burst_gyro); imu_burst(true); }
     oled_init(bus);
     input_init();
     led_init();
@@ -213,8 +213,8 @@ void app_main(void)
 
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
     input_ev_t in = { 0 };
-    static imu_vec_t raw_burst[64];
-    static vec3_t burst[64];
+    static imu_vec_t raw_burst[64], raw_gburst[64];
+    static vec3_t burst[64], gburst[64];
     int tick = 0, rec_n = 0, dirty_ms = 0;
     bool rec = false;
     TickType_t wake = xTaskGetTickCount();
@@ -249,13 +249,14 @@ void app_main(void)
         if (has_imu) imu_read(&ra, &rg);
         int nb = 0;
         if (INST.burst && has_imu) {
-            nb = imu_burst_read(raw_burst, 64);
+            nb = imu_burst_read2(raw_burst, INST.burst_gyro ? raw_gburst : NULL, 64);
             for (int i = 0; i < nb; i++) burst[i] = (vec3_t){ raw_burst[i].x, raw_burst[i].y, raw_burst[i].z };
+            if (INST.burst_gyro) for (int i = 0; i < nb; i++) gburst[i] = (vec3_t){ raw_gburst[i].x, raw_gburst[i].y, raw_gburst[i].z };
         }
         front_in_t fi = {
             .enc = in.enc, .tap = in.tap, .pressed = in.pressed, .held_ms = in.held_ms, .rec = rec,
             .imu_ok = has_imu, .acc_raw = { ra.x, ra.y, ra.z }, .gyro_raw = { rg.x, rg.y, rg.z },
-            .burst_raw = burst, .nburst = nb, .joy_ok = in.has_joy, .jx = in.jx, .jy = in.jy,
+            .burst_raw = burst, .nburst = nb, .gburst_raw = INST.burst_gyro ? gburst : NULL, .joy_ok = in.has_joy, .jx = in.jx, .jy = in.jy,
             .dt = dt, .frames = audio_frames(),
         };
         front_tick(&fi);

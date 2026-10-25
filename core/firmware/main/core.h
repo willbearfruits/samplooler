@@ -49,6 +49,7 @@ typedef struct {
     float    lean_x, lean_y;   // degrees, smoothed: right edge down > 0, bottom edge down > 0
     const vec3_t *burst;       // INST.burst: the 1 kHz accelerometer samples since the last tick, oldest first
     int      nburst;
+    const vec3_t *gburst;      // INST.burst_gyro: the gyro (°/s) at each of those samples; NULL otherwise (or frozen)
     // The joystick (Stack boards and the kit; found at boot, absent on the Mini). x right, y up, -1..1,
     // dead zone applied. 0, 0 without one.
     bool     has_joy;
@@ -122,6 +123,7 @@ typedef struct {
     const preset_t *presets;   int npresets;   // factory sounds, the first is the default
     const hint_t *hints;       int nhints;
     bool  burst;               // wants the 1 kHz accelerometer stream (ctl.burst)
+    bool  burst_gyro;          // with burst: the gyro at 1 kHz too (ctl.gburst)
     bool  looper;              // the core looper records what audio() plays: REC is its (hold = record/add, tap = stop/play)
     bool  rec_button_off;      // SYSTEM > REC BUTTON starts OFF: the REC pin is ignored, BOOT and MIDI (CC 64) record
     const char *knob;          // tag of the param the knob turns in play (until the player edits another in the menu);
