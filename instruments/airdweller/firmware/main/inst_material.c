@@ -4,8 +4,9 @@
 // sample): its pitch can move every block without a click, and its amplitude is there to read for the screen. A mode's
 // output gain lives in its state (the state is the mode times its gain): a new gain is reached by a growth or decay of
 // the rotation over the block (at most x1.43 or x0.7 a block, the rest follows), so the sum needs no multiply and the
-// gain no ramp. Modes run four at a time (their recursions overlap); a bank with nothing in it and nothing coming is
-// skipped; a note's coefficients are worked out again only when its pitch, the material or RING move.
+// gain no ramp. A bank runs all its modes in one pass (their recursions overlap); a bank with nothing in it and nothing
+// coming is skipped; a note's coefficients are worked out again only when its pitch, the material or RING move (the
+// drag's hold alone: only the decays).
 //
 // The four materials are tables of eight modes (ratio, T60 over RING, gain); MORPH (0..3) slides between neighbours:
 // ratios and T60s in log2, gains in line. METAL is a plate (inharmonic, the lowest mode rings RING, the upper ones
@@ -22,6 +23,12 @@
 // so a lifted bow lets the material ring out. Noise pulsed at each note's own rate (the slips of a bow) feeds the bank
 // as well: it starts the modes and keeps them rough. The bow's bank rings 4 s at most. DUCK: the other hand's strikes
 // push the bow's bank down (10 ms in, 10 ms held, 100 ms back).
+//
+// The drag: this box's own swings (PAINT) carry their gesture; while it is dragged, the hold holds the ring (the strikes'
+// bank decays up to 64 times slower) and the twist bends it, on top of TWIST BEND. Unlike a drum, the material does not
+// keep the bend when the drag moves to another gesture: it is one resonator that every strike rings (the other hand's
+// too, on the kick's note), so it springs back to where it was struck. A new gesture's strike takes the drag over from
+// where the last one left it.
 #include "inst_eng.h"
 #include <string.h>
 
@@ -87,6 +94,7 @@ typedef struct {
     float s[NM], c[NM], bs[NB], bc[NB];        // the strikes' bank and the bow's
     float rC[NM], rS[NM], bC[NB], bS[NB];      // their rotations x decays
     float cq[NM], sq[NM], fq[NM], rs_[NM], rb[NB], tb[NB];   // each mode's cos, sin, Hz, decay; the bow's own decay and T60
+    float t6[NM], key_h;                       // each mode's T60 as RING sets it; the hold its decay was worked out for
     float gs[NM], gbw[NB], gb[NB], bt[NB];     // the gain in each bank's states; the bow's noise gain, its amplitude
     float rlg, g;                              // its ratio in the chord (log2), its share (fading)
     float se, be;                              // what rings in each bank (energy)
@@ -108,6 +116,7 @@ static int   press_cnt, slip_cnt = 1;
 static float mat_pk;
 static uint32_t rng = 0x6d2b79f5u;
 static bool  first = true;
+static dfol_t mdf;                             // the drag on this box's own strikes
 
 // ln x for 0.25 < x < 2 (2 atanh((x - 1) / (x + 1))): the bow's regulation
 static inline float ln_near1(float x) { float z = (x - 1.0f) / (x + 1.0f), z2 = z * z; return 2.0f * z * (1.0f + z2 * (0.33333333f + z2 * (0.2f + z2 * 0.14285714f))); }
@@ -137,6 +146,7 @@ void mat_init(void)
     }
     for (int v = 0; v < NCV; v++) CV[v].key_lg = -100.0f;
     first = true;
+    dfol_init(&mdf, 0);
 }
 void mat_silence(void)
 {
@@ -163,7 +173,12 @@ static void strike(const stroke_t *st, int vel, int delay)
     if (sq > bl_slow) bl_slow = sq;
     if (sq > bl_fast) bl_fast = sq;
 }
-void mat_strike_pad(int pad, int vel, int delay) { if (pad >= 0 && pad < NPAD) strike(&PAD_ST[pad], vel, delay); }
+void mat_strike_pad(int pad, int vel, int delay, int gid)
+{
+    if (pad < 0 || pad >= NPAD) return;
+    strike(&PAD_ST[pad], vel, delay);
+    if (gid & 255) { mdf.gid = (uint8_t)gid; mdf.live = 1; }        // the drag goes on from where it is
+}
 void mat_strike_voice(int voice, int vel, int delay)
 {
     if (voice < 0 || voice >= NDV) return;
@@ -197,37 +212,47 @@ static void events(int n)
 }
 
 // ---------------------------------------------------------------- the banks
-// nm rotations (a multiple of 4), four at a time. s, c: the states (gain included); rc, rs: rotation x decay x the
-// gain's change; x: an input with per-mode gains ix (NULL: none); w[e]: impulse e's weight per mode, added to c after
-// sample ev[e].off; out += the sum.
-static IRAM_ATTR __attribute__((noinline)) void rot_run(float *restrict s, float *restrict c, const float *restrict rc, const float *restrict rs,
-                                                        int nm, const float *restrict x, const float *restrict ix,
-                                                        float (*restrict w)[NM], int ne, float *restrict out, int n)
+// The strikes' bank: eight rotations in one pass (eight independent recursions overlap: the time goes to their latency,
+// not their arithmetic). s, c: the states (gain included); rc, rs: rotation x decay x the gain's change; w[e]: impulse
+// e's weight per mode, added to c after sample ev[e].off; out += the sum.
+static IRAM_ATTR __attribute__((noinline)) void rot_strikes(float *restrict s, float *restrict c, const float *restrict rc, const float *restrict rs,
+                                                            float (*restrict w)[NM], int ne, float *restrict out, int n)
 {
-    for (int k = 0; k < nm; k += 4) {
-        float S[4], C[4], A[4], B[4], U[4];
-        for (int j = 0; j < 4; j++) { S[j] = s[k + j]; C[j] = c[k + j]; A[j] = rc[k + j]; B[j] = rs[k + j]; U[j] = x ? ix[k + j] : 0.0f; }
-        int i = 0;
-        for (int e = 0; e <= ne; e++) {
-            int end = e < ne ? ev[e].off + 1 : n;
-            if (end > n) end = n;
-            if (x) {
-                for (; i < end; i++) {
-                    float xi = x[i], o = 0.0f;
-                    for (int j = 0; j < 4; j++) { float t = A[j] * S[j] + B[j] * C[j]; C[j] = A[j] * C[j] - B[j] * S[j] + U[j] * xi; S[j] = t; o += t; }
-                    out[i] += o;
-                }
-            } else {
-                for (; i < end; i++) {
-                    float o = 0.0f;
-                    for (int j = 0; j < 4; j++) { float t = A[j] * S[j] + B[j] * C[j]; C[j] = A[j] * C[j] - B[j] * S[j]; S[j] = t; o += t; }
-                    out[i] += o;
-                }
-            }
-            if (e < ne) for (int j = 0; j < 4; j++) C[j] += w[e][k + j];
+    float S[NM], C[NM], A[NM], B[NM];
+    for (int j = 0; j < NM; j++) { S[j] = s[j]; C[j] = c[j]; A[j] = rc[j]; B[j] = rs[j]; }
+    int i = 0;
+    for (int e = 0; e <= ne; e++) {
+        int end = e < ne ? ev[e].off + 1 : n;
+        if (end > n) end = n;
+        for (; i < end; i++) {
+            float t[NM];
+            for (int j = 0; j < NM; j++) { t[j] = A[j] * S[j] + B[j] * C[j]; C[j] = A[j] * C[j] - B[j] * S[j]; S[j] = t[j]; }
+            out[i] += ((t[0] + t[1]) + (t[2] + t[3])) + ((t[4] + t[5]) + (t[6] + t[7]));
         }
-        for (int j = 0; j < 4; j++) { s[k + j] = flushf(S[j]); c[k + j] = flushf(C[j]); }
+        if (e < ne) for (int j = 0; j < NM; j++) C[j] += w[e][j];
     }
+    for (int j = 0; j < NM; j++) { s[j] = flushf(S[j]); c[j] = flushf(C[j]); }
+}
+// The bow's bank: four rotations with an input x (NULL: none) at per-mode gains ix.
+static IRAM_ATTR __attribute__((noinline)) void rot_bow(float *restrict s, float *restrict c, const float *restrict rc, const float *restrict rs,
+                                                        const float *restrict x, const float *restrict ix, float *restrict out, int n)
+{
+    float S[NB], C[NB], A[NB], B[NB], U[NB];
+    for (int j = 0; j < NB; j++) { S[j] = s[j]; C[j] = c[j]; A[j] = rc[j]; B[j] = rs[j]; U[j] = x ? ix[j] : 0.0f; }
+    if (x) {
+        for (int i = 0; i < n; i++) {
+            float xi = x[i], t[NB];
+            for (int j = 0; j < NB; j++) { t[j] = A[j] * S[j] + B[j] * C[j]; C[j] = A[j] * C[j] - B[j] * S[j] + U[j] * xi; S[j] = t[j]; }
+            out[i] += (t[0] + t[1]) + (t[2] + t[3]);
+        }
+    } else {
+        for (int i = 0; i < n; i++) {
+            float t[NB];
+            for (int j = 0; j < NB; j++) { t[j] = A[j] * S[j] + B[j] * C[j]; C[j] = A[j] * C[j] - B[j] * S[j]; S[j] = t[j]; }
+            out[i] += (t[0] + t[1]) + (t[2] + t[3]);
+        }
+    }
+    for (int j = 0; j < NB; j++) { s[j] = flushf(S[j]); c[j] = flushf(C[j]); }
 }
 // the growth per sample that takes a gain from g0 towards g1 in one block (at most x1.43 or x0.7); *g0 moves with it
 static inline float gain_step(float *g0, float g1, float inv_n)
@@ -240,7 +265,7 @@ static inline float gain_step(float *g0, float g1, float inv_n)
 static float bank_e(const float *s, const float *c, int nm) { float e = 0.0f; for (int k = 0; k < nm; k++) e += s[k] * s[k] + c[k] * c[k]; return e; }   // gain included
 
 // ---------------------------------------------------------------- a block
-void mat_run(float *acc, int n, bool on)
+void mat_run(float *acc, int n, bool on, const edrag_t *drag)
 {
     on_s = glide(on_s, on ? 1.0f : 0.0f, kblock(0.02f, n));
     if (!on) { nps = 0; scrape = 0.0f; duck_att = 0; }
@@ -268,6 +293,9 @@ void mat_run(float *acc, int n, bool on)
     if (!on) bow_t = 0.0f;
     float bow0 = bow_s;
     bow_s = glide(bow_s, bow_t, kblock(0.03f, n));
+    if (mdf.gid && mdf.gid != drag->gid) { mdf.ta = 0.0f; mdf.tb = 0.0f; }   // not dragged now: back to as struck
+    dfol_run(&mdf, drag, n);
+    const float dbend = clampf(mdf.b, -36.0f, 36.0f) * (1.0f / 12.0f), dhold = hold_rate(mdf.h);
     float lv0 = out_g;
     lvl_s = glide(lvl_s, clampf(eng_mat_level, 0.0f, 1.0f), kblock(0.03f, n));
     out_g = lvl_s * on_s;
@@ -320,17 +348,20 @@ void mat_run(float *acc, int n, bool on)
         if (!cv->live && !nev && !bowing) continue;
         cv->live = true;
         // its modes: worked out again when its pitch, the material or RING moved
-        float lg = hz_lg + bend_s * (1.0f / 12.0f) + cv->rlg + pmod;
+        float lg = hz_lg + bend_s * (1.0f / 12.0f) + dbend + cv->rlg + pmod;
         if (lg != cv->key_lg || morph_s != cv->key_m || ring_s != cv->key_r) {
-            cv->key_lg = lg; cv->key_m = morph_s; cv->key_r = ring_s;
+            cv->key_lg = lg; cv->key_m = morph_s; cv->key_r = ring_s; cv->key_h = dhold;
             for (int k = 0; k < NM; k++) {
                 float f = fast_exp2(lg + lerpf(lr[m0][k], lr[m0 + 1][k], mt));
                 float S, C; sincos_turns(fminf(f * ISR, 0.45f), &S, &C);
                 float q = 1.0f / sqrt_f(S * S + C * C);
-                float t60 = fmaxf(ring_s * fast_exp2(lerpf(lt[m0][k], lt[m0 + 1][k], mt)), 0.02f), r = decay_of(6.9078f / (t60 * SR));
-                cv->fq[k] = f; cv->cq[k] = C * q; cv->sq[k] = S * q; cv->rs_[k] = r;
+                float t60 = fmaxf(ring_s * fast_exp2(lerpf(lt[m0][k], lt[m0 + 1][k], mt)), 0.02f), r = decay_of(6.9078f * dhold / (t60 * SR));
+                cv->fq[k] = f; cv->cq[k] = C * q; cv->sq[k] = S * q; cv->rs_[k] = r; cv->t6[k] = t60;
                 if (k < NB) { cv->tb[k] = fminf(t60, 4.0f); cv->rb[k] = decay_of(6.9078f / (cv->tb[k] * SR)); }
             }
+        } else if (dhold != cv->key_h) {                               // the hold alone moved: the strikes' decays
+            cv->key_h = dhold;
+            for (int k = 0; k < NM; k++) cv->rs_[k] = decay_of(6.9078f * dhold / (cv->t6[k] * SR));
         }
         // each mode's output gain now, reached in the states
         float go1[NM];
@@ -347,7 +378,7 @@ void mat_run(float *acc, int n, bool on)
             // the strikes and slips: each mode's share of each impulse
             for (int e = 0; e < nev; e++)
                 for (int k = 0; k < NM; k++) w[e][k] = (ev[e].lo * g_lo[k] + ev[e].hi * g_hi[k]) * contact(cv->fq[k], ev[e].len_s) * cv->gs[k];
-            rot_run(cv->s, cv->c, cv->rC, cv->rS, NM, NULL, NULL, w, nev, mix, n);
+            rot_strikes(cv->s, cv->c, cv->rC, cv->rS, w, nev, mix, n);
         }
         // the bow: an amplitude to keep each of its modes at, held up no faster than the mode's own decay
         if (bowing || cv->be > 1e-14f) {
@@ -379,7 +410,7 @@ void mat_run(float *acc, int n, bool on)
                 }
                 cv->bph = ph; bx = xb;
             }
-            rot_run(cv->bs, cv->bc, cv->bC, cv->bS, NB, bx, cv->gb, NULL, 0, bowmix, n);
+            rot_bow(cv->bs, cv->bc, cv->bC, cv->bS, bx, cv->gb, bowmix, n);
         }
         cv->se = bank_e(cv->s, cv->c, NM); cv->be = bank_e(cv->bs, cv->bc, NB);
         if (cv->se + cv->be < 1e-14f && !bowing) cv->live = false;

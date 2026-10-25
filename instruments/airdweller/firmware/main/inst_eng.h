@@ -1,5 +1,6 @@
-// AIRDWELLER's audio task inside: inst_engine.c (the queues, the grid, the loops, the bus) calls the kit (inst_drums.c)
-// and the material (inst_material.c). Everything here runs in the audio task, except the two init calls.
+// AIRDWELLER's audio task inside: inst_engine.c (the queues, the grid, the loops, the bus) calls the kit (inst_drums.c),
+// the material (inst_material.c) and the notes (inst_notes.c). Everything here runs in the audio task, except the init
+// calls.
 #pragma once
 #include "inst_ad.h"
 #include "dsp.h"
@@ -52,6 +53,15 @@ static inline float log2_f(float x)
     float m = u.f, z = (m - 1.0f) / (m + 1.0f), z2 = z * z;
     return e + 2.8853901f * z * (1.0f + z2 * (0.33333333f + z2 * (0.2f + z2 * (0.14285714f + z2 * 0.11111111f))));
 }
+// sin(pi/2 u) without a branch (sin_turns branches on the sign, which mispredicts half the time on audio): the folder
+static inline float fold_sin(float u)
+{
+    float p = 0.25f * u + 256.0f;
+    p -= (float)(int)p;
+    float x = 2.0f * p - 1.0f, y = 4.0f * x * (1.0f - fabsf(x));
+    y = 0.225f * (y * fabsf(y) - y) + y;
+    return -y;
+}
 // the SVF's coefficients from a cutoff, tan by a Pade approximant (0.8 % at 0.4 SR): a sweep, or a filter set at a hit
 static inline void svf_fc(svf_t *f, float fc)
 {
@@ -61,15 +71,53 @@ static inline void svf_fc(svf_t *f, float fc)
     f->a1 = 1.0f / (1.0f + g * (g + f->k)); f->a2 = g * f->a1; f->a3 = g * f->a2;
 }
 
+// ---------------------------------------------------------------- the drag (inst_ad.h's DRAG), as each voice follows it
+// The engine reads eng_drag_* once a block into an edrag_t, scaled by eng_drag_depth. Each voice keeps the gesture that
+// started it (gid) and a follower: while its gid is the one dragged it takes the drag as its target, otherwise it keeps
+// the amount and the bend it had and lets the hold go. The amount and the bend move through a spring (6.5 Hz, damping
+// 0.6: a pull overshoots a little and settles, rubber rather than a knob); the hold glides (15 ms up, 60 ms down).
+typedef struct { int gid; float amt, hold, bend; } edrag_t;     // gid 0: none; amt, hold 0..1; bend semitones
+typedef struct { uint8_t gid, live; float ta, tb, th, a, av, b, bv, h; } dfol_t;
+static inline void dfol_init(dfol_t *f, int gid) { *f = (dfol_t){ 0 }; f->gid = (uint8_t)gid; }
+// one block: true when anything moved (the voice works its drag out again)
+static inline bool dfol_run(dfol_t *f, const edrag_t *d, int n)
+{
+    if (!f->gid) return false;
+    if (f->gid == d->gid) { f->ta = d->amt; f->tb = d->bend; f->th = d->hold; f->live = 1; }
+    else f->th = 0.0f;
+    if (!f->live) return false;
+    if (f->a == f->ta && f->av == 0.0f && f->b == f->tb && f->bv == 0.0f && f->h == f->th) {   // at rest: nothing to do
+        if (f->gid != d->gid) f->live = 0;
+        return false;
+    }
+    const float dt = (float)n * (1.0f / (float)AUDIO_SR), w2 = 1668.0f, zw = 49.0f;   // (2 pi 6.5)^2, 2 x 0.6 x 2 pi 6.5
+    f->av += (w2 * (f->ta - f->a) - zw * f->av) * dt; f->a += f->av * dt;
+    f->bv += (w2 * (f->tb - f->b) - zw * f->bv) * dt; f->b += f->bv * dt;
+    f->h += kblock(f->th > f->h ? 0.015f : 0.06f, n) * (f->th - f->h);
+    bool rest = fabsf(f->ta - f->a) < 1e-4f && fabsf(f->av) < 1e-3f && fabsf(f->tb - f->b) < 1e-3f && fabsf(f->bv) < 1e-2f && fabsf(f->th - f->h) < 1e-4f;
+    if (rest) { f->a = f->ta; f->av = 0.0f; f->b = f->tb; f->bv = 0.0f; f->h = f->th; }
+    return true;
+}
+// what a hold does to a decay: its rate times 2^-6h (held: 64 times longer)
+static inline float hold_rate(float h) { return fast_exp2(-6.0f * clampf(h, 0.0f, 1.0f)); }
+
 // ---------------------------------------------------------------- the kit (inst_drums.c)
 void kit_init(void);
-void kit_hit(int voice, int vel, float tune_st, int delay);   // delay: samples into this block
-int  kit_run(float *acc, int n, float squeeze);               // adds every voice into acc; returns how many sound
+void kit_hit(int voice, int vel, float tune_st, int delay, int gid);   // delay: samples into this block; gid: the gesture
+int  kit_run(float *acc, int n, float squeeze, const edrag_t *dg);     // adds every voice into acc; returns how many sound
 void kit_silence(void);
 
 // ---------------------------------------------------------------- the material (inst_material.c)
 void mat_init(void);
-void mat_strike_pad(int pad, int vel, int delay);             // PAINT: this box's own swing
+void mat_strike_pad(int pad, int vel, int delay, int gid);    // PAINT: this box's own swing (gid: its gesture, 0 a loop's)
 void mat_strike_voice(int voice, int vel, int delay);         // the other hand's hit (DV_*): it also ducks the bow
-void mat_run(float *acc, int n, bool on);                     // adds the material into acc (on: PAINT or PUMP)
+void mat_run(float *acc, int n, bool on, const edrag_t *dg);   // adds the material into acc (on: PAINT or PUMP)
 void mat_silence(void);
+
+// ---------------------------------------------------------------- the notes (inst_notes.c)
+// ev: this block's note events in the order they came, each at its sample (off); the voices render between them.
+typedef struct { nev_t e; int off; } nblk_t;
+void notes_init(void);
+int  notes_run(float *acc, int n, const nblk_t *ev, int ne, const edrag_t *dg);   // adds the notes into acc; returns how many sound
+void notes_silence(void);
+extern float notes_pk;                                        // the last block's peak (the engine reports eng_note_lvl)

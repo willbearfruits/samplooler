@@ -432,7 +432,7 @@ static void drag_tick(void)
     D.peer_shapes = 0;
     if (RS.on && DG.gid && RS.target == last_live_seq) { amt = fmaxf(amt, RS.amt); hold = fmaxf(hold, RS.hold); bend += RS.bend; D.peer_shapes = 1; }
     if ((int)pv[P_ROLE] == ROLE_SHAPE) eng_drag_gid = 0;               // this hand drags the other's sound, not its own
-    else { eng_drag_gid = DG.gid; eng_drag_amt = amt; eng_drag_hold = hold; eng_drag_bend = bend; }
+    else { eng_drag_gid = DG.gid; eng_drag_amt = amt; eng_drag_hold = hold; eng_drag_bend = (int)pv[P_ROLE] == ROLE_PAINT ? 0.0f : bend; }   // PAINT: TWIST BEND bends it already
     eng_drag_depth = pv[P_DRAG] * 0.01f;
     if (DG.amt > 0.5f && DG.gid) coach_done(L_DRAG);
     D.drag = amt; D.hold = hold; D.dbend = bend; D.dragging = DG.on && (amt > 0.02f || hold > 0.1f || D.peer_shapes);

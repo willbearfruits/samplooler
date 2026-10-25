@@ -1,15 +1,21 @@
-// AIRDWELLER's audio task: the grid, the trigger and strike queues, the scheduling (a hit at frame `at` plays in the
-// block that holds it, at its offset), the loops' playback and the played report (AIR's), then the sound: the kit
-// (inst_drums.c), the material (inst_material.c) and the bus. inst_ad.h is the contract; inst_eng.h joins the three.
+// AIRDWELLER's audio task: the grid, the trigger, strike and note queues, the scheduling (a hit or a note at frame `at`
+// plays in the block that holds it, at its offset), the loops' playback and the played report (AIR's), then the sound:
+// the kit (inst_drums.c), the material (inst_material.c), the notes (inst_notes.c) and the bus. inst_ad.h is the
+// contract; inst_eng.h joins them.
 //
-// The bus: drums + material -> DRIVE (DWELL's asymmetric cubic clip with first-order ADAA and a DC blocker, wet/dry;
+// The roles: DRUM plays the kit; PAINT and PUMP the material (a pad hit strikes it, the other hand's hits strike it);
+// NOTES the notes (and the kit, for a loop's pad hits); SHAPE nothing: what sounds fades in 20 ms and the bus's tails
+// (echo, room) ring out. The drag is read once a block (scaled by DRAG) and handed to every voice; each follows it if
+// its gesture is the one dragged.
+//
+// The bus: drums + notes + material -> DRIVE (DWELL's asymmetric cubic clip with first-order ADAA and a DC blocker, wet/dry;
 // the clip's out-gain holds a full kick near where it was, so DRIVE squeezes rather than swells) -> TONE (a 12 dB low
 // pass, 800 Hz .. 16 kHz) -> ECHO (DWELL's: PSRAM, its time gliding like tape, a dark saturating feedback, equal-power
 // mix) -> ROOM (DWELL's four-line hall, 0.3 .. 6 s, equal-power) -> LEVEL -> CUT (a 3 ms linear fade to silence and
 // back). Every gain is ramped across the block; filters and delays move at block rate.
 //
-// Memory: the echo 203 KB in PSRAM (app_alloc), the hall 33 KB in internal RAM (app_alloc_fast), the voices and the
-// material about 6 KB static.
+// Memory: the echo 203 KB in PSRAM (app_alloc), the hall 33 KB in internal RAM (app_alloc_fast); static, the drum voices
+// 8 KB, the material 3 KB, the notes 1 KB, the loops 6 KB.
 #include "inst_eng.h"
 #include "spsc.h"
 #include <string.h>
@@ -22,21 +28,29 @@ volatile float eng_pad_tune[NPAD], eng_kick_hz = 55.0f, eng_drum_decay = 1.0f, e
 volatile float eng_mat_morph, eng_mat_hz = 220.0f, eng_mat_ring = 2.0f, eng_mat_bright = 0.5f, eng_bend, eng_bow, eng_creak, eng_mat_level = 1.0f, eng_duck;
 volatile float eng_drive, eng_tone = 0.6f, eng_echo_s = 0.3f, eng_echo_fb, eng_echo_mix, eng_room, eng_room_size = 0.5f, eng_level = 0.8f;
 volatile float eng_out_lvl, eng_mat_lvl, eng_mode_amp[8];
+volatile int   eng_drag_gid, eng_note_voice;
+volatile float eng_drag_amt, eng_drag_hold, eng_drag_bend, eng_drag_depth = 0.7f;
+volatile float eng_note_glide = 0.06f, eng_note_lvl;
 
 // ---------------------------------------------------------------- the queues
 SPSC(trigq, trig_t, 32)
 SPSC(playq, played_t, 64)
 typedef struct { uint32_t at; int vel, voice; } strike_t;
 SPSC(strkq, strike_t, 32)
+SPSC(noteq, nev_t, 32)
 static trigq_t trigs;
 static playq_t played;
 static strkq_t strikes;
+static noteq_t notesq;
 void eng_trigger(const trig_t *t) { trigq_push(&trigs, t); }
 bool eng_played_pop(played_t *p) { return playq_pop(&played, p); }
 void eng_strike(uint32_t at, int vel, int voice) { strike_t s = { at, vel, voice }; strkq_push(&strikes, &s); }
+void eng_note(const nev_t *e) { noteq_push(&notesq, e); }
 #define NPEND 32
-typedef struct { uint32_t at; int pad, vel, src, voice; bool strike; } pend_t;   // waiting for its frame
+typedef struct { uint32_t at; int pad, vel, src, voice, gid; bool strike; } pend_t;   // waiting for its frame
 static pend_t pend[NPEND]; static int npend;
+#define NNPEND 24
+static nev_t npend_q[NNPEND]; static int nnpend;                    // notes waiting for their frame, in the order they came
 
 static uint32_t frame0;
 
@@ -76,19 +90,23 @@ uint16_t eng_hit_tick(const loop_t *l, const hit_t *h)
 }
 
 // ---------------------------------------------------------------- a hit or a strike on its frame
-// DRUM: the pad's drum. PAINT (and PUMP, from a loop): the pad strikes the material. The other hand's strikes ring the
-// material in PAINT and PUMP and are ignored in DRUM. Every pad hit is reported (eng_played_pop).
+// DRUM (and NOTES, a loop's pads): the pad's drum, carrying its gesture. PAINT (and PUMP, from a loop): the pad strikes
+// the material. SHAPE: nothing. The other hand's strikes ring the material in PAINT and PUMP and are ignored otherwise.
+// Every pad hit that sounds is reported (eng_played_pop).
+static inline bool role_mat(int r) { return r == ROLE_PAINT || r == ROLE_PUMP; }
 static void fire(const pend_t *p, int d)
 {
-    if (p->strike) { if (eng_role != ROLE_DRUM) mat_strike_voice(p->voice, p->vel, d); return; }
-    if (eng_role == ROLE_DRUM) kit_hit(p->voice, p->vel, eng_pad_tune[p->pad & 3], d);
-    else mat_strike_pad(p->pad, p->vel, d);
+    int role = eng_role;
+    if (p->strike) { if (role_mat(role)) mat_strike_voice(p->voice, p->vel, d); return; }
+    if (role == ROLE_SHAPE) return;                                   // SHAPE plays nothing
+    if (role_mat(role)) mat_strike_pad(p->pad, p->vel, d, p->gid);
+    else kit_hit(p->voice, p->vel, eng_pad_tune[p->pad & 3], d, p->gid);
     played_t pl = { frame0 + (uint32_t)d, (uint8_t)p->pad, (uint8_t)p->vel, (uint8_t)p->src, (uint8_t)p->voice };
     playq_push(&played, &pl);
 }
-static void schedule(uint32_t at, int pad, int vel, int src, int voice, bool strike)
+static void schedule(uint32_t at, int pad, int vel, int src, int voice, int gid, bool strike)
 {
-    pend_t p = { at, pad, vel, src, voice, strike };
+    pend_t p = { at, pad, vel, src, voice, gid, strike };
     int32_t d = (int32_t)(at - frame0);
     if (at == 0 || d < 0) { fire(&p, 0); return; }
     if (npend < NPEND) pend[npend++] = p;
@@ -114,8 +132,9 @@ static void loop_block(int n)
             int32_t cycle = (int32_t)eng_floor_div(since, len);
             for (int i = 0; i < nh; i++) {
                 const hit_t *h = &l->hits[i];
+                if (h->pad >= NPAD) continue;                         // a NOTES note (NOTE_HIT): the UI plays it
                 if (eng_hit_tick(l, h) != rel || h->born == cycle) continue;
-                schedule(at, h->pad, h->vel, SRC_LOOP, eng_pad_voice[h->pad], false);
+                schedule(at, h->pad, h->vel, SRC_LOOP, eng_pad_voice[h->pad], 0, false);
             }
         }
     }
@@ -131,7 +150,7 @@ static float echo_d = 0.3f * (float)AUDIO_SR, echo_lp, efb_s, emix_s, e_dry = 1.
 static float hall_lp[HALL_N], hall_g[HALL_N], hall_t60 = -1.0f, wet_norm = 0.5f, room_s, size_s = 0.5f, dry_g = 1.0f, wet_g, send_g;
 static float dr_u1, dr_dcx, dr_dcy, dr_G = 1.0f, dr_bias = 1.0f, dr_mix, dr_out = 1.0f, drive_s;
 static svf_t tone_f; static float tone_s = -1.0f, tone_fc = -1.0f;
-static float sq_s, level_s, cut_g = 1.0f;
+static float sq_s, level_s, cut_g = 1.0f, src_g = 1.0f, nlvl_s;
 
 // the hall: four lines, a damping one-pole each, Householder feedback; in -> w (DWELL's)
 static IRAM_ATTR __attribute__((noinline)) void hall_run(const float *restrict in, float *restrict w, float send0, float send1, int n)
@@ -232,6 +251,7 @@ void eng_init(void)
 {
     kit_init();
     mat_init();
+    notes_init();
     echo_buf = app_alloc(ECHO_N * sizeof(float));                    // read and written in step, once a sample: PSRAM is fine
     for (int k = 0; k < HALL_N; k++) hall_buf[k] = app_alloc_fast((size_t)hall_len[k] * sizeof(float));
     if (!echo_buf) app_log("AIRDWELLER: out of PSRAM (no echo)");
@@ -249,22 +269,71 @@ void eng_audio(const float *in, float *out, int n)
     memset(out, 0, (size_t)n * sizeof(float));
     if (n > AUDIO_BLOCK) n = AUDIO_BLOCK;
     frame0 = audio_frames();
+    const int role = eng_role;
     trig_t t;
-    while (trigq_pop(&trigs, &t)) schedule(t.at, t.pad, t.vel, t.src, eng_pad_voice[t.pad & 3], false);
+    while (trigq_pop(&trigs, &t)) if (t.pad < NPAD) schedule(t.at, t.pad, t.vel, t.src, eng_pad_voice[t.pad], t.gid, false);
     strike_t s;
-    while (strkq_pop(&strikes, &s)) schedule(s.at, -1, s.vel, SRC_REMOTE, s.voice, true);
+    while (strkq_pop(&strikes, &s)) schedule(s.at, -1, s.vel, SRC_REMOTE, s.voice, 0, true);
+    nev_t ne;
+    while (noteq_pop(&notesq, &ne)) if (nnpend < NNPEND) npend_q[nnpend++] = ne;
     loop_block(n);
     for (int i = 0; i < npend;) {
         int32_t d = (int32_t)(pend[i].at - frame0);
         if (d < n) { fire(&pend[i], d < 0 ? 0 : d); pend[i] = pend[--npend]; } else i++;
     }
+    // the notes due in this block, at their samples, in the order they came (SHAPE: none)
+    nblk_t nb[NNPEND]; int nn = 0;
+    for (int i = 0, j = 0; i < nnpend; i++) {
+        int32_t d = (int32_t)(npend_q[i].at - frame0);
+        if (npend_q[i].at == 0 || d < n) {
+            if (role != ROLE_SHAPE) {
+                int off = d < 0 || npend_q[i].at == 0 ? 0 : d, k = nn++;
+                while (k > 0 && nb[k - 1].off > off) { nb[k] = nb[k - 1]; k--; }
+                nb[k] = (nblk_t){ npend_q[i], off };
+            }
+        } else npend_q[j++] = npend_q[i];
+        if (i == nnpend - 1) nnpend = j;
+    }
+    // the drag, this block
+    edrag_t dg = { 0, 0.0f, 0.0f, 0.0f };
+    {
+        float dep = clampf(eng_drag_depth, 0.0f, 1.0f);
+        int g = eng_drag_gid & 255;
+        if (g && dep > 0.0f) {
+            dg.gid = g;
+            dg.amt = clampf(eng_drag_amt, 0.0f, 1.0f) * dep;
+            dg.hold = clampf(eng_drag_hold, 0.0f, 1.0f) * dep;
+            dg.bend = clampf(eng_drag_bend, -24.0f, 24.0f) * dep;
+            if (!(dg.amt == dg.amt) || !(dg.hold == dg.hold) || !(dg.bend == dg.bend)) dg = (edrag_t){ 0, 0.0f, 0.0f, 0.0f };
+        }
+    }
 
-    // the sources
+    // the sources: the kit and the notes (faded out in SHAPE), the material
     float bus[AUDIO_BLOCK], wet[AUDIO_BLOCK];
     for (int i = 0; i < n; i++) bus[i] = 0.0f;
     sq_s += kblock(0.03f, n) * (clampf(eng_squeeze, 0.0f, 1.0f) - sq_s);
-    eng_voices_on = kit_run(bus, n, sq_s);
-    mat_run(bus, n, eng_role != ROLE_DRUM);
+    {
+        float g0 = src_g, g1 = role == ROLE_SHAPE ? fmaxf(g0 - (float)n / (0.02f * (float)AUDIO_SR), 0.0f) : fminf(g0 + (float)n / (0.02f * (float)AUDIO_SR), 1.0f);
+        src_g = g1;
+        if (g0 <= 0.0f && g1 <= 0.0f) {                               // SHAPE, faded: nothing sounds here
+            kit_silence(); notes_silence();
+            eng_voices_on = 0; notes_pk = 0.0f;
+        } else if (g0 >= 1.0f && g1 >= 1.0f) {
+            eng_voices_on = kit_run(bus, n, sq_s, &dg);
+            notes_run(bus, n, nb, nn, &dg);
+        } else {                                                      // fading out (or back in)
+            float src[AUDIO_BLOCK];
+            for (int i = 0; i < n; i++) src[i] = 0.0f;
+            eng_voices_on = kit_run(src, n, sq_s, &dg);
+            notes_run(src, n, nb, nn, &dg);
+            float g = g0, dg1 = (g1 - g0) / (float)n;
+            for (int i = 0; i < n; i++) { bus[i] += src[i] * g; g += dg1; }
+            notes_pk *= g0 > g1 ? g0 : g1;
+        }
+    }
+    nlvl_s = notes_pk > nlvl_s ? notes_pk : nlvl_s * 0.97f;
+    eng_note_lvl = clampf(nlvl_s * 3.0f, 0.0f, 1.5f);
+    mat_run(bus, n, role_mat(role), &dg);
 
     // DRIVE: 1 .. 29x into the clip; the out-gain keeps a full kick (0.5) near 0.5 however hard it is pushed
     drive_s += kblock(0.03f, n) * (clampf(eng_drive, 0.0f, 1.0f) - drive_s);
@@ -323,7 +392,7 @@ void eng_audio(const float *in, float *out, int n)
     cut_g = cg;
     if (!(pk == pk) || pk > 1e4f) {                                   // a NaN or a blow-up: silence, and start over
         memset(out, 0, (size_t)n * sizeof(float));
-        kit_silence(); mat_silence(); bus_clear();
+        kit_silence(); mat_silence(); notes_silence(); bus_clear();
         pk = 0.0f;
     }
     eng_out_lvl = pk > eng_out_lvl ? pk : eng_out_lvl * 0.98f;

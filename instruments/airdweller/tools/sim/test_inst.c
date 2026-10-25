@@ -35,10 +35,6 @@ int64_t ad_now_tick(void);
 void test_engine(void) __attribute__((weak));
 void test_scene(void) __attribute__((weak));
 
-// until the engine has the drag and the notes (weak: the engine's own take over)
-__attribute__((weak)) volatile int eng_drag_gid, eng_note_voice;
-__attribute__((weak)) volatile float eng_drag_amt, eng_drag_hold, eng_drag_bend, eng_drag_depth, eng_note_glide, eng_note_lvl;
-__attribute__((weak)) void eng_note(const nev_t *e) { (void)e; }
 extern nev_t ad_nev[64]; extern int ad_nevs;
 
 const char *const inst_click_skip[] = { "nlnk", "ngrp", "npow", NULL };   // the radio's switches, not the sound
