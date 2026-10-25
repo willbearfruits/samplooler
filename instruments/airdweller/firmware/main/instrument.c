@@ -435,7 +435,7 @@ static void drag_tick(void)
     else { eng_drag_gid = DG.gid; eng_drag_amt = amt; eng_drag_hold = hold; eng_drag_bend = (int)pv[P_ROLE] == ROLE_PAINT ? 0.0f : bend; }   // PAINT: TWIST BEND bends it already
     eng_drag_depth = pv[P_DRAG] * 0.01f;
     if (DG.amt > 0.5f && DG.gid) coach_done(L_DRAG);
-    D.drag = amt; D.hold = hold; D.dbend = bend; D.dragging = DG.on && (amt > 0.02f || hold > 0.1f || D.peer_shapes);
+    D.drag = amt; D.hold = hold; D.dbend = bend; D.dragging = hold > 0.1f || D.peer_shapes;
 }
 
 // ---------------------------------------------------------------- where a hit goes on the grid
@@ -457,6 +457,7 @@ static int64_t place(uint32_t frame, uint32_t *at, int64_t *after)
     int step = q == 1 ? PPB / 2 : PPB / 4;
     int64_t line = eng_floor_div(t + step / 2, step) * step;
     if (after) {                                                       // always on a line of its own, never late
+        if (*after != NO_LINE && *after - t > 4 * step) *after = NO_LINE;   // the clock went back: forget it
         if (*after != NO_LINE && line <= *after) line = *after + step;
         while ((int32_t)(eng_frame_of(&grid, line) - now_frames) <= AUDIO_BLOCK) line += step;
         if (line - t > 2 * step) return NO_LINE;
@@ -470,7 +471,8 @@ static int64_t place(uint32_t frame, uint32_t *at, int64_t *after)
 // ---------------------------------------------------------------- the other box: what this one sends
 // 16 bytes with the link's packets (link_set_app): 4 (the format), role | hand << 3 | cut << 5, energy, the kick's
 // note, the hits' number, then the last three hits (tick's low 16 bits, voice << 4 | velocity / 8; a NOTES box sends
-// its notes as voice NDV + its VOICE), this box's material (the tilt's morph x 50). A SHAPE box sends no hits; its
+// its notes as voice NDV + its VOICE), this box's material (the tilt's morph x 50), the number of its newest live hit
+// (a loop's hits have no gesture to drag). A SHAPE box sends no hits; its
 // bytes 5..8 are its drag instead: the other box's hit number it drags, amount and hold (x 255), bend (quarter
 // semitones, signed). A new hit pokes the link, so it goes at the next tick (about 10 ms).
 static void send_hit(int64_t tick, int voice, int vel, uint8_t gid)
@@ -494,6 +496,7 @@ static void app_update(void)
         a[7 + 3 * k] = (uint8_t)((sent[k].voice & 15) << 4 | (sent[k].vel >> 3));
     }
     a[14] = (uint8_t)clampi((int)(eng_mat_morph * 50.0f), 0, 255);
+    if ((int)pv[P_ROLE] != ROLE_SHAPE) a[15] = last_live_seq;            // the newest live hit (SHAPE drags that one)
     link_set_app(a, 16);
 }
 // the loops' hits a little ahead (a quarter of a beat), so the other box has them before they are due
@@ -618,7 +621,7 @@ static void notes_tick(void)
         } else if ((int32_t)(p->frame - now_frames) <= 0) {
             p->on = false;
             midi_note(p->note, p->vel);
-            scene_hit(last_pad, p->vel, SRC_LIVE);
+            scene_hit(last_pad, p->vel, p->gid >= 200 ? SRC_LOOP : SRC_LIVE);
         }
     }
     int idx = tilt_idx(pitch, tilt_idx_last);
@@ -904,6 +907,14 @@ static void peer_tick(float dt)
     // the other box is SHAPE: its drag, for this box's last live hit
     RS.on = PEER.role == ROLE_SHAPE && pair;
     if (RS.on) { RS.target = p->app[5]; RS.amt = (float)p->app[6] / 255.0f; RS.hold = (float)p->app[7] / 255.0f; RS.bend = (float)(int8_t)p->app[8] * 0.25f; }
+    // SHAPE: a new live hit on the other box starts a new drag here
+    static uint8_t live_seen; static bool live_ok;
+    uint8_t live = p->app[15];
+    if (!PEER.seq_ok) live_ok = false;
+    if (PEER.role != ROLE_SHAPE) {
+        if (live_ok && live != live_seen && role == ROLE_SHAPE && pair) { sh_target = live; drag_begin(0); }
+        live_seen = live; live_ok = true;
+    }
     uint8_t seq = p->app[4];
     if (!PEER.seq_ok) { PEER.seq = seq; PEER.seq_ok = true; return; }   // the hits it sent before we met are past
     int fresh = (uint8_t)(seq - PEER.seq);
@@ -922,7 +933,7 @@ static void peer_tick(float dt)
             eng_strike(ad_strike_at, vel, sv);
         }
     }
-    if (role == ROLE_SHAPE && pair) { sh_target = seq; drag_begin(0); }   // this hand now drags the other's newest hit
+
 }
 
 // HAND AUTO: with another AIRDWELLER around, the lower link id is the LEFT hand

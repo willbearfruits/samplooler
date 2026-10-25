@@ -1,9 +1,14 @@
 // AIRDWELLER's screens on the host: every role, played; a pair; CUT; a loop recorded; the splash and the saver; the
-// squeeze under the core's strip; what a frame costs. Shots go to out/airdweller/, clips to out/airdweller-*.gif.
+// squeeze under the core's strip; what a frame costs. 0.2: NOTES (the bead follows the tilt, the name changes, a held
+// slide), EASY (STEP's pill jumps with each swing, GROOVE's runs by itself), the drag (DRUM, PAINT, NOTES, and the other
+// hand dragging this one's hit), SHAPE (the band pulled while the other hand hits). Shots go to out/airdweller/, clips
+// to out/airdweller-*.gif.
 #include "sim.h"
 #include "inst_ad.h"
 #include "link.h"
 #include "oled.h"
+#include "dsp.h"
+#include "params.h"
 #include <math.h>
 #include <string.h>
 #include <time.h>
@@ -14,6 +19,9 @@ float st_mic(float t, void *u);
 void  st_reset(void);
 void  st_swing(float t, vec3_t dir, float peak);
 void  st_hold(vec3_t dir, float dps);
+void  st_pose(float pitch, float roll);
+void  st_glide(float t, vec3_t dir, float dps, float dur);
+void  st_strike(float t, vec3_t dir, float peak, float rise, float stop, float ret, float ret_s);
 extern const vec3_t ST_FRONT, ST_BACK, ST_LEFT, ST_RIGHT, ST_TWIST;
 bool  sim_menu_param(int p);
 void  sim_menu_close(void);
@@ -64,6 +72,277 @@ static void peer_say(int prole, int phand, bool hit, int voice, int vel)
         a[7 + 3 * k] = (uint8_t)((psent[k].voice & 15) << 4 | (psent[k].vel >> 3));
     }
     sim_peer_use(peer); link_set_app(a, 16); link_poke(); sim_peer_use(-1);
+}
+
+// ---- 0.2's measures, on the frame as it is
+static uint8_t frame_a[128 * 64];
+static void grab(uint8_t *a) { for (int y = 0; y < 64; y++) for (int x = 0; x < 128; x++) a[y * 128 + x] = oled_get(x, y); }
+static int changed_px(const uint8_t *a, int x0, int y0, int x1, int y1)
+{
+    int n = 0;
+    for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) n += a[y * 128 + x] != oled_get(x, y);
+    return n;
+}
+static void settle(int n) { for (int i = 0; i < n; i++) draw_alone(0); }   // the scene alone until its springs settle
+// NOTES: the bead on the ladder: the longest run of rows with 4 or more of x 5..9 lit (the bead is 5 rows, a rung 1)
+static int bead_y(void)
+{
+    int best = -1, bl = 0, n = 0;
+    for (int y = 16; y <= 64; y++) {
+        int c = 0;
+        for (int x = 5; y < 64 && x <= 9; x++) c += oled_get(x, y);
+        if (c >= 4) { n++; continue; }
+        if (n > bl) { bl = n; best = y - 1 - (n - 1) / 2; }
+        n = 0;
+    }
+    return bl >= 4 ? best : -1;
+}
+// EASY: the step's pill in the panel's strip (columns lit 7 rows or more of rows 27..34): its x
+static int marker_x(void)
+{
+    int sx = 0, n = 0;
+    for (int x = 84; x <= 127; x++) {
+        int c = 0;
+        for (int y = 27; y <= 34; y++) c += oled_get(x, y);
+        if (c >= 7) { sx += x; n++; }
+    }
+    return n ? sx / n : -1;
+}
+// ... and whether it is filled (its middle column lit down its length) or hollow
+static bool marker_filled(void)
+{
+    int x = marker_x(), c = 0;
+    if (x < 0) return false;
+    for (int y = 28; y <= 34; y++) c += oled_get(x, y);
+    return c >= 6;
+}
+// columns of the scene (x 0..81) with anything lit in rows y0..y1
+static int cols_lit(int y0, int y1)
+{
+    int n = 0;
+    for (int x = 0; x <= 81; x++) { int c = 0; for (int y = y0; y <= y1 && !c; y++) c = oled_get(x, y); n += c; }
+    return n;
+}
+// what the pretend box hears of this one (its app bytes: [4] the number of this box's last hit)
+static const link_peer_t *me_seen(void)
+{
+    static link_peer_t pr[LINK_PEERS_MAX];
+    sim_peer_use(peer);
+    int n = link_peers(pr, LINK_PEERS_MAX);
+    sim_peer_use(-1);
+    for (int i = 0; i < n; i++) if (!strncmp(pr[i].name, "AIRDWELL", 8)) return &pr[i];
+    return NULL;
+}
+// the pretend box as SHAPE, dragging this box's hit number `target`
+static void peer_shape(uint8_t target, float amt, float hold, float bend)
+{
+    uint8_t a[16] = { 4, (uint8_t)(ROLE_SHAPE | HAND_LEFT << 3), 0, 36, pseq, target, (uint8_t)clampi((int)(amt * 255.0f), 0, 255),
+                      (uint8_t)clampi((int)(hold * 255.0f), 0, 255), (uint8_t)(int8_t)clampi((int)lroundf(bend * 4.0f), -127, 127) };
+    sim_peer_use(peer); link_set_app(a, 16); link_poke(); sim_peer_use(-1);
+}
+static void tag(const char *t, float v) { param_set(param_by_tag(t), v); }
+
+// ---- 0.2: NOTES, EASY, the drag, SHAPE (the pretend box is there, LEFT)
+static void scenes_02(void)
+{
+    float hints_was = pv[CP(CP_HINTS)];
+    pv[CP(CP_HINTS)] = 0.0f; coach_pause();                                // the clips without the coach's tips over them
+    INST.action(P_ERASE_ALL); run(1.0f);                                    // and without the loops recorded above
+    // ---- NOTES: the tilt walks the bead up the ladder and the name follows; a flick lights its rung; a held slide
+    role(ROLE_NOTES); tag("skey", 9); tag("sscl", 1); tag("noct", 2); tag("nspn", 8); tag("qant", 0);
+    st_reset(); st_pose(-35.0f, 0.0f); run(0.6f);
+    sim_shot("notes");
+    check(lit(0, 16, 81, 63) > 120, "NOTES: the ladder and the name are drawn (%d px)", lit(0, 16, 81, 63));
+    settle(12);
+    int y_lo = bead_y(), note_lo = D.note;
+    grab(frame_a);
+    sim_gif_begin("notes");
+    for (int i = 0; i <= 14; i++) {
+        st_pose(-35.0f + 5.0f * (float)i, 0.0f); run(0.12f);
+        if (i % 2 == 0) { st_swing(sim_t + 0.02f, ST_LEFT, 650.0f); run(0.1f); if (i == 6) sim_shot("notes_flick"); run(0.32f); }
+    }
+    settle(12);
+    int y_hi = bead_y(), note_hi = D.note, name_px = changed_px(frame_a, 22, 16, 81, 45);
+    check(y_lo > 0 && y_hi > 0 && y_hi < y_lo - 15, "NOTES: the bead climbs the ladder with the tilt (row %d tipped down 35, row %d up 35)", y_lo, y_hi);
+    check(note_hi != note_lo && name_px > 40, "NOTES: the note's name changes with it (%d to %d, %d px of the name changed)", note_lo, note_hi, name_px);
+    // held: a hit tipped up, then the front edge brought down slowly: it slides down the scale
+    float t0 = sim_t + 0.05f;
+    st_strike(t0, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f);
+    st_glide(t0 + 0.15f, ST_FRONT, 40.0f, 1.5f);
+    int held_note0 = -1, held_on = 0, blob = 0, pill = 0, rails0 = lit(4, 17, 10, 62), rails = 0;
+    for (int i = 0; i < 160; i++) {
+        sim_tick();
+        if (i == 40) held_note0 = D.note;
+        if (i == 70) { sim_shot("notes_held"); held_on = D.note_on && D.hold > 0.3f; blob = lit(30, 17, 81, 48); pill = lit(30, 51, 76, 59); }
+        if (i == 120) { sim_shot("notes_held_slid"); rails = lit(4, 17, 10, 62); }
+    }
+    run(1.0f);
+    sim_gif_end();
+    int blob_after = lit(30, 17, 81, 48);
+    check(held_on && blob > 500 && pill > 30 && D.note != held_note0,
+          "NOTES: a held note: its name in a filled blob (%d px), HELD under it (%d px); it slides with the tilt (%d to %d)", blob, pill, held_note0, D.note);
+    check(rails > rails0 + 20 && blob_after < blob / 2, "NOTES: the rungs slid over fill in (%d px, %d before); once it ends the blob goes (%d px)", rails, rails0, blob_after);
+    st_pose(10.0f, 0.0f); run(0.3f);
+    st_swing(sim_t + 0.02f, ST_LEFT, 650.0f); run(0.05f);
+    sim_menu_param(param_by_tag("nspn"));
+    run(0.3f);
+    sim_shot("notes_menu");
+    draw_alone(18);
+    check(lit(0, STRIP_Y_CHECK, 127, 63) == 0, "NOTES with the strip up: nothing in the bottom 18 rows");
+    sim_menu_close();
+    st_reset(); sim_tilt(0, 0); run(0.5f);
+
+    // ---- EASY: STEP's pill jumps with each swing, a hollow box on the next; GROOVE's caret runs by itself
+    role(ROLE_DRUM); tag("qant", 2); tag("easy", EASY_STEP); tag("patt", 0);
+    run(0.5f);
+    sim_gif_begin("easy");
+    int mx[8], adv = 0, caret_step = 0;
+    for (int i = 0; i < 8; i++) {
+        st_swing(sim_t + 0.05f, i & 1 ? ST_FRONT : ST_LEFT, 650.0f);
+        run(0.45f);
+        mx[i] = marker_x();
+        caret_step += lit(84, 26, 127, 26) > 0;
+        if (i > 0 && mx[i] >= 0 && mx[i - 1] >= 0 && mx[i] != mx[i - 1]) adv++;
+        if (i == 5) sim_shot("easy_step");
+    }
+    check(adv >= 6, "EASY STEP: the step's pill moves on with each swing (%d of 7: x %d %d %d %d %d %d %d %d)", adv, mx[0], mx[1], mx[2], mx[3], mx[4], mx[5], mx[6], mx[7]);
+    sim_menu_param(param_by_tag("patt"));
+    run(0.3f);
+    sim_shot("easy_menu");
+    sim_menu_close();
+    draw_alone(18);
+    check(lit(0, STRIP_Y_CHECK, 127, 63) == 0, "EASY with the strip up: nothing in the bottom 18 rows");
+    tag("easy", EASY_GROOVE);
+    run(1.0f);
+    bool idle_filled = marker_filled();
+    st_swing(sim_t + 0.05f, ST_LEFT, 650.0f);
+    run(0.15f);
+    int moves = 0, caret = 0, filled = 0, last = marker_x();
+    for (int i = 0; i < 12; i++) {
+        run(0.1f);
+        int x = marker_x();
+        moves += x >= 0 && x != last; last = x;
+        caret += lit(84, 26, 127, 26) > 0;
+        filled += marker_filled();
+        if (i == 6) sim_shot("easy_groove");
+    }
+    float steps = 1.2f * D.bpm / 15.0f;                                    // the sixteenths in 1.2 s
+    check(!idle_filled && moves >= (int)(0.6f * steps) && filled >= 10, "EASY GROOVE: one swing and the steps run by themselves (%d moves in 1.2 s at %.0f BPM), filled while it plays (%d of 12), hollow before", moves, (double)D.bpm, filled);
+    run(3.0f);
+    check(!marker_filled() && caret == 12 && caret_step == 0, "EASY GROOVE: still, it stops (hollow); its caret runs along the top (%d of 12), STEP has none (%d)", caret, caret_step);
+    // NOTES with STEP: the strip over the ladder
+    role(ROLE_NOTES); tag("easy", EASY_STEP); tag("patt", 2);
+    st_reset(); st_pose(0.0f, 0.0f); run(0.5f);
+    for (int i = 0; i < 6; i++) { st_swing(sim_t + 0.05f, ST_LEFT, 650.0f); run(0.4f); if (i == 3) sim_shot("easy_notes"); }
+    run(0.5f);
+    sim_gif_end();
+    tag("easy", EASY_OFF); role(ROLE_DRUM); st_reset(); sim_tilt(0, 0); run(0.5f);
+
+    // ---- the drag: a hit, then the hand pulled back slowly; DRUM, a twist; PAINT; then the other hand drags this one's hit
+    sim_gif_begin("drag");
+    t0 = sim_t + 0.05f;
+    st_strike(t0, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f);
+    st_glide(t0 + 0.15f, ST_RIGHT, 60.0f, 1.3f);
+    run(0.55f);
+    int px_mid = lit(0, 16, 81, 45);
+    float d_mid = D.drag;
+    run(0.6f);
+    sim_shot("drag_drum");
+    int px_full = lit(0, 16, 81, 45);
+    float d_full = D.drag;
+    run(1.2f);
+    check(d_full > d_mid + 0.3f && px_full > px_mid + 10, "the drag played: the strand out of the kick grows as it is pulled (drag %.2f: %d px, %.2f: %d px)", (double)d_mid, px_mid, (double)d_full, px_full);
+    t0 = sim_t + 0.05f;
+    st_strike(t0, ST_RIGHT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f);
+    st_glide(t0 + 0.15f, ST_TWIST, 90.0f, 0.9f);
+    run(0.8f);
+    sim_shot("drag_drum_bent");
+    run(1.2f);
+    role(ROLE_PAINT); tag("matl", MAT_LATEX); run(0.5f);
+    t0 = sim_t + 0.05f;
+    st_strike(t0, ST_LEFT, 650.0f, 0.07f, 0.015f, 0.0f, 0.0f);
+    st_glide(t0 + 0.15f, ST_BACK, 50.0f, 1.2f);
+    run(1.0f);
+    sim_shot("drag_paint");
+    run(1.2f);
+    // the other hand (SHAPE) takes this box's last hit and drags it (no loops: their hits would be the newest sent)
+    role(ROLE_DRUM); tag("matl", MAT_METAL); st_reset(); sim_tilt(0, 0); run(0.3f);
+    st_swing(sim_t + 0.05f, ST_FRONT, 650.0f);
+    run(0.5f);
+    const link_peer_t *me = me_seen();
+    uint8_t mine = me ? me->app[4] : 0;
+    int shaped = 0;
+    for (int i = 0; i <= 25; i++) {
+        peer_shape(mine, (float)i / 25.0f, 1.0f, 1.5f * (float)i / 25.0f);
+        run(0.04f);
+        shaped += D.peer_shapes;
+        if (i == 22) sim_shot("drag_by_the_other");
+    }
+    run(0.4f);
+    peer_shape(mine, 1.0f, 0.0f, 1.5f); run(0.8f);
+    peer_say(ROLE_DRUM, HAND_LEFT, false, 0, 0); run(0.5f);
+    sim_gif_end();
+    check(shaped > 15, "the other hand dragging this box's hit shows (%d of 26 ticks)", shaped);
+
+    // the strand against the pull itself, the scene alone: 0.2 then 0.8
+    // (against the frame with nothing dragged: the pixels that changed)
+    D.last_pad = PD_LEFT; D.dragging = 0; D.hold = 0.0f; D.drag = 0.0f; D.dbend = 0.0f; D.peer_shapes = 0; D.gest = 0; D.gyro = (vec3_t){ 0, 0, 0 };
+    settle(25); grab(frame_a);
+    D.dragging = 1; D.hold = 1.0f;
+    D.drag = 0.2f; settle(25);
+    int s1 = changed_px(frame_a, 0, 16, 81, 45);
+    D.drag = 0.8f; settle(25);
+    int s2 = changed_px(frame_a, 0, 16, 81, 45);
+    sim_shot("drag_strand");
+    check(s2 > s1 + 15, "the drag: the strand grows with D.drag (%d px changed at 0.2, %d at 0.8)", s1, s2);
+    D.hold = 0.0f; settle(25);
+    int s0 = changed_px(frame_a, 0, 16, 81, 45);
+    check(s0 < 10, "let go: it springs back (%d px left changed)", s0);
+    draw_alone(18);
+    check(lit(0, STRIP_Y_CHECK, 127, 63) == 0, "the drag with the strip up: nothing in the bottom 18 rows");
+    run(0.5f);
+
+    // ---- SHAPE: the other hand hits, this one drags: the band
+    role(ROLE_SHAPE); run(0.5f);
+    sim_shot("shape");
+    sim_gif_begin("shape");
+    static const int hv[4] = { DV_KICK, DV_SNAP, DV_KICK, DV_WHIP };
+    float pull_max = 0.0f; int px_max = 0;
+    for (int i = 0; i < 4; i++) {
+        peer_say(ROLE_DRUM, HAND_LEFT, true, hv[i], 112);
+        run(0.3f);
+        float t = sim_t;
+        st_glide(t, i & 1 ? ST_LEFT : ST_RIGHT, 55.0f, 1.1f);
+        if (i == 2) st_glide(t + 0.3f, ST_TWIST, 80.0f, 0.6f);
+        for (int k = 0; k < 120; k++) {
+            sim_tick();
+            if (D.drag > pull_max) pull_max = D.drag;
+            int n = lit(0, 16, 81, 45); if (n > px_max) px_max = n;
+            if (i == 1 && k == 80) sim_shot("shape_pull");
+            if (i == 2 && k == 80) sim_shot("shape_bent");
+        }
+    }
+    sim_gif_end();
+    check(pull_max > 0.6f && px_max > 80, "SHAPE: the band is drawn and pulled (drag up to %.2f, %d px)", (double)pull_max, px_max);
+    D.paired = 0; D.drag = 0.0f; D.hold = 0.0f; D.dbend = 0.0f; settle(25);
+    sim_shot("shape_alone");
+    check(lit(0, 16, 81, 45) > 40, "SHAPE alone: the band hangs from a ghost (%d px)", lit(0, 16, 81, 45));
+    D.paired = 1; D.hold = 1.0f; D.dbend = 0.0f;
+    D.drag = 0.2f; settle(25);
+    int c1 = cols_lit(22, 42);
+    D.drag = 0.8f; settle(25);
+    int c2 = cols_lit(22, 42);
+    check(c2 > c1 + 15, "SHAPE: the grip goes further with D.drag (%d columns at 0.2, %d at 0.8)", c1, c2);
+    sim_menu_param(param_by_tag("role"));
+    peer_say(ROLE_DRUM, HAND_LEFT, true, DV_SNAP, 100); run(0.1f);
+    st_glide(sim_t, ST_RIGHT, 60.0f, 0.8f); run(0.6f);
+    sim_shot("shape_menu");
+    draw_alone(18);
+    check(lit(0, STRIP_Y_CHECK, 127, 63) == 0, "SHAPE with the strip up: nothing in the bottom 18 rows");
+    sim_menu_close();
+    run(0.5f);
+    role(ROLE_DRUM); tag("skey", 0); st_reset(); sim_tilt(0, 0); run(0.5f);
+    pv[CP(CP_HINTS)] = hints_was;
 }
 
 static void shake(float s)
@@ -220,6 +499,7 @@ void test_scene(void)
     }
     sim_gif_end();
     check(flash_max > 0.5f, "the other box's hits reach the screen (peer flash %.2f)", (double)flash_max);
+    scenes_02();
     sim_peer_power(peer, false);
 
     // ---- what a frame costs (host): 400 frames of each role
@@ -232,6 +512,21 @@ void test_scene(void)
     }
     metric("scene_us_drum", us[0]); metric("scene_us_paint", us[1]); metric("scene_us_pump", us[2]);
     check(us[0] < 1000.0 && us[1] < 1000.0 && us[2] < 1000.0, "a frame costs %.0f / %.0f / %.0f us (DRUM / PAINT / PUMP) on the host", us[0], us[1], us[2]);
+    // 0.2's at their busiest: a held note sliding, dragged and bent; the band pulled and humming; a drag with EASY's strip
+    role(ROLE_NOTES); run(0.2f);
+    D.note_on = 1; D.hold = 1.0f; D.drag = 0.6f; D.dragging = 1; D.dbend = 2.0f; scene_hit(0, 100, SRC_LIVE);
+    double us_notes = cost_us(400);
+    role(ROLE_SHAPE); run(0.2f);
+    D.paired = 1; D.drag = 0.7f; D.hold = 1.0f; D.dbend = 3.0f; scene_hit(-1, 100, SRC_REMOTE);
+    double us_shape = cost_us(400);
+    role(ROLE_DRUM); tag("easy", EASY_STEP); run(0.2f);
+    D.last_pad = PD_FRONT; D.dragging = 1; D.hold = 1.0f; D.drag = 0.7f; D.dbend = -3.0f;
+    double us_drag = cost_us(400);
+    tag("easy", EASY_OFF);
+    metric("scene_us_notes", us[3]); metric("scene_us_shape", us[4]);
+    metric("scene_us_notes_held", us_notes); metric("scene_us_shape_pulled", us_shape); metric("scene_us_drum_drag_easy", us_drag);
+    check(us[3] < 1000.0 && us[4] < 1000.0 && us_notes < 1000.0 && us_shape < 1000.0 && us_drag < 1000.0,
+          "0.2's frames cost %.0f / %.0f us (NOTES / SHAPE), busy %.0f / %.0f / %.0f us (a held slide / the band pulled / a drag with EASY)", us[3], us[4], us_notes, us_shape, us_drag);
     role(ROLE_DRUM);
 
     // ---- the splash and the saver, drawn alone

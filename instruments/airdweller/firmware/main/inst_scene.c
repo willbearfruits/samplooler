@@ -3,9 +3,13 @@
 //
 //   the header   the role in the pill (filled while CUT); REC IN n / REC n (filled) while a loop is recorded
 //   the panel    right, x 84..127, the same in every role: this box and the other (L / R / ONE; the other's role, its
-//                pill popping with the voice of each hit it sends), the beat (four bubbles, the one now popping), the
-//                loops (four little orbits: a dot when empty, a ring when off, a disc with a hand going round when on,
-//                an arc growing while one is recorded)
+//                pill popping with the voice of each hit it sends, filled while it drags this box's sound), the beat
+//                (four bubbles, the one now popping), the loops (four little orbits: a dot when empty, a ring when off, a
+//                disc with a hand going round when on, an arc growing while one is recorded)
+//   EASY         (DRUM, PAINT, NOTES) the beat row becomes the pattern's sixteen steps: a bar for each step heard
+//                playing (learned as it plays), a dot for a rest, the step now a pill that pops. STEP: the pill jumps
+//                with each swing and a hollow box waits on the next step; GROOVE: a caret runs along the bar by itself
+//                and the pill follows it, filled while the groove plays, hollow once it stops
 //   DRUM         the four pads as a compass of capsules with their voices (forward up, back down, left, right); a
 //                liquid stick in the middle follows the gyro, stretches with a stroke and snaps to the pad it hits; a
 //                hit pops its capsule and splashes; the voice in big letters bottom right; the other hand's hits ripple
@@ -17,17 +21,32 @@
 //                from its side with a mallet, a ring and a splash; a hard one flips its fill for a frame
 //   PUMP         the same material as a vessel: the energy is the liquid in it and the shape swells with it, the bow
 //                saws across it as the box moves, a shake rattles it, the other hand's hits squash it
+//   the drag     (DRUM, PAINT, NOTES) after a hit the sound being pulled: a liquid strand out of the last pad's capsule
+//                (stretched with it) or out of the material where it was struck, as long as the drag, bent by the
+//                twist, wobbling while held; it springs back when the hand lets go and drips off at the next hit. While
+//                the other hand (SHAPE) drags it, the strand leans to that side and a tether runs off the edge to it
+//   NOTES        a ladder of SPAN rungs at the left (the key's note a long rung), a liquid bead on it where the tilt
+//                is, a tongue from the rung it points at to the note's name, big (the letter, its sharp raised, its
+//                octave lowered; an arrow when the roll takes it an octave up or down). A note sounding: its rung lit
+//                across the ladder, the name in a filled blob that pops; held, the rungs it has slid over fill in, the
+//                blob stretches with the drag, leans with its bend and wobbles
+//   SHAPE        a rubber band: the other hand's last hit a blob on its side (its voice under it, popping as each one
+//                arrives, a ripple in from the edge), this hand a grip on the band; the drag pulls the grip away along
+//                a ruler, the bend bows the band, holding makes it hum; a new hit snaps it back
 //   CUT          black: a flat line, the beat a tick running along it, CUT under it; in and out on a one-frame flash
 //   the splash   two sticks strike a blob from both sides, it rings through the four materials, AIRDWELLER drops in
 //                letter by letter, the tagline
 //   the saver    two bubbles circling each other, drifting slowly over the whole panel
 //
-// When the core's strip is up the scene squeezes above it (elastic): the compass and the shape shrink, the big name
-// and the tempo or pitch go. A new role and the end of a CUT come in on one inverted frame (a hard cut).
+// When the core's strip is up the scene squeezes above it (elastic): the compass, the shape, the ladder and the band
+// shrink, the big name and the tempo or pitch go. A new role and the end of a CUT come in on one inverted frame (a hard
+// cut).
 #include "inst_ad.h"
 #include "ui.h"
 #include "dsp.h"
+#include "params.h"
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -72,6 +91,27 @@ static pt_t  shp[NPT];
 static struct { float x, y, r; int life; } wave[3];   // a ring out of the shape at a strike, behind it
 static float sh_cx = 54.0f, sh_cy = 34.0f, sh_r = 13.0f;   // where the shape was drawn last
 static int8_t surf[128];               // PUMP: the liquid's surface in each column
+// the drag (DRUM, PAINT, NOTES)
+static float drag_s, drag_v;           // the strand's length (0..1 of its reach), on a spring towards D.drag
+static float sv;                       // the strand's presence: up while the hand pulls, down when it lets go
+static float wob_ph;                   // the wobble while held
+static float drag_ang = 0.6f;          // PAINT: where this hand's last strike landed on the contour (turns)
+static pt_t  strand_end;               // where the strand ended last frame: a drop falls from there when it snaps
+// NOTES
+static float bead_u = -1.0f, bead_v;   // the bead on the ladder, in rungs, on a spring
+static int   rung_lit, rung_oct;       // the rung the tilt points at (D.note's), and the roll's octave
+static int   rung_sound = -1;          // the rung a sounding note is on (-1: none)
+static int   slide_lo, slide_hi;       // the rungs a held note has slid over
+static float name_pop, name_popv;      // the note's name pops when a note starts
+static int   name_was = -1;
+// SHAPE
+static float grip_s, grip_v;           // the grip's pull (0..1 of the ruler), on a spring towards D.drag
+static float anchor_pop, anchor_popv;
+// EASY
+static uint16_t pat_seen;              // the steps heard playing: the pattern, learned as it plays
+static int   pat_key = -1;             // role, EASY and PATTERN: a change forgets the steps
+static int   step_was = -1, step_age = 99;
+static float step_pop, step_popv;
 
 // ---------------------------------------------------------------- primitives
 static void xpix(int x, int y) { oled_pixel(x, y, !oled_get(x, y)); }
@@ -124,6 +164,82 @@ static void arc_thick(int cx, int cy, int r, float frac)   // from 12 o'clock, c
 // a spring for a pop: kicked to 1, it falls back past 0 and settles (elastic)
 static void spring(float *x, float *v) { *v += -0.45f * *x; *v *= 0.62f; *x += *v; if (fabsf(*x) < 0.01f && fabsf(*v) < 0.01f) *x = *v = 0.0f; }
 static int rnd(int n) { return (int)(rng_next(&seed) % (uint32_t)n); }
+static int ipt(float v) { return (int)lroundf(v); }
+
+// a liquid strand from a to b, r0 thick at a and r1 at b, thinning in the middle as it stretches; its middle pushed
+// `bow` px to the left of the way from a to b (up, for a strand drawn left to right)
+static void strand(float x0, float y0, float r0, float x1, float y1, float r1, float bow)
+{
+    float dx = x1 - x0, dy = y1 - y0, len = sqrtf(dx * dx + dy * dy);
+    if (len < 0.5f) { oled_disc(ipt(x0), ipt(y0), ipt(r0), true); return; }
+    float nx = dy / len, ny = -dx / len;
+    float cx = 0.5f * (x0 + x1) + nx * 2.0f * bow, cy = 0.5f * (y0 + y1) + ny * 2.0f * bow;   // the middle lands `bow` off
+    float pinch = clampf(1.0f - len / 52.0f, 0.3f, 1.0f);
+    int n = (int)(len / 1.5f) + 2;
+    for (int i = 0; i <= n; i++) {
+        float t = (float)i / (float)n, u = 1.0f - t;
+        float x = u * u * x0 + 2.0f * u * t * cx + t * t * x1, y = u * u * y0 + 2.0f * u * t * cy + t * t * y1;
+        float r = lerpf(r0, r1, t) * (1.0f - (1.0f - pinch) * sin_turns(0.5f * t));
+        oled_disc(ipt(x), ipt(y), (int)(r + 0.5f), true);
+    }
+}
+// a bend in semitones as px of bow: a few semitones show, a lot does not run away
+static float bend_px(float st, float k) { return k * st / (fabsf(st) + 4.0f); }
+
+// one glyph of f, each pixel drawn sx by sy, leaning `lean` px per row above `base` (a bend), lit or black. With big
+// pixels it is made liquid: the outer corners rounded off and the diagonal steps bridged. Returns the advance.
+static float glyph_big(const gfx_font_t *f, float x, float y, uint8_t c, float sx, float sy, float lean, float base, bool on)
+{
+    if (c < f->first || c > f->last || !f->glyphs[c - f->first].w) return (float)f->space * sx;
+    const gfx_glyph_t *g = &f->glyphs[c - f->first];
+    uint32_t col[10];
+    int w = g->w > 8 ? 8 : g->w;
+    const uint8_t *d = f->bits + g->off;
+    col[0] = col[w + 1] = 0;                                   // a blank column each side: the neighbours read 0
+    for (int i = 0; i < w; i++, d += f->bpc) { col[i + 1] = d[0]; if (f->bpc > 1) col[i + 1] |= (uint32_t)d[1] << 8; }
+#define PX(i, r) ((r) >= 0 && (col[(i) + 1] >> (r) & 1))
+#define XS(i, r) ((int)floorf(x + lean * (base - (y + ((float)(r) + 0.5f) * sy)) + (float)(i) * sx))
+#define YS(r)    ((int)floorf(y + (float)(r) * sy))
+    bool liquid = sx >= 2.0f && sy >= 2.0f;
+    for (int pass = 0; pass < (liquid ? 2 : 1); pass++)
+        for (int i = 0; i < w; i++) for (int r = 0; r < f->h; r++) {
+            if (!PX(i, r)) continue;
+            int x0 = XS(i, r), x1 = XS(i + 1, r) - 1, y0 = YS(r), y1 = YS(r + 1) - 1;
+            if (x1 < x0) x1 = x0;
+            if (y1 < y0) y1 = y0;
+            if (pass == 0) {
+                oled_rect(x0, y0, x1 - x0 + 1, y1 - y0 + 1, on);
+                if (!liquid) continue;
+                bool n = PX(i, r - 1), s = PX(i, r + 1), wv = PX(i - 1, r), e = PX(i + 1, r);
+                if (!n && !wv) oled_pixel(x0, y0, !on);
+                if (!n && !e) oled_pixel(x1, y0, !on);
+                if (!s && !wv) oled_pixel(x0, y1, !on);
+                if (!s && !e) oled_pixel(x1, y1, !on);
+                continue;
+            }
+            // the diagonal steps (a pixel up or down and to the right, nothing beside either): a bridge over the corner
+            for (int dv = -1; dv <= 1; dv += 2) {
+                if (!PX(i + 1, r + dv) || PX(i + 1, r) || PX(i, r + dv)) continue;
+                int cx = x1 + 1, cy = dv < 0 ? y0 : y1 + 1;            // the corner the two share (between pixels)
+                int rr = sx >= 3.0f && sy >= 3.0f ? 2 : 1;
+                for (int jy = -rr; jy < rr; jy++) for (int jx = -rr; jx < rr; jx++)
+                    if (abs(2 * jx + 1) + abs(2 * jy + 1) <= 2 * rr) oled_pixel(cx + jx, cy + jy, on);
+            }
+        }
+#undef PX
+#undef XS
+#undef YS
+    return (float)g->adv * sx;
+}
+static int glyph_w(const gfx_font_t *f, uint8_t c) { return c >= f->first && c <= f->last && f->glyphs[c - f->first].w ? f->glyphs[c - f->first].w : f->space; }
+
+// what the other box's hit was: one of its drums, or its NOTES voice (sent as NDV + the voice)
+static const char *voice_label(int v)
+{
+    if (v >= 0 && v < DV_OFF) return dv_name[v];
+    if (v >= NDV && v < NDV + NNV) return nv_name[v - NDV];
+    return "HIT";
+}
 
 // ---------------------------------------------------------------- hits
 void scene_hit(int pad, int vel, int src)
@@ -180,7 +296,7 @@ static void hands(void)
     if (D.paired) {
         int x0 = xo - (g > 0 ? g : 0), w0 = wo + 2 * (g > 0 ? g : 0);
         if (x0 + w0 > 127) x0 = 127 - w0;
-        capsule(x0, y - (g > 0 ? 1 : 0), w0, h + (g > 0 ? 2 : 0), ob, peer_pop > 0.3f || D.peer_flash > 0.5f ? 1 : 0);
+        capsule(x0, y - (g > 0 ? 1 : 0), w0, h + (g > 0 ? 2 : 0), ob, peer_pop > 0.3f || D.peer_flash > 0.5f || D.peer_shapes ? 1 : 0);
         // the link between them: a dot running from the other to this one
         int lx = me_left ? xm + wm : xo + wo, cy = y + h / 2;
         oled_hline_pat(lx + 1, cy, gap - 2, 0x55, true);
@@ -199,6 +315,37 @@ static void beat_row(void)
         } else if (k == 0) oled_circle(x, BEAT_Y, 2, true);
         else { oled_pixel(x, BEAT_Y, true); oled_pixel(x - 1, BEAT_Y, true); oled_pixel(x + 1, BEAT_Y, true); oled_pixel(x, BEAT_Y - 1, true); oled_pixel(x, BEAT_Y + 1, true); }
     }
+}
+
+// EASY: the pattern's sixteen steps where the beat bubbles were (see the top)
+static int step_x(int s) { return 85 + (s * 41 + 7) / 15; }
+static bool easy_shown(void) { return D.easy != EASY_OFF && (D.role == ROLE_DRUM || D.role == ROLE_PAINT || D.role == ROLE_NOTES); }
+static int groove_step(void) { return (int)(((float)D.beat_in_bar + D.beat_phase) * 4.0f) & 15; }
+static void easy_row(void)
+{
+    const int y = BEAT_Y + 1;                                      // rows 26 (the caret) .. 35 (the beats)
+    bool groove = D.easy == EASY_GROOVE;
+    for (int s = 0; s < 16; s++) {
+        int x = step_x(s);
+        if (pat_seen >> s & 1) oled_rect(x, y - 1, 1, 4, true);   // a step that plays: a bar
+        else oled_pixel(x, y + 2, true);                           // a rest: a dot on the line
+        if ((s & 3) == 0) oled_pixel(x, y + 4, true);              // the beats, under it
+    }
+    int cur = groove ? groove_step() : clampi(D.step, 0, 15);
+    bool live = step_age < (groove ? 10 : 99) && step_was >= 0;
+    if (groove) {                                                  // the caret runs along the bar by itself
+        int hx = 85 + (int)lroundf(((float)D.beat_in_bar + D.beat_phase) * 10.25f);
+        oled_rect(hx - 1, y - 5, 3, 1, true);
+    } else if (pat_seen && step_was >= 0) {                        // STEP: the next step waits in a hollow box
+        int nx = cur;
+        for (int i = 1; i <= 16; i++) if (pat_seen >> ((cur + i) & 15) & 1) { nx = (cur + i) & 15; break; }
+        if (nx != cur && step_age > 3) oled_rframe(step_x(nx) - 2, y - 2, 5, 6, 1);
+    }
+    int p = step_pop > 0.4f ? 1 : 0;
+    int x = step_x(cur), top = y - 3 - p, h = 7 + 2 * p;
+    oled_rect(x - 2, top, 5, h, false);
+    if (live) oled_rrect(x - 1, top, 3, h, 1, true);
+    else oled_rframe(x - 1, top, 3, h, 1);
 }
 
 static void loop_row(void)
@@ -237,7 +384,19 @@ static void readout(void)
         int w = oled_ftext_w(F_MED, big_txt, 1);
         if (w <= 127 - PANEL_X + 2) oled_ftext_ex(F_MED, 127 - w, 47, big_txt, 1);
     }
-    if (D.role == ROLE_DRUM) snprintf(b, sizeof b, "%d BPM", (int)lroundf(D.bpm));
+    if (easy_shown()) {                                 // EASY: which, and the pattern if it fits
+        const char *mode = D.easy == EASY_GROOVE ? "GROOVE" : "STEP";
+        const param_t *pp = param(P_PATTERN);
+        snprintf(b, sizeof b, "%s %s", mode, pp->labels[clampi(D.pattern, 0, NPATTERN - 1)]);
+        if (oled_ftext_w(F_TINY, b, 0) > 127 - PANEL_X) snprintf(b, sizeof b, "%s", mode);
+    } else if (D.role == ROLE_NOTES) {                  // the key and the scale
+        const char *k = param(P_KEY)->labels[clampi(D.key, 0, 11)], *s = param(P_SCALE)->labels[clampi(D.scale, 0, NSCALES - 1)];
+        snprintf(b, sizeof b, "%s %s", k, s);
+        if (oled_ftext_w(F_TINY, b, 0) > 127 - PANEL_X) snprintf(b, sizeof b, "%s %.3s", k, s);
+    } else if (D.role == ROLE_SHAPE) {                  // how far the band is pulled, and bent
+        if (fabsf(D.dbend) >= 0.5f) snprintf(b, sizeof b, "%+dST %d%%", (int)lroundf(D.dbend), (int)lroundf(D.drag * 100.0f));
+        else snprintf(b, sizeof b, "PULL %d%%", (int)lroundf(D.drag * 100.0f));
+    } else if (D.role == ROLE_DRUM) snprintf(b, sizeof b, "%d BPM", (int)lroundf(D.bpm));
     else if (fabsf(D.bend) >= 0.5f) snprintf(b, sizeof b, "%dHZ %+dST", (int)lroundf(D.mat_hz), (int)lroundf(D.bend));
     else snprintf(b, sizeof b, "%dHZ", (int)lroundf(D.mat_hz));
     oled_ftext_r(F_TINY, 127, 58, b, 0);
@@ -281,11 +440,45 @@ static void blob_line(float x0, float y0, float r0, float x1, float y1, float r1
     }
 }
 
+// ---------------------------------------------------------------- the drag: the sound pulled out after a hit
+static float drag_k(void) { return clampf(drag_s, 0.0f, 1.0f) * sv; }
+static float drag_bow(float k) { return sv * (bend_px(D.dbend, k) + 2.2f * D.hold * sin_turns(wob_ph)); }
+// a strand out of (x, y) along (ux, uy), up to `reach` px at a full drag, sagging a little, bowed by the bend (up, or
+// to the right when it runs up or down); the other hand (SHAPE) dragging it leans it to that side, a tether running off
+// the edge to an open grip
+static void pull(float x, float y, float ux, float uy, float reach, float r0)
+{
+    float k = drag_k();
+    if (k < 0.03f && !D.peer_shapes) return;
+    float len = 2.0f + (reach - 2.0f) * k;
+    float ex = x + ux * len, ey = y + uy * len;
+    float nx = uy, ny = -ux;                                    // the strand's left
+    float upx = nx, upy = ny;
+    if (upy > 0.01f || (fabsf(upy) <= 0.01f && upx < 0.0f)) { upx = -upx; upy = -upy; }
+    // it hangs: a sideways strand sags under the compass's middle, one running up or down swings out to the right
+    float b = drag_bow(7.0f), sag = fabsf(uy) > 0.7f ? 0.0f : 0.3f * len, side = fabsf(uy) > 0.7f ? 0.25f * len : 0.0f;
+    float bow = (upx * b + side) * nx + (upy * b + sag) * ny;
+    if (D.peer_shapes) {
+        float tx = other_on_right() ? (float)PANEL_X - 4.0f : 2.0f, ty = clampf(ey + 9.0f, 20.0f, lerpf(42.0f, 56.0f, clampf(room, 0.0f, 1.0f)));
+        ex = lerpf(ex, tx, 0.45f * sv); ey = lerpf(ey, ty, 0.45f * sv);
+        for (int i = 1; i < 12; i += 2) oled_pixel(ipt(lerpf(ex, tx, (float)i / 12.0f)), ipt(lerpf(ey, ty, (float)i / 12.0f)), true);
+        oled_circle(ipt(tx), ipt(ty), 3, true);
+        oled_disc(ipt(tx), ipt(ty), 1, (fr >> 2) & 1);
+    }
+    strand(x, y, r0, ex, ey, 1.3f, bow);
+    oled_disc(ipt(ex), ipt(ey) + 1, 2, true);                // the drop at its end, hanging
+    oled_pixel(ipt(ex) - 1, ipt(ey) - 1, false);
+    strand_end = (pt_t){ ex, ey };
+}
+
 static void drum_scene(void)
 {
     int cx = 40, cy = (int)lroundf(lerpf(31.0f, 38.0f, room)), arm = (int)lroundf(lerpf(11.0f, 17.0f, room));
     int h = room > 0.5f ? 9 : 7;
     float ax = 9.0f, ay = (float)arm - (float)h / 2.0f - 2.5f;
+    int dp = clampi(D.last_pad, 0, NPAD - 1);
+    float dk = drag_k();
+    pt_t edge = { 0.0f, 0.0f };                         // the dragged pad's inner edge
     // the pads
     for (int p = 0; p < NPAD; p++) {
         int v = D.pad_voice[p];
@@ -295,10 +488,21 @@ static void drum_scene(void)
         y = cy + pdy[p] * arm - h / 2;
         padc[p] = (pt_t){ (float)x + (float)w * 0.5f, (float)y + (float)h * 0.5f };
         int gx = (int)lroundf(pop[p] * 3.0f), gy = (int)lroundf(pop[p] * 1.5f);
+        int xx = x, yy = y, ww = w, hh = h;
+        bool dragged = p == dp && (dk > 0.03f || D.peer_shapes);
+        if (dragged) {                                  // the sound being dragged: its capsule stretches inwards, wobbling
+            int st = (int)lroundf(dk * 6.0f + D.hold * sv * 1.4f * sin_turns(wob_ph * 2.0f));
+            if (st < 0) st = 0;
+            if (pdx[p]) { ww += st; if (pdx[p] > 0) xx -= st; }
+            else { int s2 = st / 2; hh += s2; if (pdy[p] > 0) yy -= s2; }
+        }
+        edge = p == dp ? (pt_t){ pdx[p] < 0 ? (float)(xx + ww) : pdx[p] > 0 ? (float)xx - 1.0f : (float)xx + (float)ww * 0.5f,
+                                 pdy[p] < 0 ? (float)(yy + hh) : pdy[p] > 0 ? (float)yy - 1.0f : (float)yy + (float)hh * 0.5f } : edge;
         if (gx < -1) gx = -1;
         if (gy < 0) gy = 0;
         bool lit = pop[p] > 0.3f || D.flash[p] > 0.45f;
-        capsule(x - gx, y - gy, w + 2 * gx, h + 2 * gy, nm, v == DV_OFF ? 2 : lit ? 1 : 0);
+        capsule(xx - gx, yy - gy, ww + 2 * gx, hh + 2 * gy, nm, v == DV_OFF ? 2 : lit ? 1 : 0);
+        if (dragged) continue;                          // its strand takes the place of its axis
         // the axis to it, dotted: the way to swing for it
         int ix = (int)padc[p].x - pdx[p] * (w / 2 + 2), iy = (int)padc[p].y - pdy[p] * (h / 2 + 1);
         for (int k = 5; k < 40; k += 2) {
@@ -307,6 +511,8 @@ static void drum_scene(void)
             oled_pixel(x1, y1, true);
         }
     }
+    // the drag: a strand out of the last pad, across the compass
+    pull(edge.x, edge.y, (float)-pdx[dp], (float)-pdy[dp], pdx[dp] ? 20.0f : 2.0f * ((float)arm - (float)h * 0.5f) - 3.0f, 2.6f);
     // the stick: a liquid bead on a spring, pulled by the gyro, stretching out of the middle
     float tx, ty; stick_target(ax, ay, &tx, &ty);
     tipvx += (tx - tipx) * 0.5f; tipvy += (ty - tipy) * 0.5f;
@@ -385,7 +591,6 @@ static void contour(int m, float R, float vib, const float *w, float swell, pt_t
     }
 }
 
-static int ipt(float v) { return (int)lroundf(v); }
 
 static void poly_line(const pt_t *p, int n, int thick)
 {
@@ -472,9 +677,15 @@ static void material_scene(bool pump)
     float jx = sh ? (float)(rnd(2 * sh + 1) - sh) : 0.0f, jy = sh ? (float)(rnd(3) - 1) : 0.0f;
     float lean = clampf(D.bend / 24.0f, -1.0f, 1.0f) * 0.55f;
     float sqx = 1.0f + 0.18f * squash, sqy = 1.0f - 0.22f * squash;
+    float pk = pump ? 0.0f : drag_k();                  // PAINT: the drag pulls the material out where it was struck
     for (int i = 0; i < NPT; i++) {
         float x = lerpf(a[i].x, b[i].x, f) * sqx, y = lerpf(a[i].y, b[i].y, f) * sqy;
         x -= y * lean;
+        if (pk > 0.0f) {
+            float dt = (float)i / (float)NPT - drag_ang; dt -= floorf(dt + 0.5f);
+            float g = 1.0f - fabsf(dt) * 6.0f;
+            if (g > 0.0f) { float l = sqrtf(x * x + y * y) + 1e-3f, bump = pk * R * 0.4f * g * g; x += bump * x / l; y += bump * y / l; }
+        }
         shp[i] = (pt_t){ cx + jx + x, cy + jy + y };
     }
     for (int j = 0; j < 3; j++) if (wave[j].life > 0) dot_circle(ipt(wave[j].x), ipt(wave[j].y), (int)wave[j].r, 16, 63);
@@ -539,7 +750,168 @@ static void material_scene(bool pump)
         for (int i = 0; i < NPT; i++) if (fabsf(shp[i].x - cx) < R * 0.6f && shp[i].y < yt) yt = shp[i].y;
         bow(cx, yt, R);
     }
+    if (!pump) {                                        // the strand pulled out of it
+        int i = clampi((int)lroundf(drag_ang * (float)NPT), 0, NPT) % NPT;
+        float dx = shp[i].x - cx, dy = shp[i].y - cy, l = sqrtf(dx * dx + dy * dy) + 1e-3f;
+        pull(shp[i].x, shp[i].y, dx / l, dy / l, 16.0f, 2.2f);
+    }
     count_in((int)cx, (int)cy);
+}
+
+// ---------------------------------------------------------------- NOTES: the ladder, the bead, the name
+// the scales as instrument.c has them (SING's numbering, as the link numbers them): which rung a note is on
+static const int8_t scales[NSCALES][7] = { { 0, 2, 4, 5, 7, 9, 11 }, { 0, 2, 3, 5, 7, 8, 10 }, { 0, 2, 3, 5, 7, 9, 10 },
+                                           { 0, 2, 4, 5, 7, 9, 10 }, { 0, 1, 3, 5, 7, 8, 10 }, { 0, 2, 3, 5, 7, 8, 11 } };
+// the rung of the SPAN `note` is on (the nearest to u when the roll's octave lets two fit), and that octave
+static int rung_of(int note, float u, int *oct)
+{
+    int sc = clampi(D.scale, 0, NSCALES - 1), span = clampi(D.span, 1, 32), best = -1;
+    int rel = note - 12 * (D.octave + 1) - D.key;
+    float bd = 1e9f;
+    *oct = 0;
+    for (int o = 0; o < 3; o++) {
+        int oc = o == 0 ? 0 : o == 1 ? -1 : 1, r2 = rel - 12 * oc, ov = (r2 + 1200) / 12 - 100, semi = r2 - 12 * ov;
+        for (int d = 0; d < 7; d++) {
+            if (scales[sc][d] != semi) continue;
+            int idx = 7 * ov + d;
+            float dd = fabsf((float)idx - u) + (oc ? 0.01f : 0.0f);
+            if (idx >= 0 && idx < span && dd < bd) { bd = dd; best = idx; *oct = oc; }
+        }
+    }
+    return best >= 0 ? best : clampi((int)(u + 0.5f), 0, span - 1);
+}
+
+// the note's name, big: the letter (F_MED at S), its sharp raised and its octave lowered beside it (F_SMALL at S - 1);
+// centred on cx, its baseline at base. Squashed by pop, stretched by st, leaning by lean; lit or black. bx, bw: where
+// it went
+static void note_name(int note, float cx, float base, float S, float pop, float st, float lean, bool on, int *bx, int *bw)
+{
+    int pc = ((note % 12) + 12) % 12;
+    uint8_t letter = (uint8_t)"CCDDEFFGGAAB"[pc];
+    bool sharp = (0x54A >> pc) & 1;
+    char oc[4]; snprintf(oc, sizeof oc, "%d", note / 12 - 1);
+    float s2 = S > 2.5f ? 2.0f : 1.0f;
+    float sx = S * st * (1.0f - 0.15f * pop), sy = S * (1.0f + 0.14f * pop);
+    float lw = (float)glyph_w(F_MED, letter) * sx, ow = 0.0f;
+    for (int i = 0; oc[i]; i++) ow += (float)(glyph_w(F_SMALL, (uint8_t)oc[i]) + 1) * s2;
+    float rw = fmaxf(sharp ? (float)glyph_w(F_SMALL, '#') * s2 : 0.0f, ow - s2);
+    float w = lw + S + rw, x = cx - w * 0.5f;
+    glyph_big(F_MED, x, base - 7.0f * sy, letter, sx, sy, lean, base, on);
+    float xr = x + lw + S;
+    if (sharp) glyph_big(F_SMALL, xr + lean * 7.0f * sy, base - 7.0f * sy, '#', s2, s2, 0.0f, 0.0f, on);
+    float ox = xr;
+    for (int i = 0; oc[i]; i++) ox += glyph_big(F_SMALL, ox, base + 2.0f - 5.0f * s2, (uint8_t)oc[i], s2, s2, 0.0f, 0.0f, on) + s2;
+    *bx = ipt(x); *bw = ipt(w);
+}
+
+static void notes_scene(void)
+{
+    int span = clampi(D.span, 1, 32);
+    float rm = clampf(room, 0.0f, 1.0f);
+    float top = 18.0f, bot = lerpf(43.0f, 61.0f, rm), pitch = (bot - top) / (float)span;
+    const int xl = 3, xr = 11, xm = 7;
+#define RY(u) (bot - ((u) + 0.5f) * pitch)
+    float u = clampf(D.note_pos * (float)span, -0.5f, (float)span - 0.5f);
+    rung_lit = rung_of(D.note, u, &rung_oct);
+    bool sounding = D.note_on && rung_sound >= 0;
+    bool held = sounding && D.hold > 0.3f;
+    if (held) { rung_sound = rung_lit; if (rung_lit < slide_lo) slide_lo = rung_lit; if (rung_lit > slide_hi) slide_hi = rung_lit; }
+    // the rungs a held note has slid over, filled in
+    if (sounding && slide_hi > slide_lo) {
+        int y0 = ipt(RY((float)slide_hi)), y1 = ipt(RY((float)slide_lo));
+        oled_dither(xl + 1, y0, xr - xl - 1, y1 - y0 + 1, 2, true);
+    }
+    // the ladder: two rails and the rungs, the key's note (every seventh) long
+    oled_rect(xl, ipt(top) - 1, 1, ipt(bot) - ipt(top) + 3, true);
+    oled_rect(xr, ipt(top) - 1, 1, ipt(bot) - ipt(top) + 3, true);
+    for (int k = 0; k < span; k++) {
+        int y = ipt(RY((float)k));
+        if (k % 7 == 0) oled_rect(xl - 2, y, xr - xl + 5, 1, true);
+        else if (pitch >= 2.5f) oled_rect(xl + 1, y, xr - xl - 1, 1, true);
+        else { oled_pixel(xl + 1, y, true); oled_pixel(xr - 1, y, true); }
+    }
+    if (sounding) { int y = ipt(RY((float)rung_sound)); oled_rrect(xl - 2, y - 1, xr - xl + 5, 3, 1, true); }
+    // the bead where the tilt is: a liquid drop, a tail behind it when it moves fast
+    float by = RY(bead_u), tail = clampf(bead_v * pitch * 1.6f, -9.0f, 9.0f);
+    if (fabsf(tail) > 1.5f) blob_line((float)xm, by + tail, 1.4f, (float)xm, by, 3.0f);
+    oled_disc(xm, ipt(by), 3, true);
+    oled_pixel(xm - 1, ipt(by) - 2, false); oled_pixel(xm - 2, ipt(by) - 1, false);
+    // the name
+    float S = rm > 0.5f ? 3.0f : 2.0f, cx = 53.0f, base = rm > 0.5f ? 43.0f : 37.0f;
+    float k = drag_k();
+    float st = 1.0f + 0.3f * k, lean = sounding ? clampf(bend_px(D.dbend, 0.5f) + 0.07f * D.hold * sv * sin_turns(wob_ph), -0.4f, 0.4f) : 0.0f;
+    int bx, bw;
+    note_name(D.note, cx, base, S, name_pop, st, lean, true, &bx, &bw);   // measured (drawn over below)
+    int pad = 3 + (int)lroundf(clampf(name_pop, 0.0f, 1.0f) + k * 2.0f), btop = ipt(base - 7.0f * S * (1.0f + 0.14f * name_pop)) - pad;
+    if (btop < 17) btop = 17;
+    int bbot = ipt(base) + 3 + pad / 2;
+    if (sounding) {
+        oled_rrect(bx - pad, btop, bw + 2 * pad, bbot - btop, 4, true);
+        note_name(D.note, cx, base, S, name_pop, st, lean, false, &bx, &bw);
+    }
+    // the tongue: from the rung the tilt points at to the name
+    int ty = ipt(RY((float)rung_lit));
+    if (sounding && rung_sound == rung_lit) oled_rrect(xr + 2, ty - 1, 7, 3, 1, true);
+    else { oled_rframe(xr + 2, ty - 1, 7, 3, 1); }
+    float ex = (float)(bx - pad - 1), ey = 0.5f * (float)(btop + bbot);
+    strand((float)xr + 9.0f, (float)ty, 1.0f, ex, ey, 0.6f, held ? 1.5f * D.hold * sin_turns(wob_ph) : 0.0f);
+    // the roll's octave: an arrow beside the name
+    if (rung_oct) {
+        int ax = bx + bw + 4, ay = ipt(base - 3.5f * S);
+        for (int j = 0; j < 3; j++) oled_rect(ax - j, ay + (rung_oct > 0 ? j : -j), 2 * j + 1, 1, true);
+        oled_rect(ax, rung_oct > 0 ? ay + 3 : ay - 5, 1, 3, true);
+    }
+    // held: a pill under the name with the bend
+    if (held && rm > 0.6f) {
+        char b[16];
+        if (fabsf(D.dbend) >= 0.5f) snprintf(b, sizeof b, "HELD %+dST", (int)lroundf(D.dbend)); else snprintf(b, sizeof b, "HELD");
+        int w = oled_pill_w(F_SMALL, b);
+        oled_pill(F_SMALL, ipt(cx) - w / 2, 51, b, true);
+    }
+    count_in(ipt(cx), ipt(base) - 10);
+#undef RY
+}
+
+// ---------------------------------------------------------------- SHAPE: the band between the two hands
+static void shape_scene(void)
+{
+    bool right = other_on_right();
+    float rm = clampf(room, 0.0f, 1.0f);
+    float cy = lerpf(30.0f, 33.0f, rm), ax = right ? 68.0f : 13.0f, dir = right ? -1.0f : 1.0f;
+    const float r0 = 11.0f, reach = 46.0f;
+    float g = clampf(grip_s, -0.2f, 1.15f), gx = ax + dir * (r0 + reach * g), gy = cy;
+    // the ruler: a tick each quarter of the reach, filled as far as the pull
+    if (rm > 0.5f) {
+        int ry = ipt(cy) + 13;
+        for (int i = 0; i <= 4; i++) oled_rect(ipt(ax + dir * (r0 + reach * (float)i * 0.25f)), ry - 1, 1, 3, true);
+        for (int i = 0; i <= (int)reach; i += 2) oled_pixel(ipt(ax + dir * (r0 + (float)i)), ry, true);
+        float p = clampf(D.drag, 0.0f, 1.0f) * reach;
+        if (p >= 1.0f) { int x0 = ipt(ax + dir * r0), x1 = ipt(ax + dir * (r0 + p)); oled_rect(x0 < x1 ? x0 : x1, ry - 1, abs(x1 - x0) + 1, 2, true); }
+    }
+    // the band: bowed by the bend (up for up), humming while held, sagging when nobody is there to pull against
+    float bow = bend_px(D.dbend, 9.0f) + 2.6f * D.hold * sin_turns(wob_ph) - (D.paired ? 0.0f : 4.0f);
+    float t0 = 3.2f - 1.2f * clampf(g, 0.0f, 1.0f);
+    if (right) strand(gx, gy, 2.0f, ax, cy, t0, bow);
+    else strand(ax, cy, t0, gx, gy, 2.0f, bow);
+    // the grip: this hand
+    oled_disc(ipt(gx), ipt(gy), 5, false);
+    oled_circle(ipt(gx), ipt(gy), 5, true); oled_circle(ipt(gx), ipt(gy), 4, true);
+    oled_disc(ipt(gx), ipt(gy), 1, true);
+    // the anchor: the other hand's last hit, popping as each one arrives (over the grip when it snaps back past), its
+    // voice under it
+    if (D.paired) {
+        int r = 6 + (int)lroundf(3.0f * clampf(anchor_pop, -0.3f, 1.0f));
+        oled_disc(ipt(ax), ipt(cy), r, true);
+        oled_pixel(ipt(ax) - r / 2, ipt(cy) - r / 2, false); oled_pixel(ipt(ax) - r / 2 + 1, ipt(cy) - r / 2, false);
+        const char *nm = voice_label(D.peer_voice);
+        int w = oled_ftext_w(F_TINY, nm, 0), tx = clampi(ipt(ax) - w / 2, 0, PANEL_X - 3 - w), ty = ipt(cy) + 10;
+        oled_rect(tx - 1, ty - 1, w + 2, 7, false);
+        oled_ftext_ex(F_TINY, tx, ty, nm, 0);
+    } else {
+        dot_circle(ipt(ax), ipt(cy), 6, 16, 63);
+        if (rm > 0.5f) oled_ftext_c(F_TINY, 41, ipt(cy) + 17, "NO OTHER HAND", 0);
+    }
+    count_in(41, ipt(cy));
 }
 
 // ---------------------------------------------------------------- CUT: the silence
@@ -555,6 +927,22 @@ static void cut_scene(void)
 }
 
 // ---------------------------------------------------------------- one frame's movement
+// a new hit: the old strand snaps off and drips
+static void snap_strand(void)
+{
+    if (drag_k() > 0.15f) parts_emit(&parts, strand_end.x, strand_end.y, 0.0f, 10.0f, 0.4f, PART_SQUARE, 1);
+    sv = 0.0f; drag_s = drag_v = 0.0f;
+}
+// EASY: the step a live hit played (learned for the strip)
+static void easy_heard(void)
+{
+    if (!easy_shown()) return;
+    int s = D.easy == EASY_GROOVE ? (int)lroundf(((float)D.beat_in_bar + D.beat_phase) * 4.0f) & 15 : clampi(D.step, 0, 15);
+    pat_seen |= (uint16_t)(1u << s);
+    step_pop = 1.0f; step_popv = 0.0f; step_age = 0;
+    if (step_was < 0) step_was = D.step;
+}
+
 static void events(void)
 {
     for (int e = 0; e < nev; e++) {
@@ -562,24 +950,42 @@ static void events(void)
         float k = 0.35f + 0.65f * (float)ev->vel / 127.0f;
         if (ev->src == SRC_REMOTE) {
             peer_pop = 1.0f; peer_popv = 0.0f; peer_name_f = 12;
-            int v = clampi(D.peer_voice, 0, NDV - 1);
-            if (D.role == ROLE_DRUM) {
+            int v = D.peer_voice >= 0 && D.peer_voice < DV_OFF ? D.peer_voice : DV_GLASS;   // a note strikes like glass
+            if (D.role == ROLE_DRUM || D.role == ROLE_NOTES || D.role == ROLE_SHAPE) {
                 for (int i = 0; i < 3; i++) if (rip[i].life <= 0) { rip[i].r = 4.0f; rip[i].life = 9; break; }
+                if (D.role == ROLE_SHAPE) {
+                    anchor_pop = 1.0f; anchor_popv = 0.0f;
+                    big_txt = voice_label(D.peer_voice); big_age = 0;
+                    float ax = other_on_right() ? 68.0f : 13.0f, cy = lerpf(30.0f, 33.0f, clampf(room, 0.0f, 1.0f));
+                    for (int i = 0; i < 3 + ev->vel / 32; i++)
+                        parts_emit(&parts, ax, cy - 4.0f, 70.0f * rng_bi(&seed), -50.0f - 70.0f * k * rng_uni(&seed), 0.3f + 0.2f * rng_uni(&seed), PART_SQUARE, rnd(2));
+                }
             } else {
                 bool right = other_on_right();
                 float heavy = v == DV_KICK || v == DV_SUB ? 1.0f : v == DV_HAT || v == DV_GLASS ? 0.45f : 0.7f;
                 float ang = right ? (heavy > 0.9f ? 0.95f : 0.875f) : (heavy > 0.9f ? 0.55f : 0.625f);
                 strike(ang, heavy * k);
                 if (D.role == ROLE_PUMP) { squash = 1.0f * k; squash_v = 0.0f; }
-                big_txt = dv_name[v]; big_age = 0;
+                big_txt = voice_label(D.peer_voice); big_age = 0;
             }
+            continue;
+        }
+        if (ev->src == SRC_LIVE) easy_heard();
+        if (D.role == ROLE_SHAPE) continue;                 // SHAPE plays nothing of its own
+        if (D.role == ROLE_NOTES) {                          // a note: the name pops, its rung lights
+            if (ev->src != SRC_LIVE) continue;
+            if (D.note_on) {
+                if (rung_sound < 0 || !(D.hold > 0.3f)) { snap_strand(); rung_sound = rung_lit; slide_lo = slide_hi = rung_lit; }
+                name_pop = 1.0f; name_popv = 0.0f;
+            } else { name_pop = 0.6f; name_popv = 0.0f; }
+            big_txt = nv_name[clampi((int)pv[P_NVOICE], 0, NNV - 1)]; big_age = 0;
             continue;
         }
         int p = ev->pad;
         if (p < 0 || p >= NPAD) continue;
         if (D.role == ROLE_DRUM) {
             pop[p] = 1.0f; popv[p] = 0.0f;
-            if (ev->src == SRC_LIVE) { big_txt = dv_name[clampi(D.pad_voice[p], 0, NDV)]; big_age = 0; }   // a loop's hit: no name
+            if (ev->src == SRC_LIVE) { big_txt = dv_name[clampi(D.pad_voice[p], 0, NDV)]; big_age = 0; snap_strand(); }   // a loop's hit: no name
             int n = 4 + ev->vel / 25;
             parts_emit(&parts, padc[p].x, padc[p].y, 0.0f, 0.0f, 0.2f, PART_RING, 2);
             for (int i = 0; i < n; i++) {                // a splash out of the pad, thrown up
@@ -593,7 +999,7 @@ static void events(void)
             static const float amp[NPAD] = { 0.45f, 1.0f, 0.7f, 0.3f };
             static const char *const kind[NPAD] = { "LIGHT", "HEAVY", "MIDDLE", "SCRAPE" };
             strike(ang[p], amp[p] * k);
-            if (ev->src == SRC_LIVE) { big_txt = kind[p]; big_age = 0; }
+            if (ev->src == SRC_LIVE) { big_txt = kind[p]; big_age = 0; snap_strand(); drag_ang = ang[p]; }
         }
     }
     nev = 0;
@@ -608,8 +1014,12 @@ static void step(const view_t *v)
     for (int p = 0; p < NPAD; p++) spring(&pop[p], &popv[p]);
     spring(&peer_pop, &peer_popv);
     spring(&squash, &squash_v);
+    spring(&name_pop, &name_popv);
+    spring(&anchor_pop, &anchor_popv);
+    spring(&step_pop, &step_popv);
     if (peer_name_f > 0) peer_name_f--;
     if (big_age < 99) big_age++;
+    if (step_age < 99) step_age++;
     for (int i = 0; i < 3; i++) if (rip[i].life > 0) { rip[i].life--; rip[i].r += 9.0f; }
     for (int k = 0; k < 4; k++) if (imp[k].age < 99) imp[k].age++;
     for (int j = 0; j < 3; j++) if (wave[j].life > 0) { wave[j].life--; wave[j].r += 3.0f; }
@@ -627,8 +1037,34 @@ static void step(const view_t *v)
     if (morph_s < 0.0f) morph_s = D.morph;
     morph_s += (D.morph - morph_s) * 0.35f;
     bow_ph = wrap1(bow_ph + 0.06f * clampf(D.motion * 1.5f + D.energy * 0.2f * (D.role == ROLE_PUMP), 0.0f, 1.0f));
+    // the drag: the strand follows the pull on a spring, shows while the hand pulls (or the other hand does)
+    float dt = D.dragging ? clampf(D.drag, 0.0f, 1.0f) : 0.0f;
+    drag_v += (dt - drag_s) * 0.4f; drag_v *= 0.6f; drag_s += drag_v;
+    float sw = D.dragging && (D.hold > 0.1f || D.peer_shapes) ? 1.0f : 0.0f;
+    sv += (sw - sv) * (sw > sv ? 0.5f : 0.2f);
+    if (sv < 0.01f) sv = 0.0f;
+    wob_ph = wrap1(wob_ph + 0.19f);
+    // NOTES: the bead on a spring towards the tilt; the sounding rung forgotten once nothing sounds
+    float ut = clampf(D.note_pos * (float)clampi(D.span, 1, 32), -0.5f, (float)clampi(D.span, 1, 32) - 0.5f);
+    if (bead_u < -0.9f || D.role != ROLE_NOTES) { bead_u = ut; bead_v = 0.0f; }
+    bead_v += (ut - bead_u) * 0.45f; bead_v *= 0.55f; bead_u += bead_v;
+    if (!D.note_on) rung_sound = -1;
+    if (D.note != name_was) { if (name_was >= 0 && D.role == ROLE_NOTES && name_pop < 0.3f) { name_pop = 0.45f; name_popv = 0.0f; } name_was = D.note; }
+    // SHAPE: the grip on a spring towards the pull (a new hit sets the pull back to 0: it snaps back, past, and settles)
+    float gt = D.paired ? clampf(D.drag, 0.0f, 1.0f) : 0.0f;
+    grip_v += (gt - grip_s) * 0.3f; grip_v *= 0.72f; grip_s += grip_v;
+    // EASY: a new role, mode or pattern forgets the steps heard; a step taken pops the strip
+    int key = D.role * 64 + D.easy * 8 + D.pattern;
+    if (key != pat_key) { pat_key = key; pat_seen = 0; step_was = -1; step_age = 99; }
+    if (easy_shown()) {
+        if (step_was >= 0 && D.step != step_was) {
+            if (D.easy == EASY_STEP) { pat_seen |= (uint16_t)(1u << clampi(D.step, 0, 15)); step_pop = 1.0f; step_popv = 0.0f; }
+            step_age = 0;
+        }
+        if (step_was >= 0 || step_age < 99) step_was = D.step;   // known once a step has been heard
+    }
     // a shake throws rattling bits off the bottom (PAINT, PUMP)
-    if (D.role != ROLE_DRUM && D.shake > 0.2f && rnd(3) == 0)
+    if ((D.role == ROLE_PAINT || D.role == ROLE_PUMP) && D.shake > 0.2f && rnd(3) == 0)
         parts_emit(&parts, 30.0f + (float)rnd(36), lerpf(40.0f, 50.0f, room), 60.0f * rng_bi(&seed), -60.0f - 40.0f * rng_uni(&seed), 0.35f, PART_SQUARE, 0);
     events();
     parts_step(&parts, 0.04f, 260.0f, 1.5f);
@@ -644,19 +1080,23 @@ void scene_draw(const view_t *v)
         cut_scene();
         cut_f++;
     } else {
-        // the other hand's hits ripple in from its side (DRUM)
+        // the other hand's hits ripple in from its side (DRUM, NOTES, SHAPE)
         bool right = other_on_right();
         for (int i = 0; i < 3; i++) if (rip[i].life > 0) dot_circle(right ? 134 : -6, 31, (int)rip[i].r, 16, 63);
-        if (D.role == ROLE_DRUM) drum_scene();
-        else {
+        switch (D.role) {
+        case ROLE_DRUM: drum_scene(); break;
+        case ROLE_NOTES: notes_scene(); break;
+        case ROLE_SHAPE: shape_scene(); break;
+        default: {
             int y1 = (int)lroundf(lerpf(44.0f, 58.0f, clampf(room, 0.0f, 1.0f)));
             material_scene(D.role == ROLE_PUMP);
             vial(morph_s, 17, y1);
         }
+        }
         parts_draw(&parts);
         oled_rect(PANEL_X - 2, 16, 128 - PANEL_X + 2, 30, false);
         hands();
-        beat_row();
+        if (easy_shown()) easy_row(); else beat_row();
         loop_row();
         if (v->cover <= 0) readout();
     }

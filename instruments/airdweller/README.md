@@ -26,7 +26,7 @@ folds them towards plastic. Hold REC for a loop of whole bars, four stacked; tap
 come back in on the next beat.
 
 Firmware for the Samplooler Stack (ESP32-S3). Version 0.2, built 2026-10-25, checked in the host simulator
-(`tools/sim`, 218 checks). Version 0.1 ran on two boards: it started at 16 % of the processor with 127 KB of memory
+(`tools/sim`, 238 checks). Version 0.1 ran on two boards: it started at 16 % of the processor with 127 KB of memory
 free, and it triggered too slowly on fast beats and misfired on the way back. 0.2 rebuilt the detector for that, on
 the gyro at 1 kHz, and has not been on a board yet. Its busiest case takes about 10 microseconds per audio block on a
 computer; the board's figure is still to be read. The detector has been tuned on a model of a hand; the recorder
@@ -36,6 +36,8 @@ computer; the board's figure is still to be read. The detector has been tuned on
 
 ![a kick in one hand strikes the metal in the other](images/airdweller-pair.gif) ![DRUM](images/airdweller-drum.gif)
 ![PAINT](images/airdweller-paint.gif) ![PUMP](images/airdweller-pump.gif)
+![the drag](images/airdweller-drag.gif) ![NOTES](images/airdweller-notes.gif) ![SHAPE](images/airdweller-shape.gif)
+![EASY](images/airdweller-easy.gif)
 
 ## Playing it
 

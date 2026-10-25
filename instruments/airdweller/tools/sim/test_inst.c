@@ -343,6 +343,7 @@ static void peer_bytes(int role, int hand, int kick, int nhits, const int64_t *t
     for (int i = 0; i < nhits; i++) { pt[0] = pt[1]; pt[1] = pt[2]; pt[2] = ticks[i]; pvo[0] = pvo[1]; pvo[1] = pvo[2]; pvo[2] = voices[i]; peer_seq++; }
     a[0] = 4; a[1] = (uint8_t)(role | hand << 3); a[2] = 0; a[3] = (uint8_t)kick; a[4] = peer_seq;
     for (int k = 0; k < 3; k++) { uint16_t lo = (uint16_t)(pt[k] & 0xFFFF); a[5 + 3 * k] = (uint8_t)(lo & 0xFF); a[6 + 3 * k] = (uint8_t)(lo >> 8); a[7 + 3 * k] = (uint8_t)(pvo[k] << 4 | 15); }
+    a[15] = peer_seq;                                                  // every hit here counts as live
     sim_peer_use(peer_k); link_set_app(a, 16); link_poke(); sim_peer_use(-1);
 }
 static const link_peer_t *me_seen_by_peer(void)
