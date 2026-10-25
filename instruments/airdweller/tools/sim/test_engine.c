@@ -127,7 +127,7 @@ static float hit(int voice, int vel)                     // DRUM: the FRONT pad 
 {
     set("role", ROLE_DRUM); set("pfrt", (float)voice); run(0.03f);
     float t0 = sim_t;
-    eng_trigger(&(trig_t){ PD_FRONT, (uint8_t)vel, SRC_LIVE, 0 });
+    eng_trigger(&(trig_t){ .pad = PD_FRONT, .vel = (uint8_t)vel, .src = SRC_LIVE });
     return t0;
 }
 static float strike(int voice, int vel) { float t0 = sim_t; eng_strike(0, vel, voice); return t0; }
@@ -139,7 +139,7 @@ static int peer = -1;
 static void peer_here(void)
 {
     if (peer < 0) peer = sim_peer_add("AIRDWELL", 1, 4.0, 0.0); else sim_peer_power(peer, true);
-    uint8_t a[16] = { 3, ROLE_DRUM | HAND_LEFT << 2, 0, 36, 0 };
+    uint8_t a[16] = { 4, ROLE_DRUM | HAND_LEFT << 3, 0, 36, 0 };
     sim_peer_use(peer); link_set_app(a, 16); link_poke(); sim_peer_use(-1);
 }
 
@@ -427,7 +427,7 @@ static double busy_once(int *v0, int *v1)
     set("drve", 60); set("emix", 30); set("efb ", 50); set("room", 40); set("rsiz", 70); run(0.3f);
     static const int kit[10] = { DV_CLANG, DV_CREAK, DV_CLANG, DV_GLASS, DV_CREAK, DV_CLANG, DV_KICK, DV_CREAK, DV_GLASS, DV_CLANG };
     st_hold(ST_FRONT, 400.0f);
-    for (int i = 0; i < 10; i++) { set("pfrt", (float)kit[i]); set("tune", (float)(i - 5)); shake_tick(); shake_tick(); eng_trigger(&(trig_t){ PD_FRONT, 120, SRC_LIVE, 0 }); }
+    for (int i = 0; i < 10; i++) { set("pfrt", (float)kit[i]); set("tune", (float)(i - 5)); shake_tick(); shake_tick(); eng_trigger(&(trig_t){ .pad = PD_FRONT, .vel = 120, .src = SRC_LIVE }); }
     set("role", ROLE_PUMP); shake(0.15f);
     *v0 = eng_voices_on;
     eng_audio_ns = 0; eng_audio_max_ns = 0; eng_audio_blocks = 0;

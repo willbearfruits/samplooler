@@ -11,9 +11,13 @@
 #include <string.h>
 
 // ---------------------------------------------------------------- params
-static const char *const groups[] = { "PLAY", "KIT", "MATERIAL", "ENERGY", "LOOPS", "FX", "FEEL", "SONG" };
-enum { G_PLAY, G_KIT, G_MAT, G_ENERGY, G_LOOPS, G_FX, G_FEEL, G_SONG, G_N };
-static const char *const role_l[] = { "DRUM", "PAINT", "PUMP" };
+static const char *const groups[] = { "PLAY", "KIT", "DRAG", "NOTES", "MATERIAL", "ENERGY", "LOOPS", "FX", "FEEL", "SONG" };
+enum { G_PLAY, G_KIT, G_DRAG, G_NOTES, G_MAT, G_ENERGY, G_LOOPS, G_FX, G_FEEL, G_SONG, G_N };
+const char *const role_name[NROLE] = { "DRUM", "PAINT", "PUMP", "NOTES", "SHAPE" };
+const char *const nv_name[NNV] = { "BASS", "SQUELCH", "LEAD", "BELL" };
+static const char *const easy_l[] = { "OFF", "STEP", "GROOVE" };
+static const char *const patt_l[NPATTERN] = { "FOUR", "BACKBEAT", "BREAK", "HALF", "BOUNCE", "ROLL" };
+static const char *const scale_l[NSCALES] = { "MAJOR", "MINOR", "DORIAN", "MIXOLYDIAN", "PHRYGIAN", "HARM MINOR" };   // SING's, as the link numbers them
 static const char *const hand_l[] = { "AUTO", "LEFT", "RIGHT" };
 static const char *const off_on[] = { "OFF", "ON" };
 const char *const dv_name[NDV + 1] = { "KICK", "SNAP", "CLANG", "HAT", "GLASS", "SUB", "WHIP", "CREAK", "OFF", "AUTO" };
@@ -33,7 +37,9 @@ static const char *const range_l[] = { "NEAR", "ROOM", "FAR" };
 #define SYS (PF_SYS | PF_NOCC)
 
 static const param_t params[P_N] = {
-    [P_ROLE]    = { "ROLE", "role", G_PLAY, PK_ENUM, PF_SYS, 0, NROLE - 1, 1, ROLE_DRUM, "", role_l, "DRUM, PAINT OR PUMP" },
+    [P_ROLE]    = { "ROLE", "role", G_PLAY, PK_ENUM, PF_SYS, 0, NROLE - 1, 1, ROLE_DRUM, "", role_name, "WHAT THIS HAND DOES" },
+    [P_EASY]    = { "EASY", "easy", G_PLAY, PK_ENUM, PF_SYS, 0, 2, 1, EASY_OFF, "", easy_l, "ANY SWING: THE NEXT STEP" },
+    [P_PATTERN] = { "PATTERN", "patt", G_PLAY, PK_ENUM, 0, 0, NPATTERN - 1, 1, 0, "", patt_l, "WHAT EASY PLAYS" },
     [P_HAND]    = { "HAND", "hand", G_PLAY, PK_ENUM, PF_SYS, 0, 2, 1, HAND_AUTO, "", hand_l, "WHICH HAND THIS BOX IS" },
     [P_PAIR]    = { "PAIR", "pair", G_PLAY, PK_ENUM, PF_SYS, 0, 1, 1, 1, "", off_on, "THE OTHER HAND STRIKES IT" },
     [P_DUCK]    = { "DUCK", "duck", G_PLAY, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "ITS HITS PUSH THIS DOWN" },
@@ -45,6 +51,15 @@ static const param_t params[P_N] = {
     [P_TUNE]    = { "TUNE", "tune", G_KIT, PK_NUM, PF_INT | PF_SIGNED, -12, 12, 1, 0, "st", NULL, "THE DRUMS UP OR DOWN" },
     [P_DECAY]   = { "DECAY", "decy", G_KIT, PK_NUM, PF_LOG, 0.25f, 4.0f, 1.1f, 1.0f, "x", NULL, "SHORTER OR LONGER" },
     [P_SQUEEZE] = { "SQUEEZE", "sqez", G_KIT, PK_NUM, PF_INT, 0, 100, 5, 40, "%", NULL, "FOLDED, PLASTIC, HARDER" },
+    [P_DRAG]    = { "DRAG", "drag", G_DRAG, PK_NUM, PF_INT, 0, 100, 5, 70, "%", NULL, "AFTER A HIT, MOVE: IT BENDS" },
+    [P_REACH]   = { "REACH", "rech", G_DRAG, PK_NUM, PF_INT, 15, 180, 5, 60, "deg", NULL, "THIS FAR: A FULL DRAG" },
+    [P_DBEND]   = { "DRAG BEND", "dbnd", G_DRAG, PK_NUM, PF_INT, 0, 24, 1, 5, "st", NULL, "TWIST IT WHILE DRAGGING" },
+    [P_NVOICE]  = { "VOICE", "nvoc", G_NOTES, PK_ENUM, 0, 0, NNV - 1, 1, NV_BASS, "", nv_name, "WHAT THE NOTES ARE" },
+    [P_SCALE]   = { "SCALE", "sscl", G_NOTES, PK_ENUM, PF_SYS, 0, NSCALES - 1, 1, 1, "", scale_l, "SHARED WITH LINKED BOARDS" },
+    [P_OCTAVE]  = { "OCTAVE", "noct", G_NOTES, PK_NUM, PF_INT, 1, 5, 1, 2, "", NULL, "THE LOWEST NOTE'S OCTAVE" },
+    [P_SPAN]    = { "SPAN", "nspn", G_NOTES, PK_NUM, PF_INT, 3, 15, 1, 8, "", NULL, "NOTES OVER THE TILT" },
+    [P_NLEN]    = { "NOTE LENGTH", "nlen", G_NOTES, PK_NUM, PF_LOG, 0.04f, 1.0f, 1.12f, 0.15f, "s", NULL, "A FLICK: THIS LONG" },
+    [P_GLIDE]   = { "GLIDE", "glid", G_NOTES, PK_NUM, PF_LOG, 0.01f, 0.5f, 1.12f, 0.06f, "s", NULL, "FROM NOTE TO NOTE" },
     [P_MAT]     = { "MATERIAL", "matl", G_MAT, PK_ENUM, 0, 0, NMAT - 1, 1, MAT_METAL, "", mat_name, "WHAT RINGS" },
     [P_MORPH]   = { "TILT MORPH", "mrph", G_MAT, PK_NUM, PF_INT, 0, 100, 5, 60, "%", NULL, "TILT IT: ANOTHER MATERIAL" },
     [P_TUNETO]  = { "TUNE TO", "tnto", G_MAT, PK_ENUM, 0, 0, 1, 1, TT_KICK, "", tuneto_l, "IT RINGS WITH THE KICK" },
@@ -76,6 +91,7 @@ static const param_t params[P_N] = {
     [P_ROOM]    = { "ROOM", "room", G_FX, PK_NUM, PF_INT, 0, 100, 5, 20, "%", NULL, "HOW MUCH ROOM" },
     [P_RSIZE]   = { "ROOM SIZE", "rsiz", G_FX, PK_NUM, PF_INT, 0, 100, 5, 40, "%", NULL, "A BOOTH TO A HANGAR" },
     [P_SENS]    = { "SENSE", "sens", G_FEEL, PK_NUM, PF_INT | PF_SYS, 0, 100, 5, 50, "%", NULL, "HOW EASILY A SWING COUNTS" },
+    [P_STOP]    = { "STOP", "stop", G_FEEL, PK_NUM, PF_INT | PF_SYS, 0, 100, 5, 50, "%", NULL, "HOW SHARP A STOP IS A HIT" },
     [P_CONFIRM] = { "CONFIRM", "cnfm", G_FEEL, PK_ENUM, SYS, 0, 1, 1, 1, "", off_on, "A HIT NEEDS A JOLT TOO" },
     [P_FLIP]    = { "FORWARD", "flip", G_FEEL, PK_ENUM, SYS, 0, 1, 1, 0, "", flip_l, "WHICH WAY IS FRONT" },
     [P_SIDES]   = { "SIDES", "side", G_FEEL, PK_ENUM, SYS, 0, 1, 1, 0, "", sides_l, "WHICH SIDE IS LEFT" },
@@ -415,7 +431,7 @@ static int64_t hit_place(uint32_t frame, uint32_t *at)
 }
 
 // ---------------------------------------------------------------- the other box: what this one sends
-// 16 bytes with the link's packets (link_set_app): 3 (the format), role | hand << 2 | cut << 4, energy, the kick's
+// 16 bytes with the link's packets (link_set_app): 4 (the format), role | hand << 3 | cut << 5, energy, the kick's
 // note, the hits' number, then the last three hits (tick's low 16 bits, voice << 4 | velocity / 8), this box's
 // material (the tilt's morph x 50). A new hit pokes the link, so it goes at the next tick (about 10 ms).
 static void send_hit(int64_t tick, int voice, int vel)
@@ -427,7 +443,7 @@ static void send_hit(int64_t tick, int voice, int vel)
 }
 static void app_update(void)
 {
-    uint8_t a[16] = { 3, (uint8_t)((int)pv[P_ROLE] | (hand_now << 2) | (cut_on ? 16 : 0)),
+    uint8_t a[16] = { 4, (uint8_t)((int)pv[P_ROLE] | (hand_now << 3) | (cut_on ? 32 : 0)),
                       (uint8_t)clampi((int)(energy * 255.0f + 0.5f), 0, 255), (uint8_t)clampi(kick_note(), 0, 127), sent_seq };
     for (int k = 0; k < 3; k++) {
         uint16_t lo = (uint16_t)(sent[k].tick & 0xFFFF);
@@ -466,7 +482,7 @@ static void hit_pad(int pad, int vel, uint32_t frame)
     if (role == ROLE_PUMP) return;                                     // pumping: the movement is the energy, not hits
     uint32_t at;
     int64_t tick = hit_place(frame, &at);
-    trig_t t = { (uint8_t)pad, (uint8_t)vel, SRC_LIVE, at };
+    trig_t t = { .pad = (uint8_t)pad, .vel = (uint8_t)vel, .src = SRC_LIVE, .gid = 0, .at = at };
     eng_trigger(&t);
     record_hit(tick, pad, vel);
     if (role == ROLE_DRUM) send_hit(tick, pad_voice(pad), vel);
@@ -484,11 +500,11 @@ static void peer_tick(float dt)
     link_peer_t pr[LINK_PEERS_MAX];
     int np = link_peers(pr, LINK_PEERS_MAX);
     const link_peer_t *p = NULL;
-    for (int i = 0; i < np; i++) if (!strncmp(pr[i].name, "AIRDWELL", 8) && pr[i].app_n >= 16 && pr[i].app[0] == 3) { p = &pr[i]; break; }
+    for (int i = 0; i < np; i++) if (!strncmp(pr[i].name, "AIRDWELL", 8) && pr[i].app_n >= 16 && pr[i].app[0] == 4) { p = &pr[i]; break; }
     if (!p) { if (PEER.on) toast("THE OTHER HAND IS GONE", 900); PEER.on = false; PEER.seq_ok = false; return; }
     if (!PEER.on || PEER.id != p->id) { PEER.seq_ok = false; toast("THE OTHER HAND IS HERE", 900); coach_done(L_PAIR); }
     PEER.on = true; PEER.id = p->id; PEER.age = 0.0f; (void)dt;
-    PEER.role = p->app[1] & 3; PEER.hand = (p->app[1] >> 2) & 3; PEER.kick_note = p->app[3];
+    PEER.role = p->app[1] & 7; PEER.hand = (p->app[1] >> 3) & 3; PEER.kick_note = p->app[3];
     uint8_t seq = p->app[4];
     if (!PEER.seq_ok) { PEER.seq = seq; PEER.seq_ok = true; return; }   // the hits it sent before we met are past
     int fresh = (uint8_t)(seq - PEER.seq);
@@ -602,7 +618,7 @@ static void sounded(const played_t *p)
 }
 static void led_tick(void)
 {
-    static const uint8_t role_rgb[NROLE][3] = { { 255, 40, 120 }, { 80, 200, 255 }, { 255, 160, 20 } };
+    static const uint8_t role_rgb[NROLE][3] = { { 255, 40, 120 }, { 80, 200, 255 }, { 255, 160, 20 }, { 120, 255, 80 }, { 200, 120, 255 } };
     const uint8_t *c = role_rgb[clampi((int)pv[P_ROLE], 0, NROLE - 1)];
     float beat = grid.fpb ? 1.0f - (float)(now_tick % PPB) / (float)PPB : 0.0f;
     float l = cut_on ? 0.02f : 0.08f + 0.12f * beat * beat + 0.5f * led_l + 0.4f * energy * ((int)pv[P_ROLE] == ROLE_PUMP);

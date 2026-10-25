@@ -12,6 +12,19 @@
 //          materials, twisting bends the pitch, the roll is brightness, moving sustains it (a bow), shaking scrapes it.
 //   PUMP   the same material bowed instead of struck: DWELL's energy (movement pumps it in, stillness lets it fall)
 //          drives a drone on the material's chord, ducked by the other hand's hits so the two interlock.
+//   NOTES  basslines and leads drawn in the air: a hit starts a note of the shared scale, the tilt picks which
+//          (forward and back over SPAN notes, the roll an octave up or down); a flick is a short note, a hit that keeps
+//          moving holds it and slides it from note to note as the tilt changes.
+//   SHAPE  plays nothing itself: its movement drags the other box's sounds (the other hand hits, this one drags).
+//
+// 0.2's gestures (the detector in instrument.c, on the gyro at 1 kHz): a HIT is a stroke that stops sharply (the stick
+// meeting the drum); its pad is the stroke's direction measured against gravity (FRONT and BACK: the front edge
+// tipped down or up; LEFT and RIGHT: swept round), so the angle the box is held at does not matter, and a twist of
+// the wrist (a roll about the forearm) is never a pad. A stroke that slows down gently (the hand coming back) is not
+// a hit. After a hit, slow movement DRAGS the sound it started: the kick bends down and stretches, the snare's noise
+// hangs on, the hat opens, a note holds and slides. The twist during a drag bends the pitch. EASY: the direction does
+// not matter; STEP plays the pattern's next step with every hit, GROOVE plays the pattern by itself while you move.
+//
 // Two boxes find each other on the link (name AIRDWELL): one beat, one key; every hit a DRUM box makes, live or from a
 // loop, is sent with its tick on the shared clock (link_set_app), so a kick in the left hand and the metal it strikes
 // in the right sound together. Tap REC: CUT, a hard silence (SOPHIE's stops), back in on the next beat.
@@ -25,9 +38,13 @@
 // ---------------------------------------------------------------- params (the table in instrument.c, in this order)
 enum {
     // PLAY
-    P_ROLE, P_HAND, P_PAIR, P_DUCK, P_LEVEL,
+    P_ROLE, P_EASY, P_PATTERN, P_HAND, P_PAIR, P_DUCK, P_LEVEL,
     // KIT (DRUM)
     P_FRONT, P_LEFT, P_RIGHT, P_BACK, P_TUNE, P_DECAY, P_SQUEEZE,
+    // DRAG (after a hit)
+    P_DRAG, P_REACH, P_DBEND,
+    // NOTES
+    P_NVOICE, P_SCALE, P_OCTAVE, P_SPAN, P_NLEN, P_GLIDE,
     // MATERIAL (PAINT, PUMP)
     P_MAT, P_MORPH, P_TUNETO, P_RATIO, P_CHORD, P_RING, P_BRIGHT, P_BEND, P_CREAK,
     // ENERGY
@@ -37,12 +54,16 @@ enum {
     // FX
     P_DRIVE, P_TONE, P_ECHO, P_ESYNC, P_EFB, P_EMIX, P_ROOM, P_RSIZE,
     // FEEL (device settings: they stay when the sound changes)
-    P_SENS, P_CONFIRM, P_FLIP, P_SIDES,
+    P_SENS, P_STOP, P_CONFIRM, P_FLIP, P_SIDES,
     // SONG
     P_KEY, P_LINK, P_GROUP, P_RANGE, P_PEERS,
     P_N
 };
-enum { ROLE_DRUM, ROLE_PAINT, ROLE_PUMP, NROLE };
+enum { ROLE_DRUM, ROLE_PAINT, ROLE_PUMP, ROLE_NOTES, ROLE_SHAPE, NROLE };   // in this order: saved settings keep their role
+enum { EASY_OFF, EASY_STEP, EASY_GROOVE };
+#define NPATTERN 6                            // FOUR BACKBEAT BREAK HALF BOUNCE ROLL (the patterns in instrument.c)
+enum { NV_BASS, NV_SQUELCH, NV_LEAD, NV_BELL, NNV };   // the NOTES voices
+#define NSCALES 6                             // MAJOR MINOR DORIAN MIXOLYDIAN PHRYGIAN HARM MINOR (SING's, as the link numbers them)
 enum { HAND_AUTO, HAND_LEFT, HAND_RIGHT };
 enum { PD_FRONT, PD_LEFT, PD_RIGHT, PD_BACK, NPAD };
 // the synthesized drums
@@ -95,13 +116,35 @@ uint16_t eng_hit_tick(const loop_t *l, const hit_t *h);   // where a hit plays i
 // (eng_pad_voice) at the pad's tune. In PAINT the same call strikes the material instead (the pad picks the strike:
 // LEFT heavy and low, RIGHT middle, FRONT light and high, BACK a scrape). Every hit that sounds is reported back
 // (eng_played_pop) with its voice, live or from a loop.
-typedef struct { uint8_t pad, vel, src; uint32_t at; } trig_t;
+typedef struct { uint8_t pad, vel, src, gid; uint32_t at; } trig_t;   // gid: the gesture (this hit's number, mod 256; 0 none)
 typedef struct { uint32_t frame; uint8_t pad, vel, src, voice; } played_t;
 void  eng_trigger(const trig_t *t);           // UI
 bool  eng_played_pop(played_t *p);            // UI
 // PAINT and PUMP: the other hand's hit strikes the material at frame `at` (late: now). voice: the striking drum (DV_*):
 // a kick strikes heavy, low and long, a hat light, high and short, a snap or a whip bright, a creak scrapes.
 void  eng_strike(uint32_t at, int vel, int voice);   // UI
+
+// NOTES: a note starts (on 1) at frame `at` (0 or past: now), or the gesture's note ends (on 0: its release starts; at
+// as above), or (on 1, legato 1) the gesture's sounding note moves to `note`, gliding over eng_note_glide. BASS, SQUELCH
+// and LEAD are one voice each (a new note takes over from the one sounding, legato or not); BELL rings up to 4.
+typedef struct { uint32_t at; uint8_t on, note, vel, gid, legato; } nev_t;   // note: MIDI
+void  eng_note(const nev_t *e);               // UI
+
+// DRAG: what the hand does after a hit, sent every tick, for the voices that the gesture eng_drag_gid started (a drum,
+// a note, or the material's strike). 0 for amt, hold and bend means the voice as it was struck. Every voice reacts in
+// its own way, scaled by eng_drag_depth:
+//   KICK  bends down (up to an octave) and its body stretches (decay x 1..6) as amt grows; hold keeps the sub sounding
+//   SNAP  the noise tail hangs on and its band pass slides down further      HAT    opens (decay x 1..8)
+//   CLANG, GLASS  the ring is held and darkens; bend bends it                 SUB    slides down further and holds
+//   WHIP  a second, slower sweep upward                                       CREAK  keeps creaking while held (amt: the
+//   a note  hold sustains it; amt opens its filter (BASS, SQUELCH) or its        rate of the slips)
+//           formant (LEAD) or its index (BELL); bend bends it
+// When eng_drag_gid moves to a new gesture, the old one's voices keep what they had and decay as struck from there.
+extern volatile int   eng_drag_gid;           // 0: none
+extern volatile float eng_drag_amt;           // 0..1: how far it has been dragged (slow movement since the hit)
+extern volatile float eng_drag_hold;          // 0..1: 1 while the hand keeps moving slowly (held), falls when still
+extern volatile float eng_drag_bend;          // semitones, signed (the twist since the hit)
+extern volatile float eng_drag_depth;         // DRAG: 0..1, how much a drag does at all
 
 extern volatile int   eng_role;               // ROLE_*
 extern volatile int   eng_pad_voice[NPAD];    // DV_* (never DV_AUTO: the UI resolves it)
@@ -120,6 +163,10 @@ extern volatile float eng_bow;                // 0..1: bowing (friction excitati
 extern volatile float eng_creak;              // 0..1: a shake's scrape (stick-slip bursts through the material)
 extern volatile float eng_mat_level;          // the material's gain: REST LEVEL .. 1 with the energy (glides 30 ms)
 extern volatile float eng_duck;               // 0..1: how far each strike from the other hand ducks the bow's drone
+// the notes
+extern volatile int   eng_note_voice;         // NV_*
+extern volatile float eng_note_glide;         // s: legato slides
+extern volatile float eng_note_lvl;           // report: the notes' level now
 // the bus (everything): drive, tone, echo, room, level, cut
 extern volatile float eng_drive;              // 0..1: an asymmetric soft clip with ADAA (DWELL's)
 extern volatile float eng_tone;               // 0..1: a low pass after it, 800 Hz .. 16 kHz
@@ -167,10 +214,21 @@ typedef struct {
     int   last_pad;                           // the last stroke's pad
     vec3_t gyro;                              // deg/s now
     int   key;                                // 0..11
+    // 0.2
+    int   easy, pattern, step;                // EASY_*, the pattern, the step it is on (0..15)
+    float drag, hold, dbend;                  // the drag now (this box's own, or the other hand's in SHAPE)
+    int   dragging;                           // a drag is on (a gesture being shaped)
+    int   note, note_on;                      // NOTES: the note the tilt points at (MIDI), and whether one sounds
+    int   scale, span, octave;                // NOTES: SCALE, SPAN, OCTAVE
+    float note_pos;                           // NOTES: where the tilt is over the SPAN, 0..1
+    int   stop_ok;                            // the last stroke: 1 a hit (it stopped sharply), 0 not (it slowed gently)
+    int   peer_shapes;                        // the other box is SHAPE and is dragging this box's sound now
 } ad_ui_t;
 extern ad_ui_t D;
 extern const char *const dv_name[NDV + 1];    // "KICK" ... "OFF", "AUTO"
 extern const char *const mat_name[NMAT];      // "METAL" ...
+extern const char *const nv_name[NNV];        // "BASS" ...
+extern const char *const role_name[NROLE];    // "DRUM" ...
 
 // ---------------------------------------------------------------- the screens (inst_scene.c)
 void scene_draw(const view_t *v);

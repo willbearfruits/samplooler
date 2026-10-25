@@ -57,7 +57,7 @@ static void peer_say(int prole, int phand, bool hit, int voice, int vel)
         psent[2].voice = (uint8_t)voice; psent[2].vel = (uint8_t)vel;
         pseq++;
     }
-    uint8_t a[16] = { 3, (uint8_t)(prole | phand << 2), 0, 36, pseq };
+    uint8_t a[16] = { 4, (uint8_t)(prole | phand << 3), 0, 36, pseq };
     for (int k = 0; k < 3; k++) {
         uint16_t lo = (uint16_t)(psent[k].tick & 0xFFFF);
         a[5 + 3 * k] = (uint8_t)(lo & 0xFF); a[6 + 3 * k] = (uint8_t)(lo >> 8);

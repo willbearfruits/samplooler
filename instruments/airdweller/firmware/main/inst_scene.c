@@ -167,9 +167,8 @@ static void hands(void)
     }
     bool me_left = D.hand != HAND_RIGHT;
     const char *me = me_left ? "L" : "R";
-    static const char *const role_l[NROLE] = { "DRUM", "PAINT", "PUMP" };
     char ob[16];
-    const char *who = peer_name_f > 0 && D.peer_voice >= 0 && D.peer_voice < NDV ? dv_name[D.peer_voice] : role_l[clampi(D.peer_role, 0, NROLE - 1)];
+    const char *who = peer_name_f > 0 && D.peer_voice >= 0 && D.peer_voice < NDV ? dv_name[D.peer_voice] : role_name[clampi(D.peer_role, 0, NROLE - 1)];
     if (D.paired) snprintf(ob, sizeof ob, "%s %s", me_left ? "R" : "L", who);
     else snprintf(ob, sizeof ob, "%s", me_left ? "R" : "L");
     int wm = capsule_w(me), wo = capsule_w(ob), gap = 5;
@@ -664,11 +663,10 @@ void scene_draw(const view_t *v)
     if (flip_f > 0) { oled_invert(0, 16, 128, 48); flip_f--; }
     if (v->cover > 0) oled_rect(0, STRIP_Y, 128, 64 - STRIP_Y, false);
     oled_rect(0, 0, 128, 16, false);
-    static const char *const role_l[NROLE] = { "DRUM", "PAINT", "PUMP" };
     char hb[16];
     if (D.rec == 1) { snprintf(hb, sizeof hb, "REC IN %d", clampi(4 - D.beat_in_bar, 1, 4)); ui_head(hb, true); }
     else if (D.rec >= 2) { snprintf(hb, sizeof hb, "REC %d", D.rec == 3 && D.loop_bars[D.rec_slot] ? D.loop_bars[D.rec_slot] : rec_bars + 1); ui_head(hb, true); }
-    else ui_head(role_l[clampi(D.role, 0, NROLE - 1)], D.cut != 0);
+    else ui_head(role_name[clampi(D.role, 0, NROLE - 1)], D.cut != 0);
 }
 
 // ---------------------------------------------------------------- the splash: two sticks strike a blob from both sides
