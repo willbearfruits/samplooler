@@ -47,7 +47,7 @@ static UI_RAM parts_t parts;
 static float room = 1.0f, room_v;      // 1: the whole scene; 0: squeezed above the core's strip
 static int   role_was = -1, flip_f, cut_was, cut_f;
 // hits since the last frame (scene_hit runs in the tick)
-typedef struct { int8_t pad; uint8_t vel, remote; } ev_t;
+typedef struct { int8_t pad; uint8_t vel, src; } ev_t;
 static ev_t evq[8];
 static int  nev;
 // DRUM
@@ -126,9 +126,9 @@ static void spring(float *x, float *v) { *v += -0.45f * *x; *v *= 0.62f; *x += *
 static int rnd(int n) { return (int)(rng_next(&seed) % (uint32_t)n); }
 
 // ---------------------------------------------------------------- hits
-void scene_hit(int pad, int vel, int remote)
+void scene_hit(int pad, int vel, int src)
 {
-    if (nev < 8) evq[nev++] = (ev_t){ (int8_t)pad, (uint8_t)clampi(vel, 0, 127), (uint8_t)(remote != 0) };
+    if (nev < 8) evq[nev++] = (ev_t){ (int8_t)pad, (uint8_t)clampi(vel, 0, 127), (uint8_t)src };
 }
 
 static bool other_on_right(void)
@@ -561,7 +561,7 @@ static void events(void)
     for (int e = 0; e < nev; e++) {
         const ev_t *ev = &evq[e];
         float k = 0.35f + 0.65f * (float)ev->vel / 127.0f;
-        if (ev->remote) {
+        if (ev->src == SRC_REMOTE) {
             peer_pop = 1.0f; peer_popv = 0.0f; peer_name_f = 12;
             int v = clampi(D.peer_voice, 0, NDV - 1);
             if (D.role == ROLE_DRUM) {
@@ -580,7 +580,7 @@ static void events(void)
         if (p < 0 || p >= NPAD) continue;
         if (D.role == ROLE_DRUM) {
             pop[p] = 1.0f; popv[p] = 0.0f;
-            big_txt = dv_name[clampi(D.pad_voice[p], 0, NDV)]; big_age = 0;
+            if (ev->src == SRC_LIVE) { big_txt = dv_name[clampi(D.pad_voice[p], 0, NDV)]; big_age = 0; }   // a loop's hit: no name
             int n = 4 + ev->vel / 25;
             parts_emit(&parts, padc[p].x, padc[p].y, 0.0f, 0.0f, 0.2f, PART_RING, 2);
             for (int i = 0; i < n; i++) {                // a splash out of the pad, thrown up
@@ -588,14 +588,13 @@ static void events(void)
                 float vx = (float)pdx[p] * sp * 0.6f + 70.0f * rng_bi(&seed), vy = (float)pdy[p] * sp * 0.6f - 50.0f - 60.0f * rng_uni(&seed);
                 parts_emit(&parts, padc[p].x + 12.0f * rng_bi(&seed), padc[p].y - 2.0f, vx, vy, 0.3f + 0.25f * rng_uni(&seed), PART_SQUARE, rnd(2));
             }
-            float gm = sqrtf(D.gyro.x * D.gyro.x + D.gyro.y * D.gyro.y + D.gyro.z * D.gyro.z);
-            if (gm > 150.0f) { tipx = (float)pdx[p] * 9.0f; tipy = (float)pdy[p] * 9.0f; tipvx = tipvy = 0.0f; }   // a live hit: the stick snaps out
+            if (ev->src == SRC_LIVE) { tipx = (float)pdx[p] * 9.0f; tipy = (float)pdy[p] * 9.0f; tipvx = tipvy = 0.0f; }   // a live hit: the stick snaps out
         } else {
             static const float ang[NPAD] = { 0.75f, 0.6f, 0.9f, 0.25f };      // FRONT light from above, LEFT, RIGHT, BACK a scrape
             static const float amp[NPAD] = { 0.45f, 1.0f, 0.7f, 0.3f };
             static const char *const kind[NPAD] = { "LIGHT", "HEAVY", "MIDDLE", "SCRAPE" };
             strike(ang[p], amp[p] * k);
-            big_txt = kind[p]; big_age = 0;
+            if (ev->src == SRC_LIVE) { big_txt = kind[p]; big_age = 0; }
         }
     }
     nev = 0;

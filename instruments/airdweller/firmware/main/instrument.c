@@ -501,7 +501,7 @@ static void peer_tick(float dt)
         int64_t tick = now_tick + (int16_t)(lo - (uint16_t)(now_tick & 0xFFFF));   // the nearest tick with those low bits
         int voice = p->app[7 + 3 * k] >> 4, vel = ((p->app[7 + 3 * k] & 15) << 3) | 4;
         peer_flash = 1.0f; peer_voice = voice;
-        scene_hit(-1, vel, 1);
+        scene_hit(-1, vel, SRC_REMOTE);
         if (role != ROLE_DRUM && pv[P_PAIR] >= 1.0f) { ad_strike_at = eng_frame_of(&grid, tick); ad_strike_tick = tick; ad_strikes++; eng_strike(ad_strike_at, vel, voice); }
     }
 }
@@ -593,7 +593,7 @@ static const int gm_of[NDV] = { 36, 38, 49, 42, 81, 35, 39, 54 };
 static void sounded(const played_t *p)
 {
     ad_played_frame = p->frame;
-    if (p->pad < NPAD) { flash[p->pad] = 1.0f; scene_hit(p->pad, p->vel, 0); }
+    if (p->pad < NPAD) { flash[p->pad] = 1.0f; scene_hit(p->pad, p->vel, p->src); }
     if (p->voice < NDV - 1) {                                          // DV_OFF sends nothing
         midi_note_ch(10, gm_of[p->voice], p->vel);
         midi_note_ch(10, gm_of[p->voice], 0);

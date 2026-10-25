@@ -150,7 +150,7 @@ void test_scene(void)
     for (int m = 0; m < NMAT; m++) {
         param_set(param_by_tag("matl"), (float)m);
         for (int k = 0; k < 3; k++) {
-            eng_strike(0, 110, DV_KICK); scene_hit(-1, 110, 1);   // as peer_tick() does with a hit from the other box
+            eng_strike(0, 110, DV_KICK); scene_hit(-1, 110, SRC_REMOTE);   // as peer_tick() does with a hit from the other box
             run(0.12f);
             if (k == 0) { char b[24]; snprintf(b, sizeof b, "paint_%s", mat_name[m]); sim_shot(b); }
             run(0.3f);
@@ -160,11 +160,11 @@ void test_scene(void)
     }
     check(lit(0, 16, 80, 63) > 80, "PAINT: the material is drawn");
     param_set(param_by_tag("matl"), MAT_METAL);
-    for (int i = 0; i <= 20; i++) { sim_tilt(0.0f, -4.5f * (float)i); if (i % 5 == 0) { eng_strike(0, 100, DV_SNAP); scene_hit(-1, 100, 1); } run(0.1f); }
+    for (int i = 0; i <= 20; i++) { sim_tilt(0.0f, -4.5f * (float)i); if (i % 5 == 0) { eng_strike(0, 100, DV_SNAP); scene_hit(-1, 100, SRC_REMOTE); } run(0.1f); }
     sim_shot("paint_tilted");
     float morph_hi = D.morph;
     st_hold(ST_TWIST, 280.0f);
-    eng_strike(0, 120, DV_KICK); scene_hit(-1, 120, 1);
+    eng_strike(0, 120, DV_KICK); scene_hit(-1, 120, SRC_REMOTE);
     run(0.6f);
     sim_shot("paint_twist");
     float bent = D.bend;
@@ -226,7 +226,7 @@ void test_scene(void)
     double us[NROLE];
     for (int r = 0; r < NROLE; r++) {
         role(r);
-        eng_strike(0, 120, DV_KICK); scene_hit(-1, 120, 1); scene_hit(PD_LEFT, 120, 0);
+        eng_strike(0, 120, DV_KICK); scene_hit(-1, 120, SRC_REMOTE); scene_hit(PD_LEFT, 120, SRC_LIVE);
         run(0.2f);
         us[r] = cost_us(400);
     }

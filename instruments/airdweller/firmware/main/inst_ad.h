@@ -176,4 +176,4 @@ extern const char *const mat_name[NMAT];      // "METAL" ...
 void scene_draw(const view_t *v);
 bool scene_splash(int frame);
 void scene_saver(uint32_t frame);
-void scene_hit(int pad, int vel, int remote);   // a hit sounded (this box's, or the other's: remote 1)
+void scene_hit(int pad, int vel, int src);      // a hit sounded: SRC_LIVE or SRC_LOOP (this box's), SRC_REMOTE (pad -1)
