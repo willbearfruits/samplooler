@@ -143,7 +143,7 @@ static uint8_t sent_seq;
 static int64_t loop_sent_until = -1;                  // loop hits up to this tick have been sent ahead
 static int led_flash_pad = -1; static float led_l;
 // for the tests: the last strike sent to the engine from the other hand (its frame), how many
-uint32_t ad_strike_at; int64_t ad_strike_tick; int ad_strikes;
+uint32_t ad_strike_at; int64_t ad_strike_tick; int ad_strikes; uint32_t ad_played_frame;
 int64_t ad_now_tick(void) { return now_tick; }
 
 static uint32_t fpb_of(float bpm) { return (uint32_t)(60.0f * (float)AUDIO_SR / bpm + 0.5f); }
@@ -592,6 +592,7 @@ static void link_follow(void)
 static const int gm_of[NDV] = { 36, 38, 49, 42, 81, 35, 39, 54 };
 static void sounded(const played_t *p)
 {
+    ad_played_frame = p->frame;
     if (p->pad < NPAD) { flash[p->pad] = 1.0f; scene_hit(p->pad, p->vel, 0); }
     if (p->voice < NDV - 1) {                                          // DV_OFF sends nothing
         midi_note_ch(10, gm_of[p->voice], p->vel);

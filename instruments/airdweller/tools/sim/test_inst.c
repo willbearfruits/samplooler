@@ -20,7 +20,7 @@ void  st_stroke(float t, vec3_t dir, float peak, float dur, float ret);
 void  st_hold(vec3_t dir, float dps);
 void  st_flat_acc(int on);
 extern const vec3_t ST_FRONT, ST_BACK, ST_LEFT, ST_RIGHT, ST_TWIST;
-extern uint32_t ad_strike_at; extern int64_t ad_strike_tick; extern int ad_strikes;
+extern uint32_t ad_strike_at; extern int64_t ad_strike_tick; extern int ad_strikes; extern uint32_t ad_played_frame;
 int64_t ad_now_tick(void);
 void test_engine(void) __attribute__((weak));
 void test_scene(void) __attribute__((weak));
@@ -45,7 +45,6 @@ static int notes_since(int from, int note)
     return n;
 }
 static int last_note_since(int from) { int nt = -1; for (int i = from; i < midi_n; i++) if (midi_log[i].st == 0x99 && midi_log[i].d2 > 0) nt = midi_log[i].d1; return nt; }
-static float last_note_t(int from) { float t = -1; for (int i = from; i < midi_n; i++) if (midi_log[i].st == 0x99 && midi_log[i].d2 > 0) t = midi_log[i].t; return t; }
 
 static void quiet(void)
 {
@@ -91,16 +90,19 @@ static void strokes(void)
     run(0.8f);
     st_flat_acc(0);
     check(notes_since(m0, -1) == 0, "CONFIRM: a fast turn with no jolt is no hit");
-    // on the grid: the hit sounds on a sixteenth line
-    m0 = midi_n;
-    st_swing(sim_t + 0.031f, ST_LEFT, 700.0f);
-    run(0.6f);
-    float t = last_note_t(m0);
-    float sixteenth = 60.0f / 120.0f / 4.0f;
+    // on the grid: a hit placed just before a sixteenth line waits for it and sounds on it. The swing is timed so it is
+    // caught (peak, then 15 % down, at the next 10 ms tick: 80 to 95 ms in; its meant moment HIT_LEAD before that) before
+    // the line.
     grid_t g; eng_get_grid(&g);
-    float beat0 = (float)(int32_t)g.origin / (float)AUDIO_SR;
-    float off = fmodf(t - beat0, sixteenth); if (off > sixteenth / 2) off -= sixteenth;
-    check(t > 0 && fabsf(off) < 0.012f, "QUANTIZE 1/16: the hit sounds within a tick of a line (%.1f ms off)", (double)(off * 1000.0f));
+    uint32_t nowf = audio_frames();
+    int64_t line = (eng_tick_at(&g, nowf) / (PPB / 4) + 3) * (PPB / 4);
+    float line_t = sim_t + (float)(int32_t)(eng_frame_of(&g, line) - nowf) / (float)AUDIO_SR;
+    m0 = midi_n;
+    st_swing(line_t - 0.110f, ST_LEFT, 700.0f);
+    run(0.6f);
+    eng_get_grid(&g);
+    uint32_t want = eng_frame_of(&g, line);
+    check(notes_since(m0, -1) == 1 && ad_played_frame == want, "QUANTIZE 1/16: a hit just before a line sounds on it (frame %u, the line's %u)", (unsigned)ad_played_frame, (unsigned)want);
 }
 
 // ---------------------------------------------------------------- the loops
