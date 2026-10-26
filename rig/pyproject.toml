@@ -1,0 +1,22 @@
+[project]
+name = "slrig"
+version = "0.1.0"
+description = "The Samplooler Rig: a bench on the PC for a Samplooler on USB (daemon, CLI, MCP)"
+requires-python = ">=3.12"
+dependencies = ["numpy>=2", "matplotlib>=3.9", "mcp>=1.2"]
+
+[project.scripts]
+slrig = "slrig.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["uv_build>=0.8"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

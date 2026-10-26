@@ -189,3 +189,22 @@ These are the registry's commands. `help` lists them with their arguments. This 
 | `curve` | `n` (points, default 121) | the tilt → speed curve from the firmware's own `gesture.c` (built on the PC) with the current tuning and settings: `{"tilt": {"angle": [...], "speed": [...], "dead": d, "full": f, "detents": [...]}, "roll": {"angle": [...], "delay": [...], "stutter": [...]}}`. The viewer draws it and asks again after any `tune` or `settings` push |
 | `gestures` | | every gesture the board knows: `[{"name": "enc.tap", "group": "enc", "rule": "released after 40..500 ms", "tune": ["enc.tap_min", "enc.tap_max"], "count": 3, "last_t": 12.3}]` |
 | `log.tail` | `n` | |
+
+---
+
+## 3. Sessions on disk
+
+A recording is a folder, `lab/rig/sessions/<YYYY-MM-DD>-<HHMMSS>-<name>/` (or `$SLRIG_SESSIONS/...`). Every file is
+plain, and the time `t` is seconds from the session's start on the board's clock (audio frames / 32000).
+
+| file | what |
+|---|---|
+| `meta.json` | `name`, `started` (ISO), `secs`, `source` ("board" or "twin"), `board` {name, serial, version}, `tune` {name: value} at the start, `settings` {name: text}, `imu` {rate_hz, acc_lsb, gyro_lsb, axis_map [ax_x, ax_y, ax_z codes 0..5]}, `test` (null, or {name, steps: [{t0, t1, label, prompt}]}), `injected` (bool), `notes` |
+| `motion.csv` | `t,ax,ay,az,gx,gy,gz,flags`: device axes (the axis map applied), g and deg/s, raw (no offset or bias removed); flags 1 injected, 2 FIFO overflow before this sample, 8 samples lost before this one |
+| `raw.txt` | the same rows as the chip's raw LSB, `ax ay az gx gy gz` a line: what `twin --calc replay` reads |
+| `state.csv` | `t` and every `state` field by name (section 2), one row per `q` |
+| `events.jsonl` | `{"t", "name", "v", "ms", "text"}` a line |
+| `screen.bin` | records of an 8-byte little-endian float64 `t` and the 1024-byte frame (page format), one per change |
+| `audio.wav` | optional: the board's USB output, stereo 16-bit, 32 kHz (left the mix; right the raw input when `usb.out` is 1) |
+| `analysis.json` | written by `session.analyze` |
+| `replay-<label>.csv` | written by `session.replay`: the twin's per-tick output for one tuning set |
