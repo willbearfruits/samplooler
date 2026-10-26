@@ -447,6 +447,7 @@ int main(int argc, char **argv)
             }
             nframe += 64;
         }
+        if (fw) fflush(fw);                                   // the daemon reads the growing file (audio.measure)
         meter_in = ipk > meter_in ? ipk : meter_in * 0.9f;
         meter_out = opk > meter_out ? opk : meter_out * 0.9f;
         if (toast > 0) toast -= 10;
