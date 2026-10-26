@@ -52,7 +52,10 @@ The rig never models the firmware in Python. Replays and A/B comparisons run the
 
 ## D6. Today's feel stays the default
 
-Preset `v1` is today's behaviour bit for bit. New fusion and mapping are opt-in tuning values until we
+Preset `v1` is today's behaviour. `twin/test_v1.c` checks it over 4.8 million comparisons with copies of the old
+code: the angles are equal to the bit, and every decision (zone, tap, hold, long, flick, count) is the same. The
+speeds and effect amounts are within 3e-6, because with `-ffast-math` a division by a `#define` becomes a multiply
+by its reciprocal, which a division by a tuning value does not. New fusion and mapping are opt-in tuning values until we
 have measured them on a board with the user's hands. When something sounds wrong and the numbers look
 fine, A/B `v1` against the new preset.
 
@@ -77,6 +80,26 @@ by its material colour (0.05, 0.25, 0.45). The boards are 94 x 46 mm, 11 mm apar
 
 Flashing stays with `tools/flash.sh`, only when the user asks, and never on the TWOFOLD.
 
+## D11. Every input, every gesture (the user's addition)
+
+One table (`tune.h`, 68 values) covers the IMU, motion, tilt, roll, joystick, encoder, REC, mic, USB and the rig.
+`gesture.c` holds every decision and reports each gesture as an event.
+
+## D12. The motion stream is the rig's own (`r`), not the core's `m`
+
+The core's `m` carries 1/1024 g and 1/4 deg/s, which is coarser than the gyro's noise (about 0.03 deg/s). It could
+not show a bias. `r` sends the chip's raw 16 bits. Takes on disk still use motion_rec's units.
+
+## D13. The twin is also the calculator
+
+`twin --calc` computes the curve and replays raw takes with any tuning, through the same C as the board. Python
+never re-implements the firmware.
+
+## D14. Injection replaces the sensor, paced by the rig
+
+While 'J' samples arrive, the board's FIFO samples are dropped, until 0.5 s after the last one. The daemon sends
+them at their own rate, and the twin takes them at the FIFO's pace.
+
 ## Log
 
 - 2026-10-27. The Samplooler's control code runs at 50 Hz (`tick % 2`) inside a 10 ms loop.
@@ -84,3 +107,9 @@ Flashing stays with `tools/flash.sh`, only when the user asks, and never on the 
   board stay short, or the buffer grows.
 - 2026-10-27. The MIDI TX buffer is 1024 bytes (`CFG_TUD_MIDI_TX_BUFSIZE`). A 1171-byte screen message
   does not fit.
+- 2026-10-27. The unix socket path has a 108-character limit: the scratchpad was too long. Test daemons live
+  under `/run/user/1000/slrig-test`.
+- 2026-10-27. `tools/flash.sh` takes the first `/dev/serial/by-id/*Espressif*`. The TWOFOLD is an Espressif
+  device: always give `PORT=` explicitly.
+- 2026-10-27. The Samplooler's `sl_midi.py` finds boards named Samplooler only. A board running HUFF needs the
+  core's `sl_midi.py` (family) to reboot into download mode.

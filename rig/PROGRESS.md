@@ -1,22 +1,33 @@
 # Progress
 
-## 2026-10-27 01:00: phase 1, the plan
+## 2026-10-27 01:45
 
-**Read:**
+**Done and checked:**
 
-- the Samplooler's `imu.c`, the tilt code in `main.c`, `usb.c` and the app line;
-- the core's IMU and its motion stream (`M`/`m`, `motion_rec.py`, `take.c`);
-- the Carapace command and MCP pattern;
-- signalpatch's GLFW and NanoVG setup;
-- the showcase's VRML path.
+- **Firmware** (`firmware/main`):
+  - `tune.c`, `motion.c`, `gesture.c`, `rig.c`, the gyro through the FIFO, `input.c` on `gesture.c`;
+  - the mic's high-pass, slot and trim, and USB stereo (the mix, plus the raw input);
+  - built with `-Werror`: 800 KB, DIRAM 197.9 of 341.8 KB static.
+- **v1 check** (`twin/build.sh`): 4.8 M comparisons, 0 differences.
+- **Twin:** streams every message. `--calc` gives the curve and replays.
+- **Daemon** (`slrig`): 45 commands, OSC, sessions, MCP (7 tools, images).
+  - `tests/test_wire.py` and `tests/test_daemon.py`: 14 pass in 7 s.
+  - On the twin: motion at 502 and 1003 Hz, state 50 Hz, no drops.
+  - The keys fire the firmware's gestures, and a recorded session replays through other tunings.
 
-**Spikes:**
+**Running:**
 
-- an EGL surfaceless GL 3.3 context works with no display server;
-- rev C exports to VRML.
+- The viewer (C++, a helper agent).
+- Analysis, guided tests, synthetic gestures and plots (a helper agent).
 
-**Wrote:** PLAN.md, DECISIONS.md and ROADMAP.md.
+**Not possible tonight:**
 
-**Next:** wait for the user's go, then milestone 0.
+- Anything on a board. Only the TWOFOLD is plugged in.
+- Heap and CPU with the rig's streams, USB throughput and the axis map are to be measured in the morning
+  (`MORNING.md`).
 
-No board is plugged in, only the TWOFOLD, which is never touched.
+**Next:**
+
+1. Integrate both agents' work.
+2. End to end with the viewer offscreen, and screenshots.
+3. `AGENTS.md`, the install, the MCP registration, a skill for the workflow.
