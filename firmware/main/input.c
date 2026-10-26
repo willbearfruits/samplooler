@@ -131,7 +131,7 @@ void input_poll(input_ev_t *ev)
 #if PIN_REC >= 0
     ev->rec = gpio_get_level(PIN_REC) == 0;
 #endif
-    if (k.rec >= 0) ev->rec = k.rec;
+    ev->rec_pc = k.rec > 0;
 
     if (!TI(TU_JO_ON)) { ev->has_joy = false; return; }
     if (!adc_ready) joy_start();

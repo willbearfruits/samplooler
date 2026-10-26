@@ -551,7 +551,7 @@ void app_main(void)
             rec_up_ms = in.rec ? 0 : rec_up_ms + 10;
             if (rec_up_ms >= 100) { rec_stuck = false; ESP_LOGI(TAG, "REC let go: it records again"); }
         }
-        down = down || (in.rec && S.rec_button && !rec_stuck);
+        down = down || (in.rec && S.rec_button && !rec_stuck) || in.rec_pc;
 #endif
         if (job != JOB_NONE) down = false;                    // a slot job owns the take
         idle_ms += 10;

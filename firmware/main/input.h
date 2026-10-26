@@ -9,6 +9,7 @@ typedef struct {
     bool  tap, hold, longp;    // encoder push: released before enc.hold; released after it; held enc.long (once)
     bool  pressed; int held_ms;
     bool  rec;                 // the record button is down (PIN_REC)
+    bool  rec_pc;              // the rig holds REC down (like MIDI note 60: not subject to the Rec button setting)
     bool  flick_l, flick_r, flick_u, flick_d;
     float jx, jy;              // -1..1 after gesture.c, 0 when no joystick
     int   raw_x, raw_y;        // the joystick's ADC (0..4095), 0 when off
