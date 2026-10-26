@@ -224,14 +224,16 @@ static void handle_midi3(uint8_t st, uint8_t d1, uint8_t d2)
     if ((st & 0xF0) == 0x90 && d2 > 0) { if (d1 == 60) midi_rec = true; else if (d1 == 64) freeze_req = true; }
     else if ((st & 0xF0) == 0x80 || ((st & 0xF0) == 0x90 && d2 == 0)) { if (d1 == 60) midi_rec = false; }
 }
+static bool stdin_done, keep_on_eof;          // --secs: run to the end after the input closes (tests pipe it all in)
 static void read_input(void)
 {
+    if (stdin_done) return;
     static uint8_t sx[256]; static int sxn; static bool in_sx;
     static uint8_t st, d[2]; static int nd;
     uint8_t buf[4096];
     for (;;) {
         ssize_t r = read(0, buf, sizeof buf);
-        if (r == 0) exit(0);                                  // the daemon has gone
+        if (r == 0) { if (keep_on_eof) { stdin_done = true; return; } exit(0); }   // the daemon has gone
         if (r < 0) return;
         for (ssize_t i = 0; i < r; i++) {
             uint8_t b = buf[i];
@@ -341,7 +343,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--calc")) return calc();
         else if (!strcmp(argv[i], "--fast")) fast = true;
         else if (!strcmp(argv[i], "--scene") && i + 1 < argc) scene = argv[++i];
-        else if (!strcmp(argv[i], "--secs") && i + 1 < argc) secs = atof(argv[++i]);
+        else if (!strcmp(argv[i], "--secs") && i + 1 < argc) { secs = atof(argv[++i]); keep_on_eof = true; }
         else if (!strcmp(argv[i], "--wav") && i + 1 < argc) wav = argv[++i];
     }
     fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
@@ -377,15 +379,18 @@ int main(int argc, char **argv)
         rig_tick(10);
 
         // the motion: injected by the rig, or the scene's
+        // a real FIFO yields rate x 10 ms samples a tick: injected ones are taken at that pace too
         static int16_t raw[256][6];
-        int n = rig_inject(raw, 256);
-        injected = n >= 0;
         int rate = rate_now();
         float al = acc_lsb_now(), gl = gyro_lsb_now();
+        samp_acc += rate * 0.01;
+        int budget = (int)samp_acc;
+        samp_acc -= budget;
+        int n = rig_inject(raw, budget);
+        injected = n >= 0;
         if (!injected) {
-            samp_acc += rate * 0.01;
             n = 0;
-            while (samp_acc >= 1.0 && n < 256) { sample_at(t - 0.01 + (double)n / rate, 1.0f / (float)rate, al, gl, raw[n]); n++; samp_acc -= 1.0; }
+            while (n < budget && n < 256) { sample_at(t - 0.01 + (double)n / rate, 1.0f / (float)rate, al, gl, raw[n]); n++; }
         }
         for (int i = 0; i < n; i++) {
             float a[3] = { raw[i][0] / al, raw[i][1] / al, raw[i][2] / al }, g[3] = { raw[i][3] / gl, raw[i][4] / gl, raw[i][5] / gl };
