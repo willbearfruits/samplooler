@@ -126,7 +126,7 @@ void app_line_sysex(uint8_t cmd, const uint8_t *body, int n)
     quiet_ms = 0;
     if (cmd == 'I') {
         char b[160];
-        snprintf(b, sizeof b, "name=Samplooler\nversion=%s\nserial=%s\nproto=1\nparams=%d",
+        snprintf(b, sizeof b, "name=Samplooler\nversion=%s\nserial=%s\nproto=1\nparams=%d\nrig=1",
                  esp_app_get_description()->version, usb_serial, norder);
         send('I', b);
     } else if (cmd == 'D') {

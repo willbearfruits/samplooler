@@ -267,8 +267,12 @@ int oled_pill(const gfx_font_t *f, int x, int y, const char *s, bool filled)
     return w;
 }
 
+// Called with the frame before it goes to the panel (main.c gives it to the rig); a weak no-op where nobody listens.
+__attribute__((weak)) void oled_on_flush(const uint8_t *frame) { (void)frame; }
+
 void oled_flush(void)
 {
+    oled_on_flush(&fb[0][0]);
     if (!present) return;
     const uint8_t win[] = { 0x21, 0, OLED_W - 1, 0x22, 0x00, PAGES - 1 };
     bool ok = cmd(win, sizeof win);

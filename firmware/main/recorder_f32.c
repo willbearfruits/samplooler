@@ -12,6 +12,7 @@ static const char *TAG = "rec";
 #define XF          320                                    // 10 ms seam crossfade
 #define MIN_LOOP    (REC_SAMPLE_RATE / 10)
 #define SLEW        0.000625f                              // one-pole per sample, tau = 50 ms
+static volatile float speed_slew = SLEW;                         // recorder_set_slew_ms
 #define GUARD       4
 #define WIN_N       512                                    // Hann table for the grains
 #define NGRAIN      2
@@ -357,8 +358,9 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
         }
     } else lock_err_v = 0.0f;
 
+    const float sk = speed_slew;                                   // tilt.slew (the tuning table), read once a block
     for (int i = 0; i < n; i++) {
-        sp += SLEW * (st - sp);
+        sp += sk * (st - sp);
         float y;
         if (mode == REC_MODE_TAPE) {
             y = read_loop(ip, fp, le, len);
@@ -396,3 +398,5 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
     pos_i = ip; pos_f = fp; speed = sp; pitch = pc;
     frames += (uint32_t)n;
 }
+
+void recorder_set_slew_ms(float ms) { if (ms >= 1.0f) speed_slew = 1.0f / (ms * (float)(REC_SAMPLE_RATE / 1000)); }   // 50 ms: SLEW

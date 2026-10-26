@@ -67,6 +67,14 @@ void audio_scope(int8_t *dst) { int w = scope_w; for (int i = 0; i < AUDIO_SCOPE
 
 typedef struct { float b0, b1, b2, a1, a2, z1, z2; } biquad_t;
 static biquad_t hp;
+// The tuning table's mic values reach the audio task as plain stores; the filter's five coefficients through a
+// sequence count (odd while the UI task writes them), copied at the top of a block.
+static biquad_t hp_next;
+static volatile uint32_t hp_seq;
+static uint32_t hp_seen;
+static volatile int   slot_force = -1;               // mic.slot: -1 auto, 0 left, 1 right
+static volatile float mic_trim;                      // dB on top of Mic gain
+static volatile int   usb_mode;                      // usb.out: 0 the mix on both channels, 1 the mix left, the input right
 static void biquad_highpass(biquad_t *q, float fc, float qf)
 {
     float w = 2.0f * (float)M_PI * fc / (float)REC_SAMPLE_RATE;
@@ -166,11 +174,20 @@ static void IRAM_ATTR audio_task(void *arg)
             lr += wr != 0 && wr != -1;
         }
         int want = (ll < frames / 4 && lr > frames / 2) ? 1 : (lr < frames / 4 && ll > frames / 2) ? 0 : mic_slot;
-        if (want != mic_slot) { if (++slot_vote > 50) { mic_slot = want; slot_vote = 0; } }
+        if (slot_force >= 0) mic_slot = slot_force;
+        else if (want != mic_slot) { if (++slot_vote > 50) { mic_slot = want; slot_vote = 0; } }
         else slot_vote = 0;
+        {   // a new high-pass from the UI task: whole or not at all
+            uint32_t q0 = __atomic_load_n(&hp_seq, __ATOMIC_ACQUIRE);
+            if (!(q0 & 1u) && q0 != hp_seen) {
+                biquad_t c = hp_next;
+                if (__atomic_load_n(&hp_seq, __ATOMIC_ACQUIRE) == q0) { hp.b0 = c.b0; hp.b1 = c.b1; hp.b2 = c.b2; hp.a1 = c.a1; hp.a2 = c.a2; hp_seen = q0; }
+            }
+        }
+        static int16_t usb_in_l[FRAMES];             // what the input was, for usb.out 1
 
         // dB to linear without powf: 10^(db/20) = 2^(db/6.0206)
-        const float k = exp2f((float)mic_db / 6.0206f) / 8388608.0f;
+        const float k = exp2f(((float)mic_db + mic_trim) / 6.0206f) / 8388608.0f;
         float pk = 0; int clips = 0;
         if (in_src == AUDIO_IN_USB) {
             static int16_t usb_in[FRAMES];
@@ -179,6 +196,7 @@ static void IRAM_ATTR audio_task(void *arg)
                 float x = usb_in[f] * (1.0f / 32768.0f);
                 float a = fabsf(x); if (a > pk) pk = a;
                 in[f] = x;
+                usb_in_l[f] = usb_in[f];
             }
         } else
         for (int f = 0; f < frames; f++) {
@@ -187,6 +205,8 @@ static void IRAM_ATTR audio_task(void *arg)
             if (a >= 1.0f) clips++;
             in[f] = x;
             scope_push(x);
+            float xc = x > 1.0f ? 1.0f : x < -1.0f ? -1.0f : x;
+            usb_in_l[f] = (int16_t)(xc * 32767.0f);
         }
         if (pk > in_peak) in_peak = pk;
         in_clips += clips;
@@ -211,7 +231,7 @@ static void IRAM_ATTR audio_task(void *arg)
         }
         if (opk > out_peak) out_peak = opk;
         out_env = opk > out_env ? opk : out_env * 0.95f;
-        usb_audio_out_push(usb_out, frames);
+        usb_audio_out_push(usb_out, usb_mode ? usb_in_l : NULL, frames);
         uint32_t used = esp_cpu_get_cycle_count() - c0;
         int pct = (int)((uint64_t)used * 100 / budget);
         cpu_pct += (pct - cpu_pct) / 8;
@@ -247,6 +267,21 @@ float audio_out_peak(void) { float p = out_peak; out_peak = 0; return p; }
 int   audio_in_clips(void) { int c = in_clips;   in_clips = 0; return c; }
 void  audio_set_input(int src) { in_src = src == AUDIO_IN_USB ? AUDIO_IN_USB : AUDIO_IN_MIC; }
 void  audio_set_monitor(bool on) { monitor_on = on; }
+void  audio_set_mic_tune(float hz, int slot, float trim_db, int usb_out)
+{
+    static float hz_was = -1;
+    if (hz != hz_was) {
+        biquad_t c;
+        biquad_highpass(&c, hz, 0.707f);
+        __atomic_add_fetch(&hp_seq, 1, __ATOMIC_ACQ_REL);
+        hp_next = c;
+        __atomic_add_fetch(&hp_seq, 1, __ATOMIC_ACQ_REL);
+        hz_was = hz;
+    }
+    slot_force = slot == 1 ? 0 : slot == 2 ? 1 : -1;
+    mic_trim = trim_db;
+    usb_mode = usb_out;
+}
 int   audio_input(void)        { return in_src; }
 void  audio_get_stats(audio_stats_t *s)
 {

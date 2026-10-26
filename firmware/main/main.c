@@ -35,19 +35,20 @@
 #include "flock.h"
 #include "settings.h"
 #include "app_line.h"
+#include "tune.h"
+#include "motion.h"
+#include "gesture.h"
+#include "rig.h"
+#include "esp_heap_caps.h"
+#include "esp_timer.h"
 #if HAS_CONTROLS
 #include "input.h"
 #endif
 
 static const char *TAG = "main";
 
-#define TILT_USE_ROLL  0
-#define TILT_SIGN     -1.0f   // -1: nose down plays backward on the stack boards (the IMU sits the other way round from the kit)
-#define TILT_DEAD_DEG  5.0f
-#define TILT_FULL_DEG  45.0f
-#define ROLL_DEAD_DEG  15.0f    // roll: left = delay, right = stutter (swap with ROLL_SIGN -1)
-#define ROLL_FULL_DEG  45.0f
-#define ROLL_SIGN      1.0f
+// The motion's numbers (axes, fusion, dead zones, full angles, signs, the curve, detents) are the tuning table's
+// (tune.h); motion.c turns the IMU into angles, gesture.c the angles into the speed and the effects.
 
 // ---- settings, editable from the encoder (settings_t is in settings.h; NVS keeps a copy) ----
 static void apply_settings(void);
@@ -291,31 +292,38 @@ static void apply_settings(void)
     vox_select(S.voice, S.key, S.scale);
 }
 
-// -1..1 control (tilt angle over TILT_FULL_DEG, or joystick Y) to a speed.
-static float control_to_speed(float u)
+// The tuning table moved: hand its numbers to what keeps a copy (the IMU's registers, the mic's filter, the tape's
+// glide, the encoder's glitch filter). Only when something changed.
+static bool imu_ok;
+static void apply_tune(void)
 {
-    float mag = fabsf(u), dead = TILT_DEAD_DEG / TILT_FULL_DEG;
-    if (mag < dead) return S.spd_min;
-    float t = (mag - dead) / (1.0f - dead);
-    if (t > 1.0f) t = 1.0f;
-    float curve = t * t * (1.6f - 0.6f * t);
-    float r = S.spd_min + (S.spd_max - S.spd_min) * curve;
-    return u >= 0.0f ? r : -r;
+    static uint32_t seen;
+    static int imu_have[4] = { -1, -1, -1, -1 };
+    if (tune_gen() == seen) return;
+    seen = tune_gen();
+    int want[4] = { TI(TU_IMU_ARANGE), TI(TU_IMU_GRANGE), TI(TU_IMU_DLPF), TI(TU_IMU_RATE) };
+    if (imu_ok && memcmp(want, imu_have, sizeof want)) { imu_config(want[0], want[1], want[2], want[3]); memcpy(imu_have, want, sizeof want); }
+    audio_set_mic_tune(TV(TU_MI_HPF), TI(TU_MI_SLOT), TV(TU_MI_TRIM), TI(TU_US_OUT));
+    recorder_set_slew_ms(TV(TU_TI_SLEW));
+#if HAS_CONTROLS
+    input_tune();
+#endif
 }
 
-// Octaves and fifths between 1/4 and 4, nearest in the log domain, keeping the sign.
-static float snap_speed(float s)
+static void tune_action(int id)
 {
-    static const float grid[] = { 0.25f, 0.375f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f, 8.0f };
-    float a = fabsf(s);
-    if (a < 0.02f) return s;
-    float best = grid[0], bd = 1e9f;
-    for (unsigned i = 0; i < sizeof grid / sizeof grid[0]; i++) {
-        float d = fabsf(a - grid[i]) / grid[i];
-        if (d < bd) { bd = d; best = grid[i]; }
-    }
-    return s < 0 ? -best : best;
+    if (id == TU_IMU_BIAS_KEEP) motion_bias_keep();
+    else if (id == TU_MO_YAW_RESET) motion_yaw_reset();
+#if HAS_CONTROLS
+    else if (id == TU_JO_CENTRE) input_joy_centre();
+#endif
 }
+
+// The rig's line first (rig.c: streams, tuning, injection), then the app's (settings).
+static void sysex_in(uint8_t cmd, const uint8_t *b, int n) { if (!rig_sysex(cmd, b, n)) app_line_sysex(cmd, b, n); }
+bool     rig_port_send(const uint8_t *m, int n) { return usb_midi_send_sysex(m, n); }
+uint32_t rig_port_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
+void     oled_on_flush(const uint8_t *fb) { rig_screen(fb); }   // oled.c, after every frame: the rig mirrors the screen
 
 static void i2c_recover(void)
 {
@@ -384,8 +392,15 @@ void app_main(void)
     gpio_config_t btn = { .pin_bit_mask = 1ULL << PIN_BOOT, .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
     gpio_config(&btn);
 
+    tune_load();                            // the tuning table (NVS "tune"): the controls' numbers, before the controls start
+    tune_on_action(tune_action);
+    gest_on_event(rig_event);
+    rig_init();
+    motion_init();
     i2c_master_bus_handle_t bus = i2c_start();
     bool has_imu = imu_init(bus);
+    imu_ok = has_imu;
+    apply_tune();
     fx_init();
 #if OLED_ENABLE
     oled_init(bus);
@@ -407,6 +422,7 @@ void app_main(void)
     if (diag_safe_mode()) {                 // three crashes in a row: start from the defaults and keep them
         ESP_LOGW(TAG, "safe mode: %d crashes in a row, settings reset to defaults", diag_crash_streak());
         S = S_DEFAULTS; setting_changed();
+        tune_defaults();                    // the tuning too (not saved: it comes back if the crashes were not its doing)
     }
     bool rec_stuck = false;                 // REC down since power-on: a stuck button or a short on its pin
 #if HAS_CONTROLS && PIN_REC >= 0
@@ -415,30 +431,32 @@ void app_main(void)
     // ignored until it has been up for 0.1 s; BOOT records meanwhile. Not with Rec button OFF. The slots stay.
     if (S.rec_button && gpio_get_level(PIN_REC) == 0) {
         int held_ms = 0;
-        for (; held_ms < 3000 && gpio_get_level(PIN_REC) == 0; held_ms += 100) {
-            char l2[24]; snprintf(l2, sizeof l2, "keep holding REC  %d", 3 - held_ms / 1000);
+        const int reset_ms = TI(TU_RE_RESET), stuck_ms = TI(TU_RE_STUCK) - TI(TU_RE_RESET);
+        for (; held_ms < reset_ms && gpio_get_level(PIN_REC) == 0; held_ms += 100) {
+            char l2[32]; snprintf(l2, sizeof l2, "keep holding REC  %d", (reset_ms - held_ms + 999) / 1000);
 #if OLED_ENABLE
             if (oled_present()) ui_fault("RESET?", l2);
 #endif
             vTaskDelay(pdMS_TO_TICKS(100));
         }
         int wait_ms = 0;
-        for (; held_ms >= 3000 && wait_ms < 3000 && gpio_get_level(PIN_REC) == 0; wait_ms += 100) {
+        for (; held_ms >= reset_ms && wait_ms < stuck_ms && gpio_get_level(PIN_REC) == 0; wait_ms += 100) {
 #if OLED_ENABLE
             if (oled_present()) ui_fault("RESET?", "let go of REC to reset");
 #endif
             vTaskDelay(pdMS_TO_TICKS(100));
         }
-        if (wait_ms >= 3000) {
+        if (wait_ms >= stuck_ms) {
             ESP_LOGW(TAG, "REC (GPIO %d) stays down from power-on: no reset; REC is ignored until it lets go, BOOT records", PIN_REC);
 #if OLED_ENABLE
             if (oled_present()) ui_fault("REC IS STUCK", "BOOT records for now");
 #endif
             vTaskDelay(pdMS_TO_TICKS(1500));
             rec_stuck = true;
-        } else if (held_ms >= 3000) {
-            ESP_LOGW(TAG, "factory reset: record button held 3 s at boot");
+        } else if (held_ms >= reset_ms) {
+            ESP_LOGW(TAG, "factory reset: record button held %d ms at boot", reset_ms);
             settings_erase(); S = S_DEFAULTS;
+            tune_erase(); tune_defaults(); apply_tune();
 #if OLED_ENABLE
             if (oled_present()) ui_fault("RESET", "defaults restored");
 #endif
@@ -457,7 +475,7 @@ void app_main(void)
     if (keep_console) ESP_LOGW(TAG, "encoder held at boot: USB MIDI/audio off, console kept");
     else {
         vTaskDelay(pdMS_TO_TICKS(200)); ESP_LOGI(TAG, "switching the USB port to MIDI + audio + CDC console"); usb_start();
-        app_line_init(&APP_SETTINGS); usb_midi_on_sysex(app_line_sysex);
+        app_line_init(&APP_SETTINGS); usb_midi_on_sysex(sysex_in);
     }
     link_apply();
 
@@ -468,7 +486,11 @@ void app_main(void)
     int  click_ms = 0, vol_ms = 0;                         // a tap in play waiting for a second; the knob on Volume
     bool click_menu = false;                               // no second tap: the menu opens (not after a tap that ended Volume)
     bool frozen = false;                                  // tilt latched: the angles stop following the sensor
-    float roll = 0, pitch = 0, speed_cmd = 1.0f, pitch_ratio = 1.0f, joy_pitch_st = 0;
+    float roll = 0, pitch = 0, speed_cmd = 1.0f, pitch_ratio = 1.0f, joy_pitch_st = 0;   // pitch + with the nose down (motion.h)
+    tilt_out_t to = { .speed = 1.0f };
+    bool injected = false, in_has_joy = false;
+    float in_jx = 0, in_jy = 0;
+    int  enc_total = 0, in_raw_x = 0, in_raw_y = 0;
 #if HAS_CONTROLS
     input_ev_t in = { 0 };
 #endif
@@ -498,9 +520,30 @@ void app_main(void)
             const char *nw = flock_news();
             if (nw) { snprintf(result_text, sizeof result_text, "%s", nw); result_ms = 1500; }
         }
+        apply_tune();
+        rig_tick(10);
+        {   // the motion: every sample from the sensor's FIFO (or what the rig injects) into motion.c and out to the rig
+            static int16_t raw[128][6], inj[128][6];
+            bool ovf = false;
+            int n = has_imu ? imu_read(raw, 128, &ovf) : 0, flags = (ovf ? 2 : 0) | (has_imu ? 4 : 0);
+            const int16_t (*src)[6] = raw;
+            int ni = rig_inject(inj, 128);
+            injected = ni >= 0;
+            if (injected) { src = (const int16_t (*)[6])inj; n = ni; flags |= 1 | 4; }
+            float al = imu_acc_lsb(), gl = imu_gyro_lsb(), dt = 1.0f / (float)imu_rate_hz();
+            for (int i = 0; i < n; i++) {
+                float a[3] = { src[i][0] / al, src[i][1] / al, src[i][2] / al };
+                float g[3] = { src[i][3] / gl, src[i][4] / gl, src[i][5] / gl };
+                motion_sample(a, g, dt);
+            }
+            uint32_t f0 = audio_frames() - (uint32_t)(n * (REC_SAMPLE_RATE / imu_rate_hz()));
+            rig_motion(src, n, f0, TI(TU_IMU_ARANGE) | TI(TU_IMU_GRANGE) << 2, flags);
+        }
         bool down = gpio_get_level(PIN_BOOT) == 0 || midi_rec_hold;
 #if HAS_CONTROLS
         input_poll(&in);
+        in_has_joy = in.has_joy; in_jx = in.jx; in_jy = in.jy; in_raw_x = in.raw_x; in_raw_y = in.raw_y;
+        enc_total += in.enc;
         if (rec_stuck) {                                     // REC down since power-on counts for nothing until it has been up 0.1 s
             static int rec_up_ms;
             rec_up_ms = in.rec ? 0 : rec_up_ms + 10;
@@ -514,31 +557,32 @@ void app_main(void)
 #if HAS_CONTROLS
         if (in.enc || in.tap || in.hold || in.pressed || in.rec) idle_ms = 0;
 #endif
-        held_n = down ? (held_n < 3 ? held_n + 1 : 3) : (held_n > 0 ? held_n - 1 : 0);
-        bool now = held_n == 3 ? true : held_n == 0 ? false : held;
-        if (now != held) { held = now; recorder_set_record(held); }
+        const int deb = TI(TU_RE_DEB);                        // REC must agree this many ticks in a row
+        held_n = down ? (held_n < deb ? held_n + 1 : deb) : (held_n > 0 ? held_n - 1 : 0);
+        bool now = held_n >= deb ? true : held_n == 0 ? false : held;
+        if (now != held) { held = now; recorder_set_record(held); gest_emit(held ? "rec.down" : "rec.up", 0, 0, ""); }
 
 #if HAS_CONTROLS
         // the encoder: tap opens the menu, dives into a setting, runs an action or climbs back out;
         // hold leaves the menu; turn chooses in the list, adjusts while editing or in play mode
         if (in.tap) {
             if (!menu) {                                      // one tap opens the menu after 0.3 s; two put the knob on Volume
-                if (click_ms > 0) { click_ms = 0; vol_ms = 3000; toast = 3000; ESP_LOGI(TAG, "the knob: volume"); }
-                else { click_ms = 300; click_menu = vol_ms <= 0; if (vol_ms > 0) { vol_ms = 0; toast = 0; } }
+                if (click_ms > 0) { click_ms = 0; vol_ms = TI(TU_EN_VOL_MS); toast = vol_ms; ESP_LOGI(TAG, "the knob: volume"); gest_emit("enc.double", 0, 0, "volume"); }
+                else { click_ms = TI(TU_EN_DOUBLE) > 10 ? TI(TU_EN_DOUBLE) : 10; click_menu = vol_ms <= 0; if (vol_ms > 0) { vol_ms = 0; toast = 0; } }
             }
             else if (menu_edit) menu_edit = false;
             else if (is_action(param)) param_adjust(param, +1);
             else menu_edit = true;
         }
-        if (in.hold && menu) { menu = false; menu_edit = false; ESP_LOGI(TAG, "play"); }
+        if (in.hold && menu) { menu = false; menu_edit = false; ESP_LOGI(TAG, "play"); gest_emit("menu.close", 0, 0, ""); }
         else if (in.hold) midi_freeze_req = true;             // held while playing: freeze or release the tilt
         if (click_ms > 0 && (click_ms -= 10) <= 0) {
             click_ms = 0;
-            if (click_menu && !menu) { menu = true; menu_edit = false; ESP_LOGI(TAG, "menu"); }
+            if (click_menu && !menu) { menu = true; menu_edit = false; ESP_LOGI(TAG, "menu"); gest_emit("menu.open", 0, 0, ""); }
         }
         if (vol_ms > 0) vol_ms -= 10;
         if (in.enc && !menu && vol_ms > 0) {
-            param_adjust(P_VOL, in.enc); apply_settings(); vol_ms = 3000; toast = 3000;
+            param_adjust(P_VOL, in.enc); apply_settings(); vol_ms = TI(TU_EN_VOL_MS); toast = vol_ms;
             ESP_LOGI(TAG, "volume %d%%", S.vol_pct);
         } else if (in.enc) {
             if (menu && !menu_edit) param = ((param + in.enc) % P_N + P_N) % P_N;
@@ -546,31 +590,25 @@ void app_main(void)
             else { param_adjust(param, in.enc); apply_settings(); if (!menu) toast = 1500; }
             char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%d/%d %s %s", param + 1, P_N, param_name[param], v);
         }
-#if HAS_JOY
-        joy_pitch_st = in.has_joy && !menu ? 12.0f * in.jx : 0.0f;
 #endif
-#endif
+        joy_pitch_st = in_has_joy && !menu ? TV(TU_JO_PITCH) * in_jx : 0.0f;
 
         if (midi_freeze_req) {
             midi_freeze_req = false; frozen = !frozen; toast = 0;
+            gest_emit(frozen ? "freeze.on" : "freeze.off", 0, 0, "");
             ESP_LOGI(TAG, "tilt %s at pitch %+.1f roll %+.1f", frozen ? "frozen" : "released", (double)pitch, (double)roll);
         }
-        if (tick % 2 == 0) {                                 // 50 Hz control rate
-            if (has_imu && !frozen) imu_poll(&roll, &pitch);   // frozen: speed, direction and effects stay where they were
-            // the speed: the tilt; or the joystick's Y; or plain 1x (Tilt off, or no sensor)
-            if (S.tilt && has_imu) speed_cmd = control_to_speed((TILT_USE_ROLL ? roll : pitch) * TILT_SIGN / TILT_FULL_DEG);
-#if HAS_JOY
-            else if (in.has_joy && !menu) speed_cmd = control_to_speed(in.jy);
-#endif
-            else speed_cmd = 1.0f;
-            {   // roll: left of the dead zone feeds the delay, right of it grabs a stutter
-                float r = has_imu ? roll * ROLL_SIGN : 0.0f;
-                float a = fabsf(r) < ROLL_DEAD_DEG ? 0.0f : (fabsf(r) - ROLL_DEAD_DEG) / (ROLL_FULL_DEG - ROLL_DEAD_DEG);
-                if (a > 1.0f) a = 1.0f;
-                fx_set_delay(r < 0 ? a : 0.0f);
-                fx_set_stutter(r > 0 ? a : 0.0f);
-            }
-            if (S.snap) speed_cmd = snap_speed(speed_cmd);
+        if (TI(TU_MO_RATE) == 1 || tick % 2 == 0) {          // the control rate: 50 Hz (v1) or 100
+            bool imu = has_imu || injected;
+            motion_tick(frozen || !imu);                      // frozen: speed, direction and effects stay where they were
+            const motion_t *mo = motion_get();
+            pitch = mo->pitch; roll = mo->roll;
+            // the speed: the tilt; or the joystick's Y; or plain 1x (Tilt off, or no sensor). Roll: delay or stutter.
+            gest_tilt(pitch, roll, S.tilt, imu, in_has_joy && !menu && TI(TU_JO_SPEED) == 0, in_jy, S.spd_min, S.spd_max, &to);
+            speed_cmd = to.speed;
+            fx_set_delay(to.delay);
+            fx_set_stutter(to.stutter);
+            if (S.snap) speed_cmd = gest_snap(speed_cmd);
             recorder_set_speed(speed_cmd);
             float st = (float)S.pitch_st + joy_pitch_st;
             pitch_ratio = exp2f(st / 12.0f);
@@ -579,13 +617,9 @@ void app_main(void)
             if (usb_connected()) {                            // MIDI out: only what changed
                 static int last[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
                 int v[8] = { 0 };
-                v[1] = (int)(64 + pitch * 64.0f / 90.0f); v[2] = (int)(64 + roll * 64.0f / 90.0f);
+                v[1] = (int)(64 - pitch * 64.0f / 90.0f); v[2] = (int)(64 + roll * 64.0f / 90.0f);   // CC 1 as before: + nose up
                 v[3] = (int)(64 + speed_cmd * 63.0f / REC_SPEED_LIMIT); v[4] = (int)(recorder_position() * 127.0f);
-#if HAS_JOY
-                v[5] = (int)(64 + in.jx * 63.0f); v[6] = (int)(64 + in.jy * 63.0f);
-#else
-                v[5] = v[6] = 64;
-#endif
+                v[5] = in_has_joy ? (int)(64 + in_jx * 63.0f) : 64; v[6] = in_has_joy ? (int)(64 + in_jy * 63.0f) : 64;
                 v[7] = (int)(meter_in * 127.0f);
                 for (int c = 1; c < 8; c++) {
                     if (v[c] < 0) v[c] = 0;
@@ -597,8 +631,35 @@ void app_main(void)
             }
         }
 
+        if (rig_state_on() && (TI(TU_MO_RATE) == 1 || tick % 2 == 0)) {   // the rig: everything the controls decided
+            const motion_t *mo = motion_get();
+            float v[RS_N] = { 0 };
+            int fl = (frozen ? RF_FROZEN : 0) | (menu ? RF_MENU : 0) | (menu_edit ? RF_MENU_EDIT : 0) | (injected ? RF_INJECTED : 0)
+                   | (held ? RF_REC_DOWN : 0) | (in_has_joy ? RF_JOY : 0) | (has_imu ? RF_IMU : 0) | (mo->rest ? RF_REST : 0)
+                   | (recorder_state() == REC_RECORDING ? RF_RECORDING : 0) | (recorder_state() == REC_PLAYING ? RF_PLAYING : 0);
+#if HAS_CONTROLS
+            if (in.pressed) fl |= RF_ENC_DOWN;
+#endif
+            v[RS_state] = (float)recorder_state(); v[RS_mode] = (float)S.mode; v[RS_flags] = (float)fl;
+            v[RS_qw] = mo->q[0]; v[RS_qx] = mo->q[1]; v[RS_qy] = mo->q[2]; v[RS_qz] = mo->q[3];
+            v[RS_pitch] = mo->pitch; v[RS_roll] = mo->roll; v[RS_yaw] = mo->yaw;
+            v[RS_tilt_u] = to.u; v[RS_zone] = (float)to.zone; v[RS_detent] = to.detent;
+            v[RS_speed_cmd] = speed_cmd; v[RS_speed_now] = recorder_speed_now(); v[RS_pos] = recorder_position();
+            v[RS_loop_s] = recorder_loop_seconds(); v[RS_delay] = to.delay; v[RS_stutter] = to.stutter;
+            v[RS_joy_x] = in_jx; v[RS_joy_y] = in_jy; v[RS_joy_rx] = (float)in_raw_x; v[RS_joy_ry] = (float)in_raw_y;
+            v[RS_enc] = (float)(((enc_total + 8192) & 16383) - 8192);
+            v[RS_in_peak] = meter_in; v[RS_out_peak] = meter_out; v[RS_in_clips] = clip_hold > 0 ? 1.0f : 0.0f;
+            v[RS_cpu] = (float)audio_cpu_percent(); v[RS_heap_kb] = (float)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024);
+            v[RS_i2c_fail] = (float)(imu_fails() > 8191 ? 8191 : imu_fails());
+            v[RS_bias_x] = mo->bias[0]; v[RS_bias_y] = mo->bias[1]; v[RS_bias_z] = mo->bias[2];
+            v[RS_rate_hz] = (float)imu_rate_hz(); v[RS_menu_param] = (float)param;
+            rig_state(v, audio_frames());
+        }
+
         int s = recorder_state();
         if (s != last_state) {
+            static const char *SN[] = { "idle", "rec", "play" };
+            gest_emit("take.state", (float)s, 0, SN[s < 0 || s > 2 ? 0 : s]);
             if (s == REC_RECORDING) usb_midi_send_note(60, 100, true);
             else if (last_state == REC_RECORDING) usb_midi_send_note(60, 0, false);
             if (s == REC_PLAYING) usb_midi_send_note(62, 100, true);
@@ -625,12 +686,12 @@ void app_main(void)
         if (toast > 0) toast -= 10;
         if (result_ms > 0) result_ms -= 10;
 #if OLED_ENABLE
-        if (tick % 5 == 0 && oled_present()) {
+        if (tick % 5 == 0 && (oled_present() || rig_screen_on())) {   // no panel: drawn for the rig's mirror alone
             int shown = vol_ms > 0 && !menu ? P_VOL : param;   // the toast: Volume while the knob is on it
             char pv[24]; param_text(shown, pv, sizeof pv);
             ui_t u = {
                 .state = s, .mode = S.mode, .speed_now = recorder_speed_now(), .speed_cmd = speed_cmd, .spd_max = S.spd_max,
-                .pitch_ratio = pitch_ratio, .tilt_pitch = TILT_USE_ROLL ? roll : pitch, .tilt_roll = TILT_USE_ROLL ? pitch : roll,
+                .pitch_ratio = pitch_ratio, .tilt_pitch = TI(TU_TI_AXIS) ? roll : -pitch, .tilt_roll = TI(TU_TI_AXIS) ? -pitch : roll,
                 .has_imu = has_imu, .tilt_on = S.tilt, .frozen = frozen, .pos = recorder_position(), .rec_fill = recorder_record_fill(),
                 .loop_s = recorder_loop_seconds(), .max_s = recorder_max_seconds(), .meter_in = meter_in, .meter_out = meter_out,
                 .clip = clip_hold > 0, .cpu = audio_cpu_percent(), .menu = menu, .menu_edit = menu_edit, .param = param, .param_n = P_N,
@@ -641,9 +702,7 @@ void app_main(void)
                 .voice = vox_on() ? vox_name(S.voice) : NULL,
                 .peers = S.link ? flock_peers() : 0, .beat_flash = flock_beat_flash(), .closing = recorder_closing(),
             };
-#if HAS_JOY
-            u.has_joy = in.has_joy;
-#endif
+            u.has_joy = in_has_joy;
             u.fx_delay = fx_delay_active(); u.fx_stutter = fx_stutter_active();
             ui_draw(&u);
         }

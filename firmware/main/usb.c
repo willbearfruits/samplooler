@@ -37,20 +37,27 @@ static uint32_t midi_write(const uint8_t *m, uint32_t n, TickType_t wait)
     return w;
 }
 
-// ---- audio rings: single producer, single consumer, mono int16 ----
+// ---- audio rings: single producer, single consumer; to the host stereo (two int16 in one word), from it mono ----
 #define RING_N 4096                          // frames, 128 ms at 32 kHz
 typedef struct { int16_t buf[RING_N]; atomic_uint wr, rd; } ring_t;
-static ring_t to_host, from_host;
+static ring_t from_host;
+#define RING2_N 2048                         // frames, 64 ms: the same 8 KB of internal RAM as the mono ring was
+typedef struct { uint32_t buf[RING2_N]; atomic_uint wr, rd; } ring2_t;
+static ring2_t to_host;
+static inline unsigned ring2_count(const ring2_t *r) { return atomic_load(&r->wr) - atomic_load(&r->rd); }
+static inline void ring2_push(ring2_t *r, uint32_t v) { unsigned w = atomic_load(&r->wr); r->buf[w % RING2_N] = v; atomic_store(&r->wr, w + 1); }
+static inline uint32_t ring2_pop(ring2_t *r) { unsigned d = atomic_load(&r->rd); uint32_t v = r->buf[d % RING2_N]; atomic_store(&r->rd, d + 1); return v; }
 static volatile bool in_active;
 
 static inline unsigned ring_count(const ring_t *r) { return atomic_load(&r->wr) - atomic_load(&r->rd); }
 static inline void ring_push(ring_t *r, int16_t v) { unsigned w = atomic_load(&r->wr); r->buf[w % RING_N] = v; atomic_store(&r->wr, w + 1); }
 static inline int16_t ring_pop(ring_t *r) { unsigned d = atomic_load(&r->rd); int16_t v = r->buf[d % RING_N]; atomic_store(&r->rd, d + 1); return v; }
 
-void IRAM_ATTR usb_audio_out_push(const int16_t *mono, int n)
+void IRAM_ATTR usb_audio_out_push(const int16_t *l, const int16_t *r, int n)
 {
-    if (ring_count(&to_host) + n > RING_N) return;          // host not draining: drop the block
-    for (int i = 0; i < n; i++) ring_push(&to_host, mono[i]);
+    if (ring2_count(&to_host) + n > RING2_N) return;         // host not draining: drop the block
+    if (!r) r = l;
+    for (int i = 0; i < n; i++) ring2_push(&to_host, (uint16_t)l[i] | (uint32_t)(uint16_t)r[i] << 16);
 }
 
 int IRAM_ATTR usb_audio_in_pull(int16_t *mono, int n)
@@ -81,12 +88,12 @@ static esp_err_t mic_cb(uint8_t *buf, size_t len, size_t *bytes_read, void *ctx)
     (void)ctx;
     int16_t *d = (int16_t *)buf;
     size_t frames = len / 4;
-    unsigned have = ring_count(&to_host);
+    unsigned have = ring2_count(&to_host);
     // Drift guard: if the ring runs high, drop one frame; if low, repeat one.
-    if (have > RING_N * 3 / 4 && have > frames + 1) { ring_pop(&to_host); have--; }
+    if (have > RING2_N * 3 / 4 && have > frames + 1) { ring2_pop(&to_host); have--; }
     for (size_t i = 0; i < frames; i++) {
-        int16_t v = have ? (have--, ring_pop(&to_host)) : 0;
-        d[2 * i] = v; d[2 * i + 1] = v;
+        uint32_t v = have ? (have--, ring2_pop(&to_host)) : 0;
+        d[2 * i] = (int16_t)(v & 0xFFFF); d[2 * i + 1] = (int16_t)(v >> 16);
     }
     *bytes_read = frames * 4;
     return ESP_OK;
@@ -168,7 +175,7 @@ bool usb_midi_send_sysex(const uint8_t *m, int n)
 void usb_midi_poll(usb_midi_handler_t h)
 {
     static uint8_t st, d[2], nd;
-    static bool in_sysex; static uint8_t sx[48]; static int sxn;
+    static bool in_sysex; static uint8_t sx[128]; static int sxn;   // the rig's 'J' carries up to six samples (110 bytes)
     uint8_t buf[64];
     uint32_t n;
     while ((n = tud_midi_stream_read(buf, sizeof buf)) > 0) {

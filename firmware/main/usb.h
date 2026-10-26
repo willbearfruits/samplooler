@@ -19,6 +19,6 @@ void usb_midi_on_sysex(usb_sysex_handler_t h);   // F0 7D <cmd> <body> F7 other 
 bool usb_midi_send_sysex(const uint8_t *m, int n);   // a whole message or none (no log line lands inside it); UI task
 
 // Audio rings, audio task side. Mono frames; the host sees both channels.
-void usb_audio_out_push(const int16_t *mono, int n);   // what the host records
+void usb_audio_out_push(const int16_t *left, const int16_t *right, int n);   // what the host records (right NULL: left on both)
 int  usb_audio_in_pull(int16_t *mono, int n);          // what the host plays; returns frames delivered (zeros pad)
 bool usb_audio_in_active(void);

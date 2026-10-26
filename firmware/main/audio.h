@@ -17,6 +17,7 @@ float audio_in_peak(void);    // peak since the last call, 0..1+, of the signal 
 float audio_out_peak(void);
 int   audio_in_clips(void);   // samples that hit the rail since the last call
 enum { AUDIO_IN_MIC, AUDIO_IN_USB };
+void  audio_set_mic_tune(float hpf_hz, int slot, float trim_db, int usb_out);   // tune.h mic.* and usb.out (UI task)
 void  audio_set_monitor(bool on);  // the Monitor setting: hear the input (the voice) all the time, not only while recording
 void  audio_set_input(int src);   // AUDIO_IN_USB takes what the host plays into the device
 int   audio_input(void);

@@ -1,14 +1,15 @@
-// Adapted from the ESP32-S3 SuperMini kit's input.c (MIT).
+// Adapted from the ESP32-S3 SuperMini kit's input.c (MIT). The decisions moved to gesture.c (the tuning table).
 #include "pins.h"
 #if HAS_CONTROLS
 #include "input.h"
+#include "gesture.h"
+#include "tune.h"
+#include "rig.h"
 #include <string.h>
 #include <math.h>
 #include "driver/gpio.h"
 #include "driver/pulse_cnt.h"
-#if HAS_JOY
 #include "esp_adc/adc_oneshot.h"
-#endif
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -16,15 +17,13 @@
 
 static const char *TAG = "input";
 static pcnt_unit_handle_t pcnt;
-static int enc_acc;
-static bool was_pressed, long_fired;
-static int64_t t_press;
-#if HAS_JOY
-static bool has_joy;
-static adc_oneshot_unit_handle_t adc;
-static float jx0, jy0, jx_f, jy_f;
-static bool flick_armed[4] = { true, true, true, true };
+static int glitch_ns = -1;
 
+// The joystick: ADC1 comes up the first time joy.on is set (a board without one leaves GPIO 1 and 2 alone).
+static adc_oneshot_unit_handle_t adc;
+static bool adc_ready, has_joy;
+static float jx0 = 2048, jy0 = 2048;
+static int off_centre;
 #define CH_X ((adc_channel_t)(PIN_JOY_X - 1))   // ADC1 channel n is GPIO n+1 on the S3
 #define CH_Y ((adc_channel_t)(PIN_JOY_Y - 1))
 
@@ -34,16 +33,57 @@ static int adc_read(adc_channel_t ch)
     for (int i = 0; i < 4; i++) { int raw = 0; if (adc_oneshot_read(adc, ch, &raw) != ESP_OK) return -1; sum += raw; }
     return sum / 4;
 }
-#endif
+
+void input_joy_centre(void)
+{
+    if (!adc_ready) return;
+    int minx = 9999, maxx = 0, miny = 9999, maxy = 0; long sx = 0, sy = 0;
+    for (int i = 0; i < 128; i++) {
+        if (i % 8 == 7) vTaskDelay(1);
+        int x = adc_read(CH_X), y = adc_read(CH_Y);
+        if (x < minx) minx = x;
+        if (x > maxx) maxx = x;
+        if (y < miny) miny = y;
+        if (y > maxy) maxy = y;
+        sx += x; sy += y;
+    }
+    jx0 = sx / 128.0f; jy0 = sy / 128.0f;
+    has_joy = jx0 > 900 && jx0 < 3300 && jy0 > 900 && jy0 < 3300 && maxx - minx < 700 && maxy - miny < 700;
+    off_centre = 0;
+    ESP_LOGI(TAG, "joystick %s (centre %d,%d spread %d,%d)", has_joy ? "found" : "not found",
+             (int)jx0, (int)jy0, maxx - minx, maxy - miny);
+    gest_emit("joy.centre", has_joy ? 1.0f : 0.0f, 0, has_joy ? "found" : "not found");
+}
+
+static void joy_start(void)
+{
+    adc_oneshot_unit_init_cfg_t ac = { .unit_id = ADC_UNIT_1 };
+    if (adc_oneshot_new_unit(&ac, &adc) != ESP_OK) { ESP_LOGW(TAG, "no ADC1 for the joystick"); return; }
+    adc_oneshot_chan_cfg_t cc = { .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_DEFAULT };
+    adc_oneshot_config_channel(adc, CH_X, &cc);
+    adc_oneshot_config_channel(adc, CH_Y, &cc);
+    adc_ready = true;
+    input_joy_centre();
+}
+
+void input_tune(void)
+{
+    int ns = TI(TU_EN_GLITCH);
+    if (ns == glitch_ns || !pcnt) return;
+    pcnt_unit_stop(pcnt);
+    pcnt_unit_disable(pcnt);
+    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = (uint32_t)ns };
+    esp_err_t e = pcnt_unit_set_glitch_filter(pcnt, ns > 0 ? &gf : NULL);
+    pcnt_unit_enable(pcnt);
+    pcnt_unit_start(pcnt);
+    glitch_ns = ns;
+    ESP_LOGI(TAG, "encoder glitch filter %d ns%s", ns, e == ESP_OK ? "" : " (refused)");
+}
 
 void input_init(void)
 {
     gpio_config_t in = {
-#if HAS_JOY
-        .pin_bit_mask = (1ULL << PIN_ENC_SW) | (1ULL << PIN_JOY_SW) | (1ULL << PIN_ENC_A) | (1ULL << PIN_ENC_B),
-#else
         .pin_bit_mask = (1ULL << PIN_ENC_SW) | (1ULL << PIN_ENC_A) | (1ULL << PIN_ENC_B),
-#endif
         .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE,
     };
     ESP_ERROR_CHECK(gpio_config(&in));
@@ -55,8 +95,9 @@ void input_init(void)
 
     pcnt_unit_config_t uc = { .high_limit = 30000, .low_limit = -30000 };
     ESP_ERROR_CHECK(pcnt_new_unit(&uc, &pcnt));
-    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = 1000 };
-    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcnt, &gf));
+    glitch_ns = TI(TU_EN_GLITCH);
+    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = (uint32_t)glitch_ns };
+    if (glitch_ns > 0 && pcnt_unit_set_glitch_filter(pcnt, &gf) != ESP_OK) ESP_LOGW(TAG, "glitch filter %d ns refused", glitch_ns);
     pcnt_channel_handle_t ca, cb;
     pcnt_chan_config_t cca = { .edge_gpio_num = PIN_ENC_A, .level_gpio_num = PIN_ENC_B };
     pcnt_chan_config_t ccb = { .edge_gpio_num = PIN_ENC_B, .level_gpio_num = PIN_ENC_A };
@@ -70,48 +111,7 @@ void input_init(void)
     ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt));
     ESP_ERROR_CHECK(pcnt_unit_start(pcnt));
     ESP_LOGI(TAG, "encoder on %d/%d (PCNT), push on %d", PIN_ENC_A, PIN_ENC_B, PIN_ENC_SW);
-
-#if HAS_JOY
-    adc_oneshot_unit_init_cfg_t ac = { .unit_id = ADC_UNIT_1 };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&ac, &adc));
-    adc_oneshot_chan_cfg_t cc = { .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_DEFAULT };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc, CH_X, &cc));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc, CH_Y, &cc));
-
-    int minx = 9999, maxx = 0, miny = 9999, maxy = 0; long sx = 0, sy = 0;
-    for (int i = 0; i < 128; i++) {
-        if (i % 8 == 7) vTaskDelay(1);
-        int x = adc_read(CH_X), y = adc_read(CH_Y);
-        if (x < minx) minx = x;
-        if (x > maxx) maxx = x;
-        if (y < miny) miny = y;
-        if (y > maxy) maxy = y;
-        sx += x; sy += y;
-    }
-    jx0 = sx / 128.0f; jy0 = sy / 128.0f;
-    has_joy = jx0 > 900 && jx0 < 3300 && jy0 > 900 && jy0 < 3300 && maxx - minx < 700 && maxy - miny < 700;
-    ESP_LOGI(TAG, "joystick %s (centre %d,%d spread %d,%d)", has_joy ? "found" : "not found",
-             (int)jx0, (int)jy0, maxx - minx, maxy - miny);
-#endif
 }
-
-#if HAS_JOY
-static float axis(int raw, float centre)
-{
-    float v = raw > centre ? (raw - centre) / (4095.0f - centre) : (raw - centre) / centre;
-    float a = fabsf(v);
-    if (a < 0.12f) return 0;
-    v = (a - 0.12f) / 0.88f * (v < 0 ? -1 : 1);
-    return v < -1 ? -1 : (v > 1 ? 1 : v);
-}
-
-static void flick(float v, bool *neg, bool *pos, int idx)
-{
-    if (v > 0.7f && flick_armed[idx]) { *pos = true; flick_armed[idx] = false; }
-    else if (v < -0.7f && flick_armed[idx]) { *neg = true; flick_armed[idx] = false; }
-    else if (fabsf(v) < 0.3f) flick_armed[idx] = true;
-}
-#endif
 
 void input_poll(input_ev_t *ev)
 {
@@ -119,49 +119,34 @@ void input_poll(input_ev_t *ev)
     int cnt = 0;
     pcnt_unit_get_count(pcnt, &cnt);
     pcnt_unit_clear_count(pcnt);
-    enc_acc += cnt * ENC_DIR;
-    ev->enc = enc_acc / ENC_STEPS;
-    enc_acc -= ev->enc * ENC_STEPS;
+    rig_keys_t k;
+    rig_keys(&k, TI(TU_EN_STEPS), TI(TU_EN_DIR) ? 1 : -1);    // the rig's turns and presses, as if from the pins
 
     bool pressed = gpio_get_level(PIN_ENC_SW) == 0;
-    int64_t now = esp_timer_get_time();
-    if (pressed && !was_pressed) { t_press = now; long_fired = false; }
-    int held = pressed ? (int)((now - t_press) / 1000) : 0;
-    if (pressed && !long_fired && held >= 3000) { ev->longp = true; long_fired = true; }
-    if (!pressed && was_pressed && !long_fired) {
-        int ms = (int)((now - t_press) / 1000);
-        if (ms >= 40 && ms < 500) ev->tap = true;
-        else if (ms >= 500) ev->hold = true;
-    }
-    ev->pressed = pressed; ev->held_ms = held;
-    was_pressed = pressed;
+    if (k.sw >= 0) pressed = k.sw;
+    enc_out_t e;
+    gest_enc(cnt + k.counts, pressed, esp_timer_get_time(), &e);
+    ev->enc = e.enc; ev->tap = e.tap; ev->hold = e.hold; ev->longp = e.longp;
+    ev->pressed = e.pressed; ev->held_ms = e.held_ms;
 #if PIN_REC >= 0
     ev->rec = gpio_get_level(PIN_REC) == 0;
 #endif
+    if (k.rec >= 0) ev->rec = k.rec;
 
-#if HAS_JOY
-    static bool joy_was, joy_long_fired;
-    static int64_t t_joy;
-    bool joy = gpio_get_level(PIN_JOY_SW) == 0;
-    if (joy && !joy_was) { t_joy = now; joy_long_fired = false; }
-    if (joy && !joy_long_fired && now - t_joy >= 700000) { ev->joy_long = true; joy_long_fired = true; }
-    if (!joy && joy_was && !joy_long_fired && now - t_joy >= 30000) ev->joy_click = true;
-    joy_was = joy;
-
-    ev->has_joy = has_joy;
-    if (has_joy) {
-        float ax = axis(adc_read(CH_X), jx0), ay = axis(adc_read(CH_Y), jy0);
-        float x = ay, y = -ax;                      // the module sits a quarter turn clockwise in the kit case
-        static int off_centre;
-        if (fabsf(x) > 0.5f || fabsf(y) > 0.5f) { if (++off_centre > 800) { has_joy = false; ESP_LOGW(TAG, "joystick pinned off centre for 8 s, ignoring it"); } }
-        else off_centre = 0;
-        jx_f += 0.3f * (x - jx_f); jy_f += 0.3f * (y - jy_f);
-        ev->jx = jx_f; ev->jy = jy_f;
-        flick(jx_f, &ev->flick_l, &ev->flick_r, 0);
-        flick(jy_f, &ev->flick_d, &ev->flick_u, 1);
+    if (!TI(TU_JO_ON)) { ev->has_joy = false; return; }
+    if (!adc_ready) joy_start();
+    bool over = k.jx >= 0 && k.jy >= 0;
+    if (!adc_ready || (!has_joy && !over)) return;
+    int rx = over ? k.jx : adc_read(CH_X), ry = over ? k.jy : adc_read(CH_Y);
+    joy_out_t j;
+    gest_joy(rx, ry, over ? 2048.0f : jx0, over ? 2048.0f : jy0, &j);
+    if (!over) {
+        if (fabsf(j.jx) > 0.5f || fabsf(j.jy) > 0.5f) {
+            if (++off_centre > 800) { has_joy = false; ESP_LOGW(TAG, "joystick pinned off centre for 8 s, ignoring it"); gest_emit("joy.pinned", 0, 0, ""); }
+        } else off_centre = 0;
     }
-#else
-    ev->has_joy = false;
-#endif
+    ev->has_joy = true;
+    ev->jx = j.jx; ev->jy = j.jy; ev->raw_x = rx; ev->raw_y = ry;
+    ev->flick_l = j.flick_l; ev->flick_r = j.flick_r; ev->flick_u = j.flick_u; ev->flick_d = j.flick_d;
 }
 #endif

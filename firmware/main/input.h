@@ -1,19 +1,21 @@
-// The record button, the encoder (PCNT + push) and, with HAS_JOY, the kit's joystick (ADC1 + click).
-// BOOT is read by main.c. HAS_CONTROLS targets only.
+// The record button, the encoder (PCNT + push) and the joystick (ADC1, when joy.on): the pins only. What a press or a
+// turn means is gesture.c's, by the tuning table. The rig's keys (rig_keys) come in here as if from the pins.
+// HAS_CONTROLS targets only.
 #pragma once
 #include <stdbool.h>
 
 typedef struct {
     int   enc;                 // detents turned since last poll, signed
-    bool  tap, hold, longp;    // encoder push: released < 0.5 s; held 0.5 s; held 3 s (once)
+    bool  tap, hold, longp;    // encoder push: released before enc.hold; released after it; held enc.long (once)
     bool  pressed; int held_ms;
     bool  rec;                 // the record button is down (PIN_REC)
-    bool  joy_click;           // released before 0.7 s
-    bool  joy_long;            // held 0.7 s (fires once)
     bool  flick_l, flick_r, flick_u, flick_d;
-    float jx, jy;              // -1..1 with dead zone, 0 when no joystick
+    float jx, jy;              // -1..1 after gesture.c, 0 when no joystick
+    int   raw_x, raw_y;        // the joystick's ADC (0..4095), 0 when off
     bool  has_joy;
 } input_ev_t;
 
 void input_init(void);
 void input_poll(input_ev_t *ev);   // call every ~10 ms
+void input_tune(void);             // the tuning table changed (the encoder's glitch filter)
+void input_joy_centre(void);       // the joystick's rest position, now

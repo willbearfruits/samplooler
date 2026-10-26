@@ -26,6 +26,7 @@ void  recorder_process(const rec_sample_t *in, rec_sample_t *out, int n);   // a
 
 // From the UI task. Plain 32-bit stores; the audio task picks them up per block.
 void  recorder_set_record(bool held);
+void  recorder_set_slew_ms(float ms);       // the speed's glide (one-pole time constant), 50 ms by default
 void  recorder_set_speed(float s);          // head movement per sample: -LIMIT..+LIMIT, negative = backwards
 void  recorder_set_pitch(float ratio);      // GRAIN only: 0.25..4, 1 = as recorded
 void  recorder_set_mode(int mode);

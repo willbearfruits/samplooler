@@ -1,64 +1,111 @@
 #include "imu.h"
-#include <math.h>
 #include "esp_log.h"
 #include "esp_timer.h"
 
 static const char *TAG = "imu";
-static int fails, fails_total;
-static int64_t t_fail_log;
 static i2c_master_dev_handle_t dev;
+static i2c_master_bus_handle_t bus_h;
 static bool present;
-static float roll_f, pitch_f;
-static int   streak;                        // consecutive failed reads
-static int64_t t_next;                      // backed off: next read not before this
-#define BACKOFF_AFTER 10                    // 0.2 s of failures at 50 Hz
+static int  streak, fails_total, rate_hz = 500;
+static float acc_lsb = 16384.0f, gyro_lsb = 32.8f;
+static int64_t t_next, t_fail_log;           // backed off: the next read not before t_next
+#define BACKOFF_AFTER 10                     // 0.1 s of failures
 #define BACKOFF_US    500000
-#define I2C_MS        10                    // 7 bytes at 400 kHz take well under a millisecond
+#define I2C_MS        10
+
+#define R_SMPLRT_DIV  0x19
+#define R_CONFIG      0x1A
+#define R_GYRO_CFG    0x1B
+#define R_ACCEL_CFG   0x1C
+#define R_FIFO_EN     0x23
+#define R_INT_STATUS  0x3A
+#define R_USER_CTRL   0x6A
+#define R_PWR_MGMT_1  0x6B
+#define R_FIFO_COUNT  0x72
+#define R_FIFO_RW     0x74
+#define R_WHO_AM_I    0x75
+#define BPS           12                     // bytes a sample in the FIFO: accelerometer, then gyro
 
 static bool wr(uint8_t reg, uint8_t val) { uint8_t b[2] = { reg, val }; return i2c_master_transmit(dev, b, 2, I2C_MS) == ESP_OK; }
+static bool rd(uint8_t reg, uint8_t *b, int n) { return i2c_master_transmit_receive(dev, &reg, 1, b, n, I2C_MS) == ESP_OK; }
+
+static bool fifo_reset(void)
+{
+    return wr(R_FIFO_EN, 0) && wr(R_USER_CTRL, 0x04) && wr(R_USER_CTRL, 0x40) && wr(R_FIFO_EN, 0x78);
+}
 
 bool imu_init(i2c_master_bus_handle_t bus)
 {
+    bus_h = bus;
     if (i2c_master_probe(bus, 0x68, 20) != ESP_OK) { ESP_LOGW(TAG, "no MPU6050 at 0x68: playing forward at 1x"); return false; }
     i2c_device_config_t cfg = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = 0x68, .scl_speed_hz = 400000 };
     if (i2c_master_bus_add_device(bus, &cfg, &dev) != ESP_OK) return false;
-    uint8_t who = 0, reg = 0x75;
-    i2c_master_transmit_receive(dev, &reg, 1, &who, 1, I2C_MS);
-    present = wr(0x6B, 0x01) && wr(0x1C, 0x00) && wr(0x1B, 0x00) && wr(0x1A, 0x03);   // wake, 2 g, 250 dps, 44 Hz DLPF
+    uint8_t who = 0;
+    rd(R_WHO_AM_I, &who, 1);
+    present = wr(R_PWR_MGMT_1, 0x01);        // wake, on the X gyro's PLL
     ESP_LOGI(TAG, "MPU6050 who_am_i 0x%02X, %s", who, present ? "ready" : "init failed");
-    // A loose wire makes the driver print three error lines per failed read, 50 times a second.
-    // Keep the log usable: count the failures here and report them once every two seconds.
+    // A loose wire makes the driver print three error lines per failed read. Keep the log usable: count the
+    // failures here and report them once every two seconds.
     esp_log_level_set("i2c.master", ESP_LOG_NONE);
     return present;
 }
 
-bool imu_present(void) { return present; }
+bool  imu_present(void) { return present; }
+float imu_acc_lsb(void) { return acc_lsb; }
+float imu_gyro_lsb(void) { return gyro_lsb; }
+int   imu_rate_hz(void) { return rate_hz; }
+int   imu_fails(void) { return fails_total; }
 
-void imu_poll(float *roll_deg, float *pitch_deg)
+void imu_config(int ar, int gr, int dlpf, int rate)
 {
-    // A sensor that stops answering is read twice a second instead of fifty times, so its I2C timeouts
-    // do not slow the control loop; the last good angles are held meanwhile.
+    static const float ALSB[] = { 16384, 8192, 4096, 2048 }, GLSB[] = { 131, 65.5f, 32.8f, 16.4f };
+    static const int RATE[] = { 100, 250, 500, 1000 };
+    ar &= 3; gr &= 3; rate &= 3;
+    if (dlpf < 0 || dlpf > 6) dlpf = 3;
+    int internal = dlpf == 0 ? 8000 : 1000;  // the gyro runs at 8 kHz with the filter off
+    int div = internal / RATE[rate] - 1;
+    if (!present) return;
+    bool ok = wr(R_FIFO_EN, 0) && wr(R_CONFIG, (uint8_t)dlpf) && wr(R_SMPLRT_DIV, (uint8_t)div)
+           && wr(R_ACCEL_CFG, (uint8_t)(ar << 3)) && wr(R_GYRO_CFG, (uint8_t)(gr << 3)) && fifo_reset();
+    acc_lsb = ALSB[ar]; gyro_lsb = GLSB[gr]; rate_hz = RATE[rate];
+    ESP_LOGI(TAG, "%s: +-%d g, +-%d deg/s, filter code %d, %d Hz", ok ? "set" : "NOT set", 2 << ar, 250 << gr, dlpf, rate_hz);
+}
+
+static void failed(int64_t now)
+{
+    fails_total++;
+    if (++streak >= BACKOFF_AFTER) {
+        t_next = now + BACKOFF_US;
+        if (streak == BACKOFF_AFTER) i2c_master_bus_reset(bus_h);     // a device holding SDA: nine clocks and a stop
+    }
+    if (now - t_fail_log > 2000000) {
+        t_fail_log = now;
+        ESP_LOGW(TAG, "%d failed reads so far: check SDA/SCL/power to the MPU6050", fails_total);
+    }
+}
+
+// The FIFO holds 1024 bytes: 85 samples, 85 ms at 1 kHz. Read it every tick; an overflow leaves it misaligned
+// (1024 is not a multiple of 12), so it is reset and the samples in it are lost (the caller is told).
+int imu_read(int16_t (*raw)[6], int max, bool *overflow)
+{
+    *overflow = false;
     int64_t now = esp_timer_get_time();
-    if (present && now >= t_next) {
-        uint8_t reg = 0x3B, b[6];
-        if (i2c_master_transmit_receive(dev, &reg, 1, b, 6, I2C_MS) == ESP_OK) {
-            streak = 0;
-            float ax = (int16_t)(b[0] << 8 | b[1]), ay = (int16_t)(b[2] << 8 | b[3]), az = (int16_t)(b[4] << 8 | b[5]);
-            // roll as the sideways lean of the Y axis, so nose-down alone leaves it near zero
-            float roll  = atan2f(ay, sqrtf(ax * ax + az * az)) * 57.2958f;
-            float pitch = atan2f(-ax, sqrtf(ay * ay + az * az)) * 57.2958f;
-            roll_f  += 0.25f * (roll - roll_f);
-            pitch_f += 0.25f * (pitch - pitch_f);
-        } else {
-            fails++; fails_total++;
-            if (++streak >= BACKOFF_AFTER) t_next = now + BACKOFF_US;
-        }
+    if (!present || now < t_next) return 0;
+    uint8_t c[2], st = 0;
+    if (!rd(R_INT_STATUS, &st, 1) || !rd(R_FIFO_COUNT, c, 2)) { failed(now); return 0; }
+    int count = c[0] << 8 | c[1];
+    if ((st & 0x10) || count >= 1020) { fifo_reset(); *overflow = true; return 0; }
+    int n = count / BPS, got = 0;
+    if (n > max) n = max;
+    static uint8_t b[240];
+    while (got < n) {
+        int k = n - got;
+        if (k > 240 / BPS) k = 240 / BPS;
+        if (!rd(R_FIFO_RW, b, k * BPS)) { failed(now); fifo_reset(); return got; }
+        for (int i = 0; i < k; i++)
+            for (int j = 0; j < 6; j++) raw[got + i][j] = (int16_t)(b[BPS * i + 2 * j] << 8 | b[BPS * i + 2 * j + 1]);
+        got += k;
     }
-    if (present) {
-        if (fails && now - t_fail_log > 2000000) {
-            ESP_LOGW(TAG, "%d of the last %d reads failed (%d total): check SDA/SCL/power to the MPU6050", fails, 100, fails_total);
-            fails = 0; t_fail_log = now;
-        } else if (!fails && now - t_fail_log > 2000000) t_fail_log = now;
-    }
-    *roll_deg = roll_f; *pitch_deg = pitch_f;
+    streak = 0;
+    return got;
 }

@@ -20,7 +20,7 @@
 
 #define CFG_TUD_MIDI              1
 #define CFG_TUD_MIDI_RX_BUFSIZE   256
-#define CFG_TUD_MIDI_TX_BUFSIZE   1024   // room for log lines as SysEx
+#define CFG_TUD_MIDI_TX_BUFSIZE   4096   // log lines and the rig's streams (a screen page is 154 bytes)
 #define CFG_TUD_MIDI_EP_BUFSIZE   64
 
 #define CFG_TUD_MSC 0
