@@ -38,7 +38,7 @@ def _item(rig: Rig, name: str) -> dict:
 
 
 # ---------------------------------------------------------------- the connection
-@command('status', examples=[{}])
+@command('status', group='board', examples=[{}])
 def status(rig: Rig) -> dict:
     """Where the rig stands: the source (board, twin or none), the board, stream rates and drops, recording, OSC, and
     the latest state in short."""
@@ -49,13 +49,13 @@ def status(rig: Rig) -> dict:
     return st
 
 
-@command('boards')
+@command('boards', group='board')
 def boards(rig: Rig) -> list:
     """The Samplooler boards on USB (a TWOFOLD is never listed)."""
     return portmod.boards()
 
 
-@command('connect', examples=[{'source': 'auto'}, {'source': 'twin', 'scene': 'demo'}])
+@command('connect', group='board', examples=[{'source': 'auto'}, {'source': 'twin', 'scene': 'demo'}])
 def connect(rig: Rig, source: Literal['auto', 'board', 'twin'] = 'auto', serial: str = '',
             scene: Literal['still', 'demo'] = 'still') -> dict:
     """Open the Samplooler on USB (found by its MIDI port's name, never a TWOFOLD), or start the twin when there is
@@ -69,7 +69,7 @@ def connect(rig: Rig, source: Literal['auto', 'board', 'twin'] = 'auto', serial:
     return rig.connect(source, serial, scene)
 
 
-@command('disconnect')
+@command('disconnect', group='board')
 def disconnect(rig: Rig) -> dict:
     """Let go of the board (its streams stop) or stop the twin."""
     rig.disconnect()
@@ -77,7 +77,7 @@ def disconnect(rig: Rig) -> dict:
     return {'source': 'none'}
 
 
-@command('stream')
+@command('stream', group='board')
 def stream(rig: Rig, motion: bool | None = None, state: bool | None = None, screen: bool | None = None,
            events: bool | None = None) -> dict:
     """Which of the board's streams run (all four by default). Off saves USB bandwidth.
@@ -276,7 +276,7 @@ def _setting_value(rig: Rig, name: str, default: float) -> float:
 
 
 # ---------------------------------------------------------------- hands from the PC
-@command('key', examples=[{'enc': 3}, {'tap': True}, {'hold_ms': 800}, {'rec': True}])
+@command('key', group='hands', examples=[{'enc': 3}, {'tap': True}, {'hold_ms': 800}, {'rec': True}])
 def key(rig: Rig, enc: int = 0, enc_down: bool | None = None, rec: bool | None = None, tap: bool = False,
         hold_ms: int = 0, press_ms: int = 0) -> dict:
     """Turn and press the encoder, or press REC, from the PC. The board's gesture code sees them as if from the pins.
@@ -306,7 +306,7 @@ def key(rig: Rig, enc: int = 0, enc_down: bool | None = None, rec: bool | None =
     return {'sent': True}
 
 
-@command('joy.override', group='joy')
+@command('joy.override', group='hands')
 def joy_override(rig: Rig, x: int | None = None, y: int | None = None) -> dict:
     """Stand in for the joystick's ADC (0..4095 each, 2048 is the centre); no arguments ends it. joy.on must be set.
 
@@ -1068,7 +1068,7 @@ def motion_snapshot(rig: Rig, secs: float = 1.0) -> dict:
                 'ref_quat': [round(float(x), 5) for x in rig.ref.q]}
 
 
-@command('wait', slow=True)
+@command('wait', group='util', slow=True)
 def wait(rig: Rig, secs: float = 1.0) -> dict:
     """Do nothing for a while (between steps of a batch).
 
@@ -1079,7 +1079,7 @@ def wait(rig: Rig, secs: float = 1.0) -> dict:
     return {'waited': secs}
 
 
-@command('help')
+@command('help', group='util')
 def help_(rig: Rig, topic: str = '') -> dict:
     """The commands: with no topic, every name and its one-line summary by group; with a command's name, its arguments
     as JSON Schema and examples; with a group's name, its commands.
