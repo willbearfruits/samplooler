@@ -2,7 +2,8 @@
 have a hand with known answers. A pose over time (pitch, roll, yaw, shake) becomes the chip's raw samples: gravity and
 the body rates in device axes, turned into chip axes by the mounting (an axis map, tune.h motion.ax_*), then the
 chip's offset, bias and noise, then LSB. Angles follow rig/PROTOCOL.md: pitch + with the nose (the screen's top edge)
-down, roll + with the right edge down.
+down, roll + with the right edge down. The pose's up vector is the twin's, (-sin r cos p, sin p, cos p cos r): with
+pitch and roll both set, motion.c's ACC formula reads the pitch exactly and the roll a little short of r.
 
     raw = gesture("tilt", 4, pitch=30)                  # int16 (N, 6): ax ay az gx gy gz, chip axes, LSB
     raw, truth = gesture("steps", 18, steps=[(0, 0, 3), (15, 0, 3)], with_truth=True)
@@ -270,7 +271,7 @@ def gesture(kind: str, secs: float, rate_hz: float = 500, acc_range: int = 0, gy
     roll (angle, start, back); axes (hold, poses); free (pitch_amp, roll_amp, yaw_amp)."""
     n = int(round(secs * rate_hz))
     dt = 1.0 / float(rate_hz)
-    t = np.arange(n) * dt
+    t = np.arange(n) / float(rate_hz)
     fn, segs = _pose_fn(kind, float(secs), np.random.default_rng([seed, 0]), params)
     p0, r0, y0, sh = (np.asarray(x, np.float64) for x in fn(t))
     p1, r1, y1, _ = (np.asarray(x, np.float64) for x in fn(t + dt))
