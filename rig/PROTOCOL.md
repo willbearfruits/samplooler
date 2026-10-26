@@ -22,7 +22,7 @@ Existing messages, unchanged:
 
 | msg | body (ASCII unless said) | meaning |
 |---|---|---|
-| `G` | `m1 q1 o1 e1 r500` (any subset) | streams on/off: motion, state, screen, events; `r` = motion rate in Hz (100/250/500/1000). Streams stop 3 s after the last `G` (send one every second as a keepalive) |
+| `G` | `m1 q1 o1 e1` (any subset; empty = keepalive) | streams on/off: motion, state, screen, events. The motion rate is the tuning value `imu.rate`. Streams and key overrides stop 3 s after the last `G` or `K` (send `G` every second as a keepalive) |
 | `T` | `l` | list the tuning table: one `t` per entry, then `t end=N` |
 | `T` | `g12` | get value 12 → `t i=12 v=…` |
 | `T` | `s12=6.5` | set value 12 (clamped, applied at once) → `t i=12 v=…` |
@@ -75,6 +75,21 @@ so 18 bytes a sample. The board treats injected samples exactly like FIFO sample
 - Only the changed pages are sent.
 
 ---
+
+## Frames (axes)
+
+- **Chip axes:** the MPU-6050's own. Only `r`, `J` and the session's `motion.take` use them.
+- **Device axes:** the core's screen axes.
+  - x points to the screen's right edge, y towards the screen's bottom edge, z out of the screen.
+  - Flat on a table with the screen up, acc = (0, 0, +1 g).
+  - The tuning values `motion.ax_*` / `motion.sign_*` map chip axes to device axes.
+  - Every `motion` push, plot and analysis uses device axes.
+- **The nose** is the screen's top edge (-y). "Nose down" means the top edge goes down.
+  - `pitch` is positive with the nose down; `roll` is positive with the right edge down.
+  - Tilt nose down plays forward faster, nose up plays backwards (with today's sign).
+- **World:** z up. `quat` and `ref_quat` rotate device-axis vectors into the world (q · v · q*). Flat,
+  screen up and yaw 0 is the identity.
+- **Yaw** has no absolute reference (no magnetometer). It drifts, and `motion.yaw_reset` zeroes it.
 
 ## 2. Daemon ↔ clients (unix socket, JSON lines)
 
@@ -137,12 +152,15 @@ Socket: `$XDG_RUNTIME_DIR/slrig/daemon.sock` (0600). One JSON object per line, U
 - `kind` is one of "float", "int", "enum", "bool" or "action".
 - An enum's `labels` name each value from `min`.
 
-**Setting item** (the board's own settings, from `D`):
+**Setting item** (the board's own settings, from `D`; they are stepped, never set to a number):
 
 ```json
-{"i": 3, "tag": "tilt", "name": "Tilt", "group": "TILT", "kind": "enum", "min": 0, "max": 1, "step": 1,
- "value": 1, "text": "ON", "labels": ["OFF", "ON"], "help": ""}
+{"i": 3, "tag": "p03", "name": "Tilt", "group": "TILT", "kind": "step", "text": "ON", "help": "Off: it plays forward at 1x, whatever the angle."}
 ```
+
+- `kind` is "step" (`settings.step` with `delta` +1 or -1) or "act" (an action such as Save: `settings.step` with
+  `delta` 1 runs it, and the item may carry `confirm`, text to show before running it).
+- The groups come in this order: PLAY, TILT, SOUND, VOICE, SLOTS, LINK, SETTINGS.
 
 ### Commands
 
@@ -168,4 +186,6 @@ These are the registry's commands. `help` lists them with their arguments. This 
 | `view.shot` | `width`, `height` | an offscreen render of the viewer (slrig-view --shot) as a PNG path |
 | `plot` | `session`, `fields`, `secs` | a PNG plot |
 | `osc.config` | `out_host`, `out_port`, `in_port`, `on` | |
+| `curve` | `n` (points, default 121) | the tilt → speed curve from the firmware's own `gesture.c` (built on the PC) with the current tuning and settings: `{"tilt": {"angle": [...], "speed": [...], "dead": d, "full": f, "detents": [...]}, "roll": {"angle": [...], "delay": [...], "stutter": [...]}}`. The viewer draws it and asks again after any `tune` or `settings` push |
+| `gestures` | | every gesture the board knows: `[{"name": "enc.tap", "group": "enc", "rule": "released after 40..500 ms", "tune": ["enc.tap_min", "enc.tap_max"], "count": 3, "last_t": 12.3}]` |
 | `log.tail` | `n` | |

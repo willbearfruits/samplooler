@@ -36,3 +36,7 @@ tools/soak/soak
 _site/
 # an old local copy of the merged image (the page now uses the library's parts)
 site/firmware/
+rig/twin/build/
+rig/view/build/
+rig/.venv/
+rig/**/__pycache__/
