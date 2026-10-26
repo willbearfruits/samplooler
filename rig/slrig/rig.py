@@ -23,7 +23,7 @@ FLAG_BITS = {'frozen': 1, 'menu': 2, 'injected': 4, 'rec_down': 8, 'enc_down': 1
 DEFAULT_FIELDS = ['state', 'mode', 'flags', 'qw', 'qx', 'qy', 'qz', 'pitch', 'roll', 'yaw', 'tilt_u', 'zone', 'detent',
                   'speed_cmd', 'speed_now', 'pos', 'loop_s', 'delay', 'stutter', 'joy_x', 'joy_y', 'joy_rx', 'joy_ry',
                   'enc', 'in_peak', 'out_peak', 'in_clips', 'cpu', 'heap_kb', 'i2c_fail', 'bias_x', 'bias_y', 'bias_z',
-                  'rate_hz', 'menu_param']
+                  'rate_hz', 'menu_param', 'loop_ms', 'wire_drops']
 RING = 60 * 1000                             # 60 s of motion at 1 kHz
 
 

@@ -11,7 +11,8 @@
     X(pitch, 45) X(roll, 45) X(yaw, 45) X(tilt_u, 2000) X(zone, 1) X(detent, 1000) X(speed_cmd, 1000) X(speed_now, 1000) \
     X(pos, 8191) X(loop_s, 400) X(delay, 8191) X(stutter, 8191) X(joy_x, 8191) X(joy_y, 8191) X(joy_rx, 2) X(joy_ry, 2) \
     X(enc, 1) X(in_peak, 8191) X(out_peak, 8191) X(in_clips, 1) X(cpu, 1) X(heap_kb, 1) X(i2c_fail, 1) \
-    X(bias_x, 400) X(bias_y, 400) X(bias_z, 400) X(rate_hz, 1) X(menu_param, 1)
+    X(bias_x, 400) X(bias_y, 400) X(bias_z, 400) X(rate_hz, 1) X(menu_param, 1) \
+    X(loop_ms, 10) X(wire_drops, 1)
 #define RIG_SID(n, s) RS_##n,
 enum { RIG_STATE(RIG_SID) RS_N };
 #undef RIG_SID

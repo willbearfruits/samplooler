@@ -499,8 +499,10 @@ void app_main(void)
     // a slot job or a driver call resets the device instead of leaving it playing with dead controls.
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
 
+    int64_t loop_us = 0;                                  // the last pass's work, for the rig (I2C, the screen, the streams)
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(10));
+        int64_t t_pass = esp_timer_get_time();
         tick++;
         esp_task_wdt_reset();
         if (tick == 1000) diag_mark_alive();                      // 10 s up: this boot counts as a good one
@@ -653,6 +655,7 @@ void app_main(void)
             v[RS_i2c_fail] = (float)(imu_fails() > 8191 ? 8191 : imu_fails());
             v[RS_bias_x] = mo->bias[0]; v[RS_bias_y] = mo->bias[1]; v[RS_bias_z] = mo->bias[2];
             v[RS_rate_hz] = (float)imu_rate_hz(); v[RS_menu_param] = (float)param;
+            v[RS_loop_ms] = (float)loop_us / 1000.0f; v[RS_wire_drops] = (float)(rig_drops() > 8191 ? 8191 : rig_drops());
             rig_state(v, audio_frames());
         }
 
@@ -718,5 +721,6 @@ void app_main(void)
             last_stats = a;
         }
         if (tick % 6000 == 0) diag_log_status();                // once a minute, for the long soak logs
+        loop_us = esp_timer_get_time() - t_pass;
     }
 }

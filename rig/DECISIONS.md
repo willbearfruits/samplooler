@@ -48,7 +48,7 @@ lowercase answers) do not collide with `R`, `S`, `L`, `M`, `I`, `D`, `P`, `V`.
 
 ## D5. The twin runs the firmware's own C
 
-The rig never models the firmware in Python. Replays and A/B comparisons run the real `tilt.c`.
+The rig never models the firmware in Python. Replays and A/B comparisons run the real `motion.c` and `gesture.c`.
 
 ## D6. Today's feel stays the default
 

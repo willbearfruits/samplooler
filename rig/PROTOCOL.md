@@ -140,7 +140,9 @@ Socket: `$XDG_RUNTIME_DIR/slrig/daemon.sock` (0600). One JSON object per line, U
   `recording`, `playing`;
 - `in_peak`, `out_peak` (0..1), `in_clips`;
 - `cpu` (%), `heap_kb`, `i2c_fail`, `bias` [x,y,z] (°/s, learned), `rest` (bool, the board thinks it is
-  still).
+  still);
+- `loop_ms` (the last pass of the board's 10 ms UI loop: I2C, the screen, the streams), `wire_drops` (the rig's
+  messages that did not fit on USB, since boot).
 
 **Tune item:**
 

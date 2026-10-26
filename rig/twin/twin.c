@@ -475,7 +475,7 @@ int main(int argc, char **argv)
             v[RS_enc] = (float)(((enc_total + 8192) & 16383) - 8192);
             v[RS_in_peak] = meter_in; v[RS_out_peak] = meter_out; v[RS_cpu] = 0; v[RS_heap_kb] = 0;
             v[RS_bias_x] = mo->bias[0]; v[RS_bias_y] = mo->bias[1]; v[RS_bias_z] = mo->bias[2];
-            v[RS_rate_hz] = (float)rate; v[RS_menu_param] = (float)param;
+            v[RS_rate_hz] = (float)rate; v[RS_menu_param] = (float)param; v[RS_wire_drops] = (float)rig_drops();
             rig_state(v, (uint32_t)nframe);
         }
         if (tick % 5 == 0) {
