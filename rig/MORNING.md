@@ -8,7 +8,8 @@ What to do when a Samplooler (rev C) is on the desk. Each step says what it find
 slrig run boards            # the Samplooler's MIDI port and serial (a TWOFOLD is never listed)
 ```
 
-It runs HUFF now, so it shows up under that name and the rig does not take it.
+Both boards run AIRDWELLER 0.2 now, so they show up under that name and the rig does not take them. Use 727600D0:
+7275FBD4 has a stuck REC button and a USB link that fails mid-flash.
 
 ## 2. Flash the rig firmware (only when you say so)
 
