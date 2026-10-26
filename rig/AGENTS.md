@@ -19,6 +19,16 @@ Listen to the board over USB for a while and measure: levels, noise floor, click
 | `secs` | number | 3.0 | how long. |
 | `tone_hz` | number | 0.0 | the frequency of the tone recorded as the take (0: no speed measurement). |
 
+### `audio.speed_check` (slow)
+
+The whole chain measured, on a board: a tone goes in over USB as the take, the rig tilts the board (injected motion) to angles the curve says give these speeds, and the board's own USB output says what speed it really played. Needs Mode TAPE; sets Input to USB for the take and back afterwards.
+
+| argument | type | default | what |
+|---|---|---|---|
+| `tone_hz` | number | 1000.0 | the tone recorded as the take. |
+| `speeds` | string | '0.5,1,1.5,-1' | the speeds to check, comma separated (negative: backwards). |
+| `hold` | number | 2.0 | seconds at each speed. |
+
 ## board
 
 ### `boards`

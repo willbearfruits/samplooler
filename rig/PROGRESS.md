@@ -15,6 +15,14 @@
   - On the twin: motion at 502 and 1003 Hz, state 50 Hz, no drops.
   - The keys fire the firmware's gestures, and a recorded session replays through other tunings.
 
+**The firmware's own checks, after the changes:**
+
+- `tools/uisim`: every screen pixel-identical to uisim built from the base commit (86e19db).
+- `tools/flocksim`: 31 checks, 0 failed.
+- `tools/soak` 0.25 h: 450 000 blocks, 166 takes, worst peak 0.92, drift 2.5 frames, 0 failures.
+- `audio.speed_check` (board only): a tone in over USB as the take, injected tilts, the real speed from the
+  board's own output.
+
 **Running:**
 
 - The viewer (C++, a helper agent).

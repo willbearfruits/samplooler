@@ -1094,3 +1094,106 @@ def help_(rig: Rig, topic: str = '') -> dict:
         if not topic or c.group == topic:
             groups.setdefault(c.group, []).append({'name': c.name, 'summary': c.summary.split('. ')[0]})
     return groups
+
+
+# ---------------------------------------------------------------- the whole chain, measured: tilt in, speed out
+def _tone_wav(path: Path, hz: float, secs: float, sr: int = 48000) -> Path:
+    import wave
+    t = np.arange(int(secs * sr)) / sr
+    x = (0.5 * np.sin(2 * np.pi * hz * t) * 32767).astype(np.int16)
+    with wave.open(str(path), 'wb') as w:
+        w.setnchannels(2); w.setsampwidth(2); w.setframerate(sr)
+        w.writeframes(np.column_stack([x, x]).tobytes())
+    return path
+
+
+def _angle_for_speed(c: dict, want: float) -> float | None:
+    """The tilt (deg) at which the firmware's curve gives this speed (the curve's own points, interpolated)."""
+    a, s = np.array(c['tilt']['angle']), np.array(c['tilt']['speed'])
+    side = a > 0 if want > 0 else a < 0
+    a, s = a[side], s[side]
+    order = np.argsort(np.abs(a))
+    a, s = a[order], np.abs(s[order])
+    if not (s.min() <= abs(want) <= s.max()):
+        return None
+    k = int(np.argmax(s >= abs(want)))
+    if k == 0:
+        return float(a[0])
+    f = (abs(want) - s[k - 1]) / max(1e-9, s[k] - s[k - 1])
+    return float(a[k - 1] + f * (a[k] - a[k - 1]))
+
+
+@command('audio.speed_check', group='audio', slow=True)
+def audio_speed_check(rig: Rig, tone_hz: float = 1000.0, speeds: str = '0.5,1,1.5,-1', hold: float = 2.0) -> dict:
+    """The whole chain measured, on a board: a tone goes in over USB as the take, the rig tilts the board (injected
+    motion) to angles the curve says give these speeds, and the board's own USB output says what speed it really
+    played. Needs Mode TAPE; sets Input to USB for the take and back afterwards.
+
+    Args:
+        tone_hz: the tone recorded as the take.
+        speeds: the speeds to check, comma separated (negative: backwards).
+        hold: seconds at each speed.
+    """
+    from . import audio_analysis as A
+    from . import synth
+    _need_port(rig)
+    if rig.source != 'board':
+        raise RigError('audio.board', 'this needs a board: the twin has no USB sound card', 'connect source=board')
+    nodes = audio_devices(rig)
+    sink = next((n for n in nodes if n['class'] == 'Audio/Sink'), None)
+    src = next((n for n in nodes if n['class'] == 'Audio/Source'), None)
+    if not sink or not src:
+        raise RigError('audio.none', "the board's USB sound card is not in PipeWire", 'audio.devices')
+    mode = next((s for s in rig.settings.values() if s['name'] == 'Mode'), None)
+    if mode and mode['text'] != 'TAPE':
+        raise RigError('audio.mode', f"Mode is {mode['text']}: the pitch only follows the speed in TAPE", 'settings.step the Mode')
+    inp = next((s for s in rig.settings.values() if s['name'] == 'Input'), None)
+    if not inp:
+        raise RigError('audio.input', 'no Input setting on this board', '')
+    was = inp['text']
+    for _ in range(4):
+        if inp['text'].startswith('USB'):
+            break
+        settings_step(rig, inp['i'], 1)
+    rate, ar, gr = _imu_now(rig)
+    c = curve(rig, 361)
+    flat = synth.gesture('still', 4.0, rate_hz=rate, acc_range=ar, gyro_range=gr)
+    _inject(rig, flat, rate, 'speed check: flat', False)      # flat while the take records: Speed min, no effects
+    tone = _tone_wav(rig.run_dir / 'tone.wav', tone_hz, 4.0)
+    play = subprocess.Popen(['pw-play', '--target', sink['name'], str(tone)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(0.6)
+    rig._send(wire.key_rec(True)); time.sleep(1.5); rig._send(wire.key_rec(False))
+    play.wait(10)
+    rows = []
+    try:
+        for sp in [float(x) for x in speeds.split(',') if x.strip()]:
+            ang = _angle_for_speed(c, sp)
+            if ang is None:
+                rows.append({'want': sp, 'note': 'outside the curve (Speed min/max)'}); continue
+            raw = synth.gesture('tilt', hold + 1.0, rate_hz=rate, acc_range=ar, gyro_range=gr, pitch=ang)
+            _inject(rig, raw, rate, f'speed check {sp:g}x', False)
+            time.sleep(0.7)                                    # the tilt settles, the tape glides
+            wav = rig.run_dir / f'speed-{sp:g}.wav'
+            rec = subprocess.Popen(['pw-record', '--target', src['name'], '--rate', '32000', '--channels', '2',
+                                    '--format', 's16', str(wav)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            states = []
+            end = time.monotonic() + hold - 0.4
+            while time.monotonic() < end:
+                states.append((rig.state.get('speed_cmd', 0), rig.state.get('speed_now', 0)))
+                time.sleep(0.05)
+            rec.terminate(); rec.wait(3)
+            x, sr = A.read_wav(str(wav))
+            m = A.speed_from_tone(x[:, 0] if x.ndim == 2 else x, sr, tone_hz)
+            got = m.get('median') if isinstance(m, dict) else None
+            cmd_m = float(np.median([s[0] for s in states])) if states else None
+            now_m = float(np.median([s[1] for s in states])) if states else None
+            rows.append({'want': sp, 'angle': round(ang, 2), 'speed_cmd': cmd_m, 'speed_now': now_m,
+                         'measured': got, 'error_pct': round(100 * (got - abs(sp)) / abs(sp), 2) if got else None,
+                         'detail': m})
+    finally:
+        inject_stop(rig)
+        for _ in range(4):
+            if inp['text'] == was:
+                break
+            settings_step(rig, inp['i'], 1)
+    return {'tone_hz': tone_hz, 'rows': rows, 'input_restored': inp['text'] == was}
