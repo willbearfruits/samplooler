@@ -458,7 +458,10 @@ int main(int argc, char **argv)
             }
             nframe += 64;
         }
-        if (fw) fflush(fw);                                   // the daemon reads the growing file (audio.measure)
+        if (fw) {                                             // the daemon reads the growing file (audio.measure)
+            fflush(fw);
+            if (wav_n >= 120ull * 32000) { if (ftruncate(fileno(fw), 44) == 0) fseek(fw, 44, SEEK_SET); wav_n = 0; }   // 2 min at most: it lives in RAM
+        }
         meter_in = ipk > meter_in ? ipk : meter_in * 0.9f;
         meter_out = opk > meter_out ? opk : meter_out * 0.9f;
         if (toast > 0) toast -= 10;
