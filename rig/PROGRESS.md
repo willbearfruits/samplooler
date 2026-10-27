@@ -1,41 +1,86 @@
 # Progress
 
-## 2026-10-27 01:45
+## 2026-10-27 02:20: the rig is built, tested on the twin, installed
 
-**Done and checked:**
+Everything runs with no board: the twin is the firmware's own code on the PC. Nothing has run on a board yet,
+because only the TWOFOLD was plugged in.
 
-- **Firmware** (`firmware/main`):
-  - `tune.c`, `motion.c`, `gesture.c`, `rig.c`, the gyro through the FIFO, `input.c` on `gesture.c`;
-  - the mic's high-pass, slot and trim, and USB stereo (the mix, plus the raw input);
-  - built with `-Werror`: 800 KB, DIRAM 197.9 of 341.8 KB static.
-- **v1 check** (`twin/build.sh`): 4.8 M comparisons, 0 differences.
-- **Twin:** streams every message. `--calc` gives the curve and replays.
-- **Daemon** (`slrig`): 45 commands, OSC, sessions, MCP (7 tools, images).
-  - `tests/test_wire.py` and `tests/test_daemon.py`: 14 pass in 7 s.
-  - On the twin: motion at 502 and 1003 Hz, state 50 Hz, no drops.
-  - The keys fire the firmware's gestures, and a recorded session replays through other tunings.
+### Done and checked
 
-**The firmware's own checks, after the changes:**
+**Firmware** (`firmware/main`, branch `rig`). It builds with `-Werror`: 800 KB, DIRAM 197.9 of 341.8 KB static.
 
-- `tools/uisim`: every screen pixel-identical to uisim built from the base commit (86e19db).
-- `tools/flocksim`: 31 checks, 0 failed.
-- `tools/soak` 0.25 h: 450 000 blocks, 166 takes, worst peak 0.92, drift 2.5 frames, 0 failures.
-- `audio.speed_check` (board only): a tone in over USB as the take, injected tilts, the real speed from the
-  board's own output.
+- **Reading the sensors:**
+  - The gyro is read through the FIFO at 100 to 1000 Hz. Before, the firmware read the accelerometer only.
+  - `input.c` reads the pins. The decisions moved to `gesture.c`.
+  - The mic: high-pass, slot and trim. USB can send the raw input on the right channel.
+- **The tuning table** (`tune.c`): 68 live values, kept in NVS (`tune`). The defaults are v1.
+- **Motion and gestures:**
+  - `motion.c`: ACC (v1), COMP and MAHONY, gyro bias learned at rest.
+  - `gesture.c`: every decision, each one reported as an event.
+- **The rig's line** (`rig.c`):
+  - streams out: raw motion, state, screen and events;
+  - in: the tuning table both ways, injected motion and keys.
+  - The state also carries the UI loop's time and the rig's dropped messages, for the first board run.
 
-**Running:**
+**Checks on the firmware:**
 
-- The viewer (C++, a helper agent).
-- Analysis, guided tests, synthetic gestures and plots (a helper agent).
+- v1 check: 4.8 M comparisons with copies of the old code, 0 differences (the angles equal to the bit).
+- `tools/uisim`: every screen pixel-identical to the base commit.
+- `tools/flocksim`: 31/31.
+- `tools/soak` 0.25 h: 0 failures.
 
-**Not possible tonight:**
+**Twin** (`rig/twin`): the firmware's C on the PC, behind the same SysEx. `--calc` gives the curve and A/B
+replays.
 
-- Anything on a board. Only the TWOFOLD is plugged in.
-- Heap and CPU with the rig's streams, USB throughput and the axis map are to be measured in the morning
-  (`MORNING.md`).
+**Daemon, CLI, OSC, MCP** (`rig/slrig`):
 
-**Next:**
+- 46 commands (`AGENTS.md`). Sessions, guided tests, analysis, replays, plots, audio.
+- OSC both ways, checked by listening on 9000 and sending to 9001.
+- MCP: 7 tools, images included, connected in Claude Code.
 
-1. Integrate both agents' work.
-2. End to end with the viewer offscreen, and screenshots.
-3. `AGENTS.md`, the install, the MCP registration, a skill for the workflow.
+**Viewer** (`rig/view`):
+
+- The rev C Stack in 3D turned by the IMU, the OLED on its glass and large, curves, six plots.
+- Panels: tune, gestures, settings, session.
+- Frame time 2.0 ms CPU, 2.7 ms CPU+GPU (1600x1000).
+- The live window was tested on a private X server: it opens, draws and swaps.
+
+**Tests:** 190 pass in 13 s (`cd rig && uv run pytest -q`).
+
+**Installed:**
+
+- `~/.local/bin/slrig` and `slrig-view`, and a menu entry ("Samplooler Rig").
+- The MCP server `slrig` (user scope).
+- The skill `~/.claude/skills/samplooler-rig`.
+
+### What the twin says about the gyro
+
+These come from the firmware's own code, with synthetic hands and the twin's sensor model (noise 0.004 g and
+0.06 °/s, bias 0.9 / -0.6 / 0.4 °/s). A real board and real hands come next.
+
+| what | v1 (accelerometer only) | gyro (COMP) |
+|---|---|---|
+| a 0.5 g shake without tilting: pitch swing | 21.8° | 2.2° |
+| the same shake: speed flutter | 369 cents (the tape flips direction) | 0 |
+| lag behind a move | 62 ms | |
+| flicks of 30°: peak reached, delay | 55 %, 33 ms | |
+| board vs gravity in held steps | within 0.14° | |
+
+- The still test recovers a known gyro bias and accelerometer offset exactly. The board's own bias learner reaches
+  97 % in 10 s.
+- The guided tests all run end to end, acted out by the rig: still, axes, steps, sweep, flicks, shake, roll,
+  encoder, rec.
+
+### Not done, or not possible tonight
+
+- **Anything on a board.** These need measuring:
+  - heap with the rig's streams (`heap_kb`);
+  - the UI loop's time (`loop_ms`) with the FIFO at 500 Hz and the OLED;
+  - USB throughput (`wire_drops`);
+  - the sign of the z axis (`axes` test).
+- **The viewer has no text entry** (sliders, keys and buttons only).
+- **The core instruments** (HUFF, AIRDWELLER...) do not speak the rig's line. ROADMAP.
+
+### Next
+
+`MORNING.md`.
