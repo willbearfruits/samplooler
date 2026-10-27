@@ -24,7 +24,7 @@ def twin():
     return synth.TWIN
 
 
-def run(tmp, name, tune=None, axis_map=(3, 0, 4), with_meta=True, gyro_range=2, events=None, state=None, **model):
+def run(tmp, name, tune=None, axis_map=synth.MOUNT, with_meta=True, gyro_range=2, events=None, state=None, **model):
     act = G.act_out(name, gyro_range=gyro_range, **model)
     st = state if state is not None else synth.twin_states(act['raw'], tune=tune, gyro_range=gyro_range)
     p = synth.write_session(tmp / name, act['raw'], state=st, test=act['test'] if with_meta else None, tune=tune,
@@ -120,12 +120,14 @@ def test_axes(tmp_path, twin):
 
 def test_axes_wrong_map(tmp_path, twin):
     r = run(tmp_path, 'axes', axis_map=(2, 1, 4))
-    assert r['suggest'] == {'motion.ax_x': 3, 'motion.ax_y': 0, 'motion.ax_z': 4} and 'wrong' in r['summary']
+    assert r['suggest'] == {'motion.ax_x': 3, 'motion.ax_y': 1, 'motion.ax_z': 5} and 'wrong' in r['summary']
+    r = run(tmp_path / 'old', 'axes', axis_map=(3, 0, 4))           # the left-handed map from before 2026-10-27
+    assert r['suggest'] == {'motion.ax_x': 3, 'motion.ax_y': 1, 'motion.ax_z': 5}
 
 
 def test_axes_other_mounting(tmp_path, twin):
-    r = run(tmp_path, 'axes', mount=(3, 1, 5))
-    assert r['suggest'] == {'motion.ax_x': 3, 'motion.ax_y': 1, 'motion.ax_z': 5}
+    r = run(tmp_path, 'axes', mount=(2, 1, 4))
+    assert r['suggest'] == {'motion.ax_x': 2, 'motion.ax_y': 1, 'motion.ax_z': 4}
 
 
 def test_steps(tmp_path, twin):

@@ -1,7 +1,8 @@
 """Analysis of recorded sessions (rig/PROTOCOL.md, section 3). load_session() reads a folder into numpy arrays; every
 analyser below is a pure function that returns a plain dict (JSON-ready, rounded): `metrics` (numbers), `findings`
 ({"metric", "value", "note"} in plain words) and `suggest` ({tune name: value}, only when the data clearly supports
-it). Axes are the device's (x to the right edge, y to the bottom edge, z out of the screen) unless a name says chip.
+it). Axes are the device's (right-handed: x to the right edge, y to the top edge, the nose, z out of the screen)
+unless a name says chip.
 Tuning values that live in chip axes (imu.gyro_bias_*, imu.acc_off_*) are converted back with the session's axis map.
 """
 from __future__ import annotations
@@ -28,7 +29,7 @@ CODES = ('+x', '-x', '+y', '-y', '+z', '-z')
 TUNE_FALLBACK = {                       # used only when tune.h cannot be read
     'imu.acc_range': 0, 'imu.gyro_range': 2, 'imu.rate': 2, 'imu.acc_off_x': 0, 'imu.acc_off_y': 0, 'imu.acc_off_z': 0,
     'imu.gyro_bias_x': 0, 'imu.gyro_bias_y': 0, 'imu.gyro_bias_z': 0, 'imu.auto_bias': 1, 'imu.rest_gyro': 3,
-    'motion.fusion': 0, 'motion.ax_x': 3, 'motion.ax_y': 0, 'motion.ax_z': 4, 'tilt.sign': 1, 'tilt.dead': 5,
+    'motion.fusion': 0, 'motion.ax_x': 3, 'motion.ax_y': 1, 'motion.ax_z': 5, 'tilt.sign': 1, 'tilt.dead': 5,
     'tilt.full': 45, 'tilt.hyst': 0, 'roll.on': 1, 'roll.sign': 1, 'roll.dead': 15, 'roll.full': 45, 'joy.dead': 0.12,
     'joy.flick': 0.7, 'joy.rearm': 0.3, 'enc.dir': 0, 'enc.steps': 4, 'enc.tap_min': 40, 'enc.hold': 500,
     'enc.long': 3000, 'enc.double': 300, 'enc.accel': 0, 'rec.debounce': 3}
@@ -129,7 +130,7 @@ def acc_angles(acc) -> tuple[np.ndarray, np.ndarray]:
     """Pitch and roll (deg) from gravity alone, motion.c's ACC formula, for device-axis samples (N, 3) in g."""
     a = np.asarray(acc, dtype=np.float64).reshape(-1, 3)
     ax, ay, az = a[:, 0], a[:, 1], a[:, 2]
-    pitch = np.degrees(np.arctan2(ay, np.sqrt(ax * ax + az * az)))
+    pitch = np.degrees(np.arctan2(-ay, np.sqrt(ax * ax + az * az)))   # nose (+y) down: gravity leans to -y
     roll = np.degrees(np.arctan2(-ax, np.sqrt(ay * ay + az * az)))
     return pitch, roll
 
@@ -526,9 +527,9 @@ def drift(sess: Session, t0=None, t1=None, still_only: bool = True) -> dict:
 # ---------------------------------------------------------------- axes
 EXPECT_UP = {                            # what the accelerometer reads in each labelled pose, device axes
     'flat': (0, 0, 1), 'screen_down': (0, 0, -1),
-    'nose_down': (0, 1, 1), 'nose_up': (0, -1, 1),
+    'nose_down': (0, -1, 1), 'nose_up': (0, 1, 1),
     'right_down': (-1, 0, 1), 'left_down': (1, 0, 1),
-    'facing': (0, -1, 0), 'standing': (0, -1, 0), 'upside': (0, 1, 0),
+    'facing': (0, 1, 0), 'standing': (0, 1, 0), 'upside': (0, -1, 0),
     'right_edge': (-1, 0, 0), 'left_edge': (1, 0, 0),
 }
 

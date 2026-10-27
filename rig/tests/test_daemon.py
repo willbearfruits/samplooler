@@ -31,6 +31,8 @@ def daemon(tmp_path_factory):
     c.close()
     p.terminate()
     p.wait(5)
+    import shutil
+    shutil.rmtree(d, ignore_errors=True)
 
 
 def ok(env):

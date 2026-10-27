@@ -232,10 +232,10 @@ def _flicks(sess):
     g = sess.gyro
     bias = g[mr].mean(0) if mr.sum() > 10 else np.zeros(3)
     rate = sess.rate_hz
-    tf, gx = mt[mf], g[mf, 0] - bias[0]
+    tf, prate = mt[mf], -(g[mf, 0] - bias[0])                 # nose down turns about -x: the pitch rate is -gx
     st, bp = sess.state.get('t'), sess.col('pitch')
     base = float(np.interp(tf[0], st, bp)) if st is not None and bp is not None and len(st) else 0.0
-    ref = base + np.cumsum(gx) / rate                         # what the gyro says the pitch did
+    ref = base + np.cumsum(prate) / rate                      # what the gyro says the pitch did
     amp_all = np.abs(ref - base)
     thr = 0.4 * amp_all.max()
     above = amp_all > thr

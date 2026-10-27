@@ -8,8 +8,8 @@ import pytest
 
 from slrig import synth
 
-DEV_OFF = np.array([0.006, 0.010, 0.020])     # the twin's chip offset (0.010, -0.006, 0.020) in device axes
-DEV_BIAS = np.array([0.6, 0.9, 0.4])          # the twin's chip bias (0.9, -0.6, 0.4) in device axes
+DEV_OFF = np.array([0.006, -0.010, -0.020])   # the twin's chip offset (0.010, -0.006, 0.020) in device axes
+DEV_BIAS = np.array([0.6, -0.9, -0.4])         # the twin's chip bias (0.9, -0.6, 0.4) in device axes
 
 
 @pytest.fixture(scope='module')
@@ -40,26 +40,30 @@ def test_tilt_reads_gravity(pitch, roll):
     raw, tr = synth.gesture('tilt', 3, pitch=pitch, roll=roll, noise_g=0, acc_offset=(0, 0, 0), with_truth=True)
     a = synth.to_device(raw)[-200:, :3].mean(0)
     th, ph = np.radians(pitch), np.radians(roll)
-    up = np.array([-np.sin(ph) * np.cos(th), np.sin(th), np.cos(th) * np.cos(ph)])
+    up = np.array([-np.sin(ph) * np.cos(th), -np.sin(th), np.cos(th) * np.cos(ph)])   # nose down: gravity to -y
     assert np.allclose(a / np.linalg.norm(a), up / np.linalg.norm(up), atol=0.002)
     assert tr['pitch'][-1] == pytest.approx(pitch) and tr['roll'][-1] == pytest.approx(roll)
     # the angles back from gravity, by motion.c's ACC formula
     ax, ay, az = a
     p, r = np.radians(pitch), np.radians(roll)
     acc_roll = np.degrees(np.arctan2(np.sin(r) * np.cos(p), np.sqrt(np.sin(p) ** 2 + (np.cos(p) * np.cos(r)) ** 2)))
-    assert np.degrees(np.arctan2(ay, np.hypot(ax, az))) == pytest.approx(pitch, abs=0.15)
+    assert np.degrees(np.arctan2(-ay, np.hypot(ax, az))) == pytest.approx(pitch, abs=0.15)
     assert np.degrees(np.arctan2(-ax, np.hypot(ay, az))) == pytest.approx(acc_roll, abs=0.15)
     if pitch == 0:
         assert acc_roll == pytest.approx(roll)
 
 
 def test_mount_is_the_twins():
-    # twin.c: chip x = device y, chip y = -device x, chip z = device z
+    # twin.c: chip = (-device y, -device x, -device z), the default map (3, 1, 5) backwards
+    assert synth.MOUNT == (3, 1, 5)
     raw = synth.gesture('tilt', 3, roll=30, noise_g=0, acc_offset=(0, 0, 0))
     chip = raw[-100:, :3].mean(0) / 16384
     assert chip[1] == pytest.approx(0.5, abs=0.002)          # right edge down: device x = -0.5, chip y = +0.5
-    assert synth.remap([1, 2, 3], (3, 0, 4)).tolist() == [-2, 1, 3]
-    assert synth.unmap([-2, 1, 3], (3, 0, 4)).tolist() == [1, 2, 3]
+    assert chip[2] == pytest.approx(-np.cos(np.radians(30)), abs=0.002)   # chip z reads -device z
+    raw = synth.gesture('tilt', 3, pitch=30, noise_g=0, acc_offset=(0, 0, 0))
+    assert raw[-100:, 0].mean() / 16384 == pytest.approx(0.5, abs=0.002)  # nose down: device y = -0.5, chip x = +0.5
+    assert synth.remap([1, 2, 3], (3, 1, 5)).tolist() == [-2, -1, -3]
+    assert synth.unmap([-2, -1, -3], (3, 1, 5)).tolist() == [1, 2, 3]
 
 
 @pytest.mark.parametrize('m', all_maps())
@@ -78,16 +82,16 @@ def test_unmap_refuses_a_map_with_a_repeated_axis():
 
 
 def test_sweep_body_rate():
-    raw = synth.gesture('sweep', 9, a=-45, b=45)               # 90 deg over 8 s
+    raw = synth.gesture('sweep', 9, a=-45, b=45)               # 90 deg nose down over 8 s: a turn about -x
     g = synth.to_device(raw)[1000:3500, 3:].mean(0)
-    assert g[0] == pytest.approx(90 / 8 + DEV_BIAS[0], abs=0.05)
+    assert g[0] == pytest.approx(-90 / 8 + DEV_BIAS[0], abs=0.05)
     assert g[1] == pytest.approx(DEV_BIAS[1], abs=0.05)
 
 
 def test_flick_peak_rate_and_saturation():
     raw, tr = synth.gesture('flicks', 6, n=5, amp=30, width=0.15, with_truth=True)
     gx = synth.to_device(raw)[:, 3]
-    assert gx.max() == pytest.approx(np.pi * 30 / 0.15, rel=0.01)
+    assert -gx.min() == pytest.approx(np.pi * 30 / 0.15, rel=0.01)  # nose down first: negative about x
     assert len(tr['segments']) == 5
     small = synth.gesture('flicks', 6, n=5, amp=40, width=0.12, gyro_range=0)
     assert (np.abs(small[:, 3:]) >= 32767).any()
@@ -105,7 +109,7 @@ def test_shake_moves_gravity_not_the_gyro():
 def test_axes_holds():
     raw, tr = synth.gesture('axes', 16, with_truth=True)
     d = synth.to_device(raw)
-    want = {'flat': (0, 0, 1), 'nose_down': (0, 0.866, 0.5), 'right_down': (-0.866, 0, 0.5), 'facing': (0, -1, 0)}
+    want = {'flat': (0, 0, 1), 'nose_down': (0, -0.866, 0.5), 'right_down': (-0.866, 0, 0.5), 'facing': (0, 1, 0)}
     for s in tr['segments']:
         k = (tr['t'] > s['t0'] + 0.2) & (tr['t'] < s['t1'])
         assert np.allclose(d[k, :3].mean(0) - DEV_OFF, want[s['label']], atol=0.01), s['label']
@@ -156,7 +160,7 @@ def test_write_session(tmp_path):
     p = synth.write_session(tmp_path / 's', raw, events=[{'t': 1.0, 'name': 'enc.tap', 'ms': 80}],
                             state={'t': [0, 0.02], 'pitch': [1, 2]}, test={'name': 'x', 'steps': []})
     meta = json.loads((p / 'meta.json').read_text())
-    assert meta['imu']['axis_map'] == [3, 0, 4] and meta['imu']['rate_hz'] == 500
+    assert meta['imu']['axis_map'] == [3, 1, 5] and meta['imu']['rate_hz'] == 500
     assert meta['tune']['motion.ax_x'] == 3
     assert len((p / 'motion.csv').read_text().splitlines()) == 1001
     assert len((p / 'raw.txt').read_text().splitlines()) == 1000
@@ -168,7 +172,8 @@ def test_twin_states_and_curve(twin):
     st = synth.twin_states(synth.gesture('tilt', 4, pitch=30))
     assert abs(len(st['t']) - 200) <= 1                        # 50 Hz ticks over 4 s (the first lands on sample 0)
     assert np.median(np.diff(st['t'])) == pytest.approx(0.02, abs=1e-3)
-    assert st['pitch'][-1] == pytest.approx(29.92, abs=0.4)    # the offset's own error, as the board would read it
+    a = np.array([0, -0.5, np.cos(np.radians(30))]) + DEV_OFF    # gravity plus the offset, as the board reads it
+    assert st['pitch'][-1] == pytest.approx(np.degrees(np.arctan2(-a[1], np.hypot(a[0], a[2]))), abs=0.4)
     assert st['speed_cmd'][-1] > 0.8 and st['zone'][-1] == 1
     st = synth.twin_states(synth.gesture('still', 3), tune={'imu.acc_off_x': 0.010, 'imu.acc_off_y': -0.006,
                                                             'imu.acc_off_z': 0.020})

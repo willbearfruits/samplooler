@@ -1,9 +1,10 @@
 """Synthetic gestures: the twin's motion model (rig/twin/twin.c: pose_q, sample_at) in numpy, so the tests and the rig
 have a hand with known answers. A pose over time (pitch, roll, yaw, shake) becomes the chip's raw samples: gravity and
 the body rates in device axes, turned into chip axes by the mounting (an axis map, tune.h motion.ax_*), then the
-chip's offset, bias and noise, then LSB. Angles follow rig/PROTOCOL.md: pitch + with the nose (the screen's top edge)
-down, roll + with the right edge down. The pose's up vector is the twin's, (-sin r cos p, sin p, cos p cos r): with
-pitch and roll both set, motion.c's ACC formula reads the pitch exactly and the roll a little short of r.
+chip's offset, bias and noise, then LSB. Axes and angles follow rig/PROTOCOL.md (right-handed): device x to the
+screen's right edge, y to its top edge (the nose), z out of the screen; pitch + with the nose down, roll + with the
+right edge down. The pose's up vector is the twin's, (-sin r cos p, -sin p, cos p cos r): with pitch and roll both
+set, motion.c's ACC formula reads the pitch exactly and the roll a little short of r.
 
     raw = gesture("tilt", 4, pitch=30)                  # int16 (N, 6): ax ay az gx gy gz, chip axes, LSB
     raw, truth = gesture("steps", 18, steps=[(0, 0, 3), (15, 0, 3)], with_truth=True)
@@ -23,7 +24,7 @@ import numpy as np
 GYRO_BIAS = (0.9, -0.6, 0.4)          # deg/s, chip axes (twin.c GBIAS)
 ACC_OFFSET = (0.010, -0.006, 0.020)   # g, chip axes (twin.c AOFF)
 NOISE_G, NOISE_DPS = 0.004, 0.06      # per sample, rms
-MOUNT = (3, 0, 4)                     # the default axis map: device x = -chip y, y = +chip x, z = +chip z
+MOUNT = (3, 1, 5)                     # the default axis map: device = (-chip y, -chip x, -chip z)
 ACC_LSB = (16384.0, 8192.0, 4096.0, 2048.0)
 GYRO_LSB = (131.0, 65.5, 32.8, 16.4)
 RATES = (100, 250, 500, 1000)
@@ -87,7 +88,7 @@ def to_raw(dev, acc_lsb: float = ACC_LSB[0], gyro_lsb: float = GYRO_LSB[2], axis
 def pose_q(pitch, roll, yaw) -> np.ndarray:
     """The device's orientation (w, x, y, z): tilt from the up vector, then the yaw about the world's z."""
     th, ph = np.asarray(pitch, np.float64) * D2R, np.asarray(roll, np.float64) * D2R
-    ux, uy, uz = -np.sin(ph) * np.cos(th), np.sin(th), np.cos(th) * np.cos(ph)
+    ux, uy, uz = -np.sin(ph) * np.cos(th), -np.sin(th), np.cos(th) * np.cos(ph)   # nose (+y) down: up leans to -y
     n = np.sqrt(ux * ux + uy * uy + uz * uz)
     ux, uy, uz = ux / n, uy / n, uz / n
     a0, a1, a2 = 1 + uz, uy, -ux

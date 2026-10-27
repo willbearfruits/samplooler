@@ -24,7 +24,7 @@ def twin():
     return synth.TWIN
 
 
-def session(path, raw, tune=None, twin_tune=None, axis_map=(3, 0, 4), with_state=True, **kw):
+def session(path, raw, tune=None, twin_tune=None, axis_map=synth.MOUNT, with_state=True, **kw):
     """A session folder as the daemon writes it, with the board's state from the twin."""
     st = synth.twin_states(raw, tune=twin_tune if twin_tune is not None else tune,
                            gyro_range=kw.get('gyro_range', 2)) if with_state else None
@@ -59,7 +59,7 @@ def test_load_session_reads_every_file(tmp_path):
     assert s.col('rest').tolist() == [True, False, True] and s.col('frozen').tolist() == [False, False, True]
     assert s.col('speed') is None and s.col('pitch').tolist() == [1, 2, 3]
     assert s.screen.shape == (2, 1024) and s.screen_t.tolist() == [0.25, 0.5] and s.screen[0, 255] == 255
-    assert s.axis_map == (3, 0, 4) and s.lsb == (16384.0, 32.8)
+    assert s.axis_map == (3, 1, 5) and s.lsb == (16384.0, 32.8)
 
 
 def test_load_session_tolerates_missing_files(tmp_path):
@@ -92,7 +92,7 @@ def test_rest_stats_recovers_bias_offset_noise(still):
     m = r['metrics']
     assert m['still'] is True
     assert np.allclose(m['gyro_bias_chip'], CHIP_BIAS, atol=0.05)
-    assert np.allclose(m['gyro_bias'], [0.6, 0.9, 0.4], atol=0.05)
+    assert np.allclose(m['gyro_bias'], [0.6, -0.9, -0.4], atol=0.05)
     assert np.allclose(m['acc_offset_chip'], CHIP_OFF, atol=0.002)
     assert np.allclose(m['gyro_std'], 0.06, rtol=0.2)
     assert m['pitch_acc_noise'] == pytest.approx(np.degrees(0.004), rel=0.2)
@@ -176,7 +176,7 @@ def test_drift_wraps_yaw():
 
 
 # ---------------------------------------------------------------- axes
-def axes_session(tmp_path, name, mount=(3, 0, 4), axis_map=(3, 0, 4), keep_raw=True):
+def axes_session(tmp_path, name, mount=synth.MOUNT, axis_map=synth.MOUNT, keep_raw=True):
     raw, tr = synth.gesture('axes', 16, mount=mount, with_truth=True)
     p = synth.write_session(tmp_path / name, raw, axis_map=axis_map)
     if not keep_raw:
@@ -189,46 +189,46 @@ def test_axis_check_right_map(tmp_path):
     s, segs = axes_session(tmp_path, 'a')
     r = A.axis_check(s, segs)
     json.dumps(r)
-    assert r['axis_map'] == [3, 0, 4] and r['current_ok'] is True and r['suggest'] == {}
+    assert r['axis_map'] == [3, 1, 5] and r['current_ok'] is True and r['suggest'] == {}
     assert r['determined'] == [True, True, True]
 
 
-@pytest.mark.parametrize('wrong', [(0, 3, 4), (2, 1, 4), (3, 0, 5), (0, 2, 4)])
+@pytest.mark.parametrize('wrong', [(3, 0, 4), (2, 1, 4), (0, 3, 4), (3, 1, 4), (0, 2, 4)])
 def test_axis_check_wrong_map_in_the_session(tmp_path, wrong):
     s, segs = axes_session(tmp_path, 'w', axis_map=wrong)
     r = A.axis_check(s, segs)
-    assert r['axis_map'] == [3, 0, 4] and r['current_ok'] is False
-    assert r['suggest'] == {'motion.ax_x': 3, 'motion.ax_y': 0, 'motion.ax_z': 4}
+    assert r['axis_map'] == [3, 1, 5] and r['current_ok'] is False
+    assert r['suggest'] == {'motion.ax_x': 3, 'motion.ax_y': 1, 'motion.ax_z': 5}
 
 
-@pytest.mark.parametrize('mount', [(2, 1, 4), (3, 1, 5), (1, 3, 4), (0, 2, 4)])
+@pytest.mark.parametrize('mount', [(2, 1, 4), (3, 0, 4), (1, 3, 4), (0, 2, 4), (3, 1, 5)])
 def test_axis_check_finds_other_mountings(tmp_path, mount):
     s, segs = axes_session(tmp_path, 'm', mount=mount)
     r = A.axis_check(s, segs)
-    assert tuple(r['axis_map']) == mount and r['current_ok'] is (mount == (3, 0, 4))
-    if mount != (3, 0, 4):
+    assert tuple(r['axis_map']) == mount and r['current_ok'] is (mount == synth.MOUNT)
+    if mount != synth.MOUNT:
         assert r['suggest'] == {f'motion.ax_{a}': mount[k] for k, a in enumerate('xyz')}
 
 
 def test_axis_check_without_raw_uses_the_sessions_map(tmp_path):
     s, segs = axes_session(tmp_path, 'n', keep_raw=False)
-    assert A.axis_check(s, segs)['axis_map'] == [3, 0, 4]
+    assert A.axis_check(s, segs)['axis_map'] == [3, 1, 5]
 
 
 def test_axis_check_flat_only_knows_z(tmp_path):
-    p = synth.write_session(tmp_path / 'f', synth.gesture('still', 3), axis_map=(0, 2, 4))
+    p = synth.write_session(tmp_path / 'f', synth.gesture('still', 3), axis_map=(2, 0, 5))   # x and y wrong, z right
     r = A.axis_check(A.load_session(p), [('flat', 0.5, 3)])
     assert r['determined'] == [False, False, True] and r['current_ok'] is True and r['suggest'] == {}
-    assert r['axis_map'][2] == 4
+    assert r['axis_map'][2] == 5
     notes = ' '.join(f['note'] for f in r['findings'])
     assert 'Not checked' in notes
 
 
 def test_axis_check_flat_only_screen_down_mount(tmp_path):
-    # the chip under the board, upside down: z is wrong, but one axis is too little to change the map
-    p = synth.write_session(tmp_path / 'u', synth.gesture('still', 3, mount=(3, 1, 5)))
+    # the chip turned over: z is wrong, but one axis is too little to change the map
+    p = synth.write_session(tmp_path / 'u', synth.gesture('still', 3, mount=(3, 0, 4)))
     r = A.axis_check(A.load_session(p), [('flat', 0.5, 3)])
-    assert r['axis_map'][2] == 5 and r['current_ok'] is False and r['suggest'] == {}
+    assert r['axis_map'][2] == 4 and r['current_ok'] is False and r['suggest'] == {}
 
 
 def test_axis_check_two_axes_fix_the_third(tmp_path):
@@ -264,10 +264,12 @@ def test_holds_recover_the_angles(tmp_path, twin):
 
 
 def test_holds_without_the_offset_in_the_tune_read_the_offsets_error(tmp_path, twin):
-    raw, tr = synth.gesture('steps', 6, steps=[(0, 0, 3), (-30, 0, 3)], with_truth=True)
+    # nose down 30: gravity to -y; the offset's y and z (device -0.010, -0.020) then pull the angle the same way
+    raw, tr = synth.gesture('steps', 6, steps=[(0, 0, 3), (30, 0, 3)], with_truth=True)
     s = session(tmp_path / 'o', raw)
-    row = A.holds(s, [{'label': 'up', 't0': 3.3, 't1': 6, 'pitch': -30}])['metrics']['steps'][0]
-    want = np.degrees(np.arctan2(-0.5 + 0.010, np.hypot(0.006, 0.866 + 0.020)))   # what gravity plus offset says
+    row = A.holds(s, [{'label': 'down', 't0': 3.3, 't1': 6, 'pitch': 30}])['metrics']['steps'][0]
+    a = np.array([0, -0.5, 0.866]) + synth.remap(CHIP_OFF)
+    want = np.degrees(np.arctan2(-a[1], np.hypot(a[0], a[2])))      # what the board reads without the offset
     assert row['pitch'] == pytest.approx(want, abs=0.2) and abs(row['pitch_err']) > 0.8
 
 
