@@ -69,8 +69,8 @@ def main(argv: list[str] | None = None) -> int:
             print(text)
         return 0
     if cmd == 'stop':
-        from .daemon import runtime_dir
-        pid_file = runtime_dir() / 'daemon.pid'
+        from .daemon import socket_path
+        pid_file = socket_path().parent / 'daemon.pid'     # beside the socket in use (SLRIG_SOCKET moves both)
         if not pid_file.exists():
             print('slrigd is not running')
             return 0
