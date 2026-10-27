@@ -4,7 +4,8 @@ A bench on the computer for a Samplooler on USB. It shows everything the board s
 change every number behind the controls while it plays, records and replays gestures, and measures the result.
 Claude works on the same bench through MCP.
 
-Status: built and tested against the twin (the firmware's own code running on the PC). Not yet run on a board.
+Status: built and tested against the twin (the firmware's own code running on the PC): 190 tests pass. Not yet run on a
+board. `MORNING.md` is the first session with one.
 
 ## What is in it
 

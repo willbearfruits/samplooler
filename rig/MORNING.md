@@ -22,6 +22,12 @@ The image is built in `~/Projects/samplooler/.rig/firmware/build` (branch `rig`)
 
 The tuning table starts at v1, so it plays exactly as before until something is changed.
 
+If it does not come up (a crash loop shows `CRASH` or `SAFE MODE` on the screen):
+
+- Three crashes in a row start it from the default settings and the v1 tuning.
+- To go back, hold BOOT while plugging it in and flash AIRDWELLER again from its instrument folder.
+- Close the desktop app and the plugin before starting the rig: only one program can hold the board's MIDI port.
+
 ## 3. Still on the table (2 minutes)
 
 ```sh

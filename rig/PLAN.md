@@ -4,7 +4,7 @@ A bench on the PC for a Samplooler on USB. It shows everything the board senses 
 of it live, records and replays gestures, and measures the result in numbers and in sound. Claude drives
 the same bench through MCP. The first job is the gyroscope.
 
-Status: approved 2026-10-27 01:05, building. Branch `rig` in the worktree `~/Projects/samplooler/.rig`,
+Status: milestones 0 to 8 done 2026-10-27 02:20 (PROGRESS.md); 9 waits for a board. Branch `rig` in the worktree `~/Projects/samplooler/.rig`,
 from `air-easy` 86e19db. Not pushed.
 
 > **USER (2026-10-27):** "i do want tuning of everything, the gyro, the accelerometer, the mic, the
@@ -201,17 +201,17 @@ Limit: its loop is a small stand-in for `main.c`. Menus, slots, voice and the fl
 
 ## Milestones
 
-- [ ] 0. Skeleton: uv project, CMake, the command registry, the test harness, the state files.
-- [ ] 1. Firmware: `tilt.c` and the gyro read. `v1` is identical to today's behaviour (PC check), and the
+- [x] 0. Skeleton: uv project, CMake, the command registry, the test harness, the state files.
+- [x] 1. Firmware: `tilt.c` and the gyro read. `v1` is identical to today's behaviour (PC check), and the
       firmware builds.
-- [ ] 2. Firmware: the rig's SysEx and the tuning NVS. The encoders are tested on the PC. `uisim`,
+- [x] 2. Firmware: the rig's SysEx and the tuning NVS. The encoders are tested on the PC. `uisim`,
       `flocksim` and the soak pass.
-- [ ] 3. Twin speaks the protocol; scripted gestures; takes replay.
-- [ ] 4. Daemon: connect (board or twin), decode, registry, CLI, sessions, OSC.
-- [ ] 5. Analysis, replay A/B, guided tests, audio capture and measurement.
-- [ ] 6. MCP, AGENTS.md, the `samplooler-rig` skill, registration.
-- [ ] 7. Viewer: 3D, OLED, plots, panels, `--shot`.
-- [ ] 8. End to end on the twin; screenshots to the phone; `rig/README.md`; launcher and menu entry; a
+- [x] 3. Twin speaks the protocol; scripted gestures; takes replay.
+- [x] 4. Daemon: connect (board or twin), decode, registry, CLI, sessions, OSC.
+- [x] 5. Analysis, replay A/B, guided tests, audio capture and measurement.
+- [x] 6. MCP, AGENTS.md, the `samplooler-rig` skill, registration.
+- [x] 7. Viewer: 3D, OLED, plots, panels, `--shot`.
+- [x] 8. End to end on the twin; screenshots to the phone; `rig/README.md`; launcher and menu entry; a
       morning checklist.
 - [ ] 9. Morning, with the user: plug in a board. With the user's OK, flash the rig firmware. Then the
       static checks (bias, noise, rates, CPU), then the user moves it and we tune.
