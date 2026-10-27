@@ -115,7 +115,7 @@ bool rig_sysex(uint8_t cmd, const uint8_t *body, int n)
         else if (t[0] == 'p') { tune_preset(atoi(t + 1)); list_next = 0; list_end_due = true; }
         return true;
     case 'J': {
-        if (n < 1) return true;
+        if (n < 1 || body[0] == 0) { injecting = false; inj_r = inj_w; return true; }   // 'J' 0: the sensor again, now
         int k = body[0];
         if (k > (n - 1) / 18) k = (n - 1) / 18;
         for (int s = 0; s < k; s++) {

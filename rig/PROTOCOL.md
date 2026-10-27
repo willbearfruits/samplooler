@@ -29,7 +29,7 @@ Existing messages, unchanged:
 | `T` | `w` | save the table to NVS (`tune` blob) → `t saved=1` |
 | `T` | `d` | back to the defaults (= today's behaviour, preset `v1`), not saved → full `t` list |
 | `T` | `p1` | load preset 1 (0 = v1) → full `t` list |
-| `J` | binary, below | injected motion: replaces the sensor until 0.5 s after the last `J` |
+| `J` | binary, below | injected motion: replaces the sensor until 0.5 s after the last `J`; a `J` with n = 0 gives the sensor back at once |
 | `K` | `e+2` / `e-1` | the encoder turned by n detents |
 | `K` | `E1` / `E0` | encoder switch down / up |
 | `K` | `R1` / `R0` | REC down / up |

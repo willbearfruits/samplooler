@@ -195,6 +195,11 @@ def inject(raw: np.ndarray) -> list[bytes]:
     return out
 
 
+def inject_end() -> bytes:
+    """'J' with no samples: the board takes its own sensor again at once (not 0.5 s later)."""
+    return sysex('J', bytes([0]))
+
+
 def key_enc(detents: int) -> bytes: return sysex('K', f'e{int(detents):+d}')
 def key_switch(down: bool) -> bytes: return sysex('K', 'E1' if down else 'E0')
 def key_rec(down: bool) -> bytes: return sysex('K', 'R1' if down else 'R0')

@@ -406,7 +406,12 @@ int main(int argc, char **argv)
         int deb = TI(TU_RE_DEB);
         held_n = down ? (held_n < deb ? held_n + 1 : deb) : (held_n > 0 ? held_n - 1 : 0);
         bool now = held_n >= deb ? true : held_n == 0 ? false : held;
-        if (now != held) { held = now; recorder_set_record(held); gest_emit(held ? "rec.down" : "rec.up", 0, 0, ""); }
+        if (now != held) {
+            static int64_t rec_t0;
+            held = now; recorder_set_record(held);
+            if (held) rec_t0 = twin_now_us;
+            gest_emit(held ? "rec.down" : "rec.up", 0, held ? 0 : (int)((twin_now_us - rec_t0) / 1000), "");
+        }
         if (e.tap) {
             if (!menu) {
                 if (click_ms > 0) { click_ms = 0; vol_ms = TI(TU_EN_VOL_MS); toast = vol_ms; param = T_VOL; gest_emit("enc.double", 0, 0, "volume"); }

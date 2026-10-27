@@ -335,13 +335,14 @@ class _Injector:
         t0, i, n = time.monotonic(), 0, len(self.raw)
         try:
             while i < n and not self.stop.is_set():
-                due = int((time.monotonic() - t0) * self.rate) + 1
+                due = int((time.monotonic() - t0 + 0.02) * self.rate) + 1   # 20 ms ahead: the board's queue never runs dry
                 j = min(n, max(due, i))
                 if j > i:
                     for msg in wire.inject(self.raw[i:j]):
                         rig._send(msg)
                     i = j
                 time.sleep(0.008)
+            rig._send(wire.inject_end())
         except (RigError, OSError, TimeoutError):
             pass
         finally:
@@ -426,6 +427,8 @@ def inject_stop(rig: Rig) -> dict:
     inj = rig.busy.pop('_injector', None)
     if inj:
         inj.stop.set()
+    if rig.port:
+        rig._send(wire.inject_end())
     return {'stopped': bool(inj)}
 
 
@@ -637,29 +640,46 @@ def session_compare(rig: Rig, name: str = 'last', a: str = 'v1', b: str = 'gyro'
         b: the second.
         plot: also draw both (a PNG beside the session).
     """
-    from . import analysis
     ra = session_replay(rig, name, a, 'A-' + a.replace(' ', '-'))
     rb = session_replay(rig, name, b, 'B-' + b.replace(' ', '-'))
     p = S.resolve(name)
     out = {'session': p.name, 'a': a, 'b': b, 'csv': [ra['csv'], rb['csv']]}
-    try:
-        out['table'] = analysis.compare_replays(p, ra['csv'], rb['csv'])
-    except AttributeError:
-        out['table'] = _compare_basic(ra['csv'], rb['csv'])
+    out['table'] = _compare_replays(p, ra['csv'], rb['csv'])
     if plot:
         from . import plots
         out['png'] = plots.plot_replays({a: ra['csv'], b: rb['csv']}, str(p / f'compare-{a}-{b}.png'.replace(' ', '-')))
     return out
 
 
-def _compare_basic(csv_a: str, csv_b: str) -> list:
-    rows = []
+def _compare_replays(path: Path, csv_a: str, csv_b: str) -> list:
+    """The two replays side by side: over the whole take, then in each step of a guided test, how far the angles and
+    the speed move (smaller is steadier) and where the pitch sits."""
     A = np.genfromtxt(csv_a, delimiter=',', names=True)
     B = np.genfromtxt(csv_b, delimiter=',', names=True)
-    for f in ('pitch', 'roll', 'speed'):
-        da, db = np.std(np.diff(A[f])), np.std(np.diff(B[f]))
-        rows.append({'metric': f'{f}: tick-to-tick wobble (std of the difference)', 'A': round(float(da), 4),
-                     'B': round(float(db), 4), 'better': 'A' if da < db else 'B'})
+    meta = json.loads((path / 'meta.json').read_text())
+    steps = (meta.get('test') or {}).get('steps') or [{'label': 'the whole take', 't0': 0, 't1': float(A['t'][-1])}]
+    rows = []
+
+    def cents(sp):
+        a = np.abs(sp[np.abs(sp) > 1e-3])
+        return float(np.std(1200 * np.log2(a / np.median(a)))) if len(a) > 2 else 0.0
+
+    def row(metric, va, vb, lower_is_better=True, unit=''):
+        better = '=' if abs(va - vb) < 1e-9 else ('A' if (va < vb) == lower_is_better else 'B')
+        rows.append({'metric': metric, 'A': round(va, 3), 'B': round(vb, 3), 'unit': unit, 'better': better})
+
+    row('pitch wobble, tick to tick (whole take)', float(np.std(np.diff(A['pitch']))), float(np.std(np.diff(B['pitch']))), unit='deg')
+    for st in steps:
+        sa = (A['t'] >= st['t0']) & (A['t'] < st['t1'])
+        sb = (B['t'] >= st['t0']) & (B['t'] < st['t1'])
+        if sa.sum() < 5 or sb.sum() < 5:
+            continue
+        lab = st['label']
+        row(f'{lab}: pitch swing (peak to peak)', float(np.ptp(A['pitch'][sa])), float(np.ptp(B['pitch'][sb])), unit='deg')
+        row(f'{lab}: roll swing (peak to peak)', float(np.ptp(A['roll'][sa])), float(np.ptp(B['roll'][sb])), unit='deg')
+        row(f'{lab}: speed flutter', cents(A['speed'][sa]), cents(B['speed'][sb]), unit='cents')
+        rows.append({'metric': f'{lab}: pitch, mean', 'A': round(float(np.mean(A['pitch'][sa])), 2),
+                     'B': round(float(np.mean(B['pitch'][sb])), 2), 'unit': 'deg', 'better': ''})
     return rows
 
 

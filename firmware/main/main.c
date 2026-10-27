@@ -562,7 +562,12 @@ void app_main(void)
         const int deb = TI(TU_RE_DEB);                        // REC must agree this many ticks in a row
         held_n = down ? (held_n < deb ? held_n + 1 : deb) : (held_n > 0 ? held_n - 1 : 0);
         bool now = held_n >= deb ? true : held_n == 0 ? false : held;
-        if (now != held) { held = now; recorder_set_record(held); gest_emit(held ? "rec.down" : "rec.up", 0, 0, ""); }
+        if (now != held) {
+            static int64_t rec_t0;                            // rec.up carries how long REC was down
+            held = now; recorder_set_record(held);
+            if (held) rec_t0 = esp_timer_get_time();
+            gest_emit(held ? "rec.down" : "rec.up", 0, held ? 0 : (int)((esp_timer_get_time() - rec_t0) / 1000), "");
+        }
 
 #if HAS_CONTROLS
         // the encoder: tap opens the menu, dives into a setting, runs an action or climbs back out;
