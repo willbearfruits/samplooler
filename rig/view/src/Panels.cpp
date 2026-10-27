@@ -17,6 +17,32 @@ static std::string upper(std::string s)
 
 static const char* TABS[TAB_N] = {"TUNE", "GESTURES", "SETTINGS", "SESSION"};
 
+// a JSON value, short: numbers to 4 figures, lists with spaces, objects as "k v" pairs
+static std::string compactJson(const json& v, int depth = 0)
+{
+    if (v.is_null()) return "-";
+    if (v.is_boolean()) return v.get<bool>() ? "yes" : "no";
+    if (v.is_number_integer()) return std::to_string(v.get<long long>());
+    if (v.is_number()) {
+        char b[32];
+        double d = v.get<double>();
+        std::snprintf(b, sizeof b, std::fabs(d) >= 1000 ? "%.0f" : "%.4g", d);
+        return b;
+    }
+    if (v.is_string()) return v.get<std::string>();
+    std::string out;
+    if (v.is_array()) {
+        for (auto& e : v) out += (out.empty() ? "" : "  ") + compactJson(e, depth + 1);
+        return out;
+    }
+    for (auto it = v.begin(); it != v.end(); ++it) {
+        std::string inner = compactJson(it.value(), depth + 1);
+        if (it.value().is_object() && depth < 2) inner = "(" + inner + ")";
+        out += (out.empty() ? "" : depth ? ", " : "  ") + it.key() + " " + inner;
+    }
+    return out;
+}
+
 void App::drawRight(Rect r)
 {
     // tabs, as the app's nav
@@ -59,46 +85,53 @@ void App::drawTune(Rect r)
         int k = ui_.segmented(Ui::id("tune.ab"), seg, AB, abSlot_, hex(ACCENT));
         if (k >= 0) {
             abSlot_ = k;
-            if (abStored_[k]) {
-                run("tune.ab", {{"slot", AB[k]}, {"store", false}});
-                toast_.clear();
-            }
+            if (abStored_[k]) run("tune.ab", {{"slot", AB[k]}, {"store", false}});
         }
         row.cutLeft(6);
+        // narrow: shorter words
+        bool narrow = row.w < Ui::btnW("KEEP AS A") + Ui::btnW("RESET") + Ui::btnW("SAVE TO BOARD", 20) + 18;
         char keep[24];
-        std::snprintf(keep, sizeof keep, "KEEP AS %s", AB[abSlot_].c_str());
-        Rect kb = row.cutLeft(pxWidth(PX_SMALL, keep, 1) + 18);
+        std::snprintf(keep, sizeof keep, narrow ? "KEEP %s" : "KEEP AS %s", AB[abSlot_].c_str());
+        Rect kb = row.cutLeft(Ui::btnW(keep));
         if (ui_.button(Ui::id("tune.keep"), kb, keep)) {
             int slot = abSlot_;
             run("tune.ab", {{"slot", AB[slot]}, {"store", true}}, [this, slot](bool ok, const json&, const json&) {
                 if (ok) abStored_[slot] = true;
             });
         }
-        Rect save = row.cutRight(pxWidth(PX_SMALL, "SAVE TO BOARD", 1) + 22);
-        if (ui_.button(Ui::id("tune.save"), save, "SAVE TO BOARD", BTN_SOLID)) run("tune.save");
+        const char* saveLab = narrow ? "SAVE" : "SAVE TO BOARD";
+        Rect save = row.cutRight(Ui::btnW(saveLab, 20));
+        if (ui_.button(Ui::id("tune.save"), save, saveLab, BTN_SOLID)) run("tune.save");
         row.cutRight(6);
-        Rect reset = row.cutRight(pxWidth(PX_SMALL, "RESET", 1) + 18);
+        Rect reset = row.cutRight(Ui::btnW("RESET"));
         if (ui_.button(Ui::id("tune.reset"), reset, "RESET", BTN_QUIET)) run("tune.reset");
     }
-    r.cutTop(8);
+    r.cutTop(10);
     {
-        Rect row = r.cutTop(22);
+        Rect row = r.cutTop(24);
         int changed = 0;
         for (auto& it : m_.tune) changed += it.changed();
-        char b[64];
-        std::snprintf(b, sizeof b, "%zu values, %d changed from v1", m_.tune.size(), changed);
-        ui_.text(row.x, row.cy(), b, ui_.sans, 13, changed ? hex(ACCENT) : hex(DIM));
-        if (!m_.presets.empty()) {
+        char b[96];
+        std::snprintf(b, sizeof b, "%zu values, %d changed from v1%s", m_.tune.size(), changed,
+                      abStored_[0] || abStored_[1] ? "" : ". Keep a set as A, then B, to compare");
+        if (m_.presets.empty()) ui_.text(row.x, row.cy(), b, ui_.sans, 13, changed ? hex(ACCENT) : hex(DIM));
+        else {
             // presets: a click loads one (tune.preset n)
-            float x = row.r();
-            for (int i = static_cast<int>(m_.presets.size()) - 1; i >= 0; i--) {
+            float x = pxText(vg_, PX_SMALL, row.x, std::round(row.cy() - 5), 2, "PRESET", hex(DIM)) + row.x + 8;
+            for (int i = 0; i < static_cast<int>(m_.presets.size()); i++) {
                 std::string name = upper(m_.presets[i]);
-                float w = pxWidth(PX_SMALL, name.c_str(), 1) + 12;
-                Rect pb{x - w, row.y + 1, w, 20};
+                float w = Ui::btnW(name.c_str(), 14);
+                if (x + w > row.r()) break;
+                Rect pb{x, row.y, w, 24};
                 if (ui_.button(Ui::id("tune.preset", i), pb, name.c_str(), BTN_QUIET)) run("tune.preset", {{"n", i}});
-                x -= w + 2;
+                x += w + 2;
             }
-            pxTextR(vg_, PX_TINY, x - 4, row.y + 9, 1, "PRESET", hex(DIM));
+            r.cutTop(4);
+            Rect row2 = r.cutTop(20);
+            if (ui_.textW(b, ui_.sans, 13) > row2.w) {
+                std::snprintf(b, sizeof b, "%zu values, %d changed from v1", m_.tune.size(), changed);
+            }
+            ui_.text(row2.x, row2.cy(), b, ui_.sans, 13, changed ? hex(ACCENT) : hex(DIM));
         }
     }
     r.cutTop(6);
@@ -123,13 +156,15 @@ void App::drawTune(Rect r)
                 if (it.group != g) continue;
                 if (!any) { y += headH; any = true; }
                 if (it.name == focusTune_) {
-                    if (y < tuneScroll_.off) tuneScroll_.off = y - headH;
+                    if (scrollCenter_) tuneScroll_.off = std::max(0.0f, y - r.h * 0.4f);
+                    else if (y < tuneScroll_.off) tuneScroll_.off = y - headH;
                     else if (y + rowH > tuneScroll_.off + r.h) tuneScroll_.off = y + rowH - r.h + 8;
                 }
                 y += rowH;
             }
         }
         scrollToFocus_ = false;
+        scrollCenter_ = false;
     }
     float y = ui_.beginScroll(Ui::id("tune.scroll"), r, tuneScroll_);
     float y0 = y;
@@ -187,11 +222,15 @@ void App::drawTune(Rect r)
                 if (k >= 0 && k != cur) { focusTune_ = it.name; setTune(it, it.min + k, true); }
             } else if (it.kind == "enum" || it.kind == "bool") {
                 // too many words for segments: a stepper
-                Rect lb{ctl.x, ctl.y, 26, ctl.h}, rb{ctl.r() - 26, ctl.y, 26, ctl.h};
+                Rect lb{ctl.x, ctl.y, 30, ctl.h}, rb{ctl.x + 34, ctl.y, 30, ctl.h};
                 if (ui_.button(wid ^ 1, lb, "-")) { focusTune_ = it.name; stepTune(it, -1, false); }
                 if (ui_.button(wid ^ 2, rb, "+")) { focusTune_ = it.name; stepTune(it, 1, false); }
-                ui_.text(ctl.cx(), ctl.cy(), ui_.fit(it.valueText(v), ui_.mono, 12, ctl.w - 60), ui_.mono, 12, hex(INK),
-                         NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+                // where it sits among its choices
+                int n = static_cast<int>(it.labels.size()), k = static_cast<int>(std::lround(v - it.min));
+                float dx = ctl.x + 76, dw = std::max(8.0f, (ctl.r() - dx) / std::max(1, n));
+                for (int j = 0; j < n && dx + dw * j < ctl.r(); j++)
+                    ui_.fill({std::round(dx + dw * j), ctl.cy() - 1.5f, std::max(2.0f, dw - 3), 3},
+                             j == k ? hex(ACCENT) : hex(PH), 1);
             } else {
                 float nv = v;
                 bool done = false;
@@ -307,6 +346,7 @@ void App::drawGestures(Rect r)
                     tab_ = TAB_TUNE;
                     focusTune_ = tn;
                     scrollToFocus_ = true;
+                    scrollCenter_ = true;
                     focusFlash_ = now_;
                 }
                 cx += cw + 4;
@@ -437,7 +477,7 @@ void App::drawConfirm(Rect r)
     ui_.fill(card, hex(PANEL), 4);
     ui_.stroke(card, hex(ACCENT), 1.5f, 4);
     pxText(vg_, PX_SMALL, card.x + 18, card.y + 18, 2, upper(confirm_.name).c_str(), hex(ACCENT));
-    ui_.wrap(card.x + 18, card.y + 38, card.w - 36, confirm_.text, ui_.sans, 15, hex(INK));
+    ui_.wrap(card.x + 18, card.y + 46, card.w - 36, confirm_.text, ui_.sans, 15, hex(INK));
     Rect run_{card.r() - 18 - 90, card.b() - 18 - 30, 90, 30};
     Rect cancel{run_.x - 8 - 90, run_.y, 90, 30};
     if (ui_.button(Ui::id("confirm.run"), run_, "RUN", BTN_SOLID)) {
@@ -517,7 +557,7 @@ void App::drawSession(Rect r)
         ui_.text(r.x, y + 8, "none recorded yet", ui_.sans, 13.5f, hex(DIM));
         y += 26;
     }
-    for (int i = static_cast<int>(m_.sessions.size()) - 1; i >= 0; i--) {
+    for (size_t i = 0; i < m_.sessions.size(); i++) {
         const Session& s = m_.sessions[i];
         Rect row{r.x, y, w, 26};
         y += 27;
@@ -535,7 +575,8 @@ void App::drawSession(Rect r)
         }
         if (sel) ui_.fill(row, hex(NAVON), 2);
         else if (ui_.hot == id) ui_.stroke(row, hex(LINE), 1, 2);
-        ui_.text(row.x + 8, row.cy(), ui_.fit(s.name, ui_.mono, 12.5f, w * 0.52f), ui_.mono, 12.5f, sel ? hex(INK) : hex(MUTE));
+        ui_.text(row.x + 8, row.cy(), ui_.fit(s.name, ui_.mono, 12.5f, w - (s.test.empty() ? 70 : 140)), ui_.mono, 12.5f,
+                 sel ? hex(INK) : hex(MUTE));
         char b[64];
         std::snprintf(b, sizeof b, "%.1f s", s.secs);
         ui_.text(row.r() - 8, row.cy(), b, ui_.mono, 12, hex(DIM), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
@@ -590,14 +631,69 @@ void App::drawSession(Rect r)
                         ui_.hline(r.x, r.x + w, std::round(y) + 0.5f, hex(LINE), 1);
                     }
             } else if (a.is_object()) {
-                // no table: every field as a row
-                for (auto it = a.begin(); it != a.end(); ++it) {
-                    if (it.key() == "summary") continue;
-                    ui_.text(r.x, y + 10, it.key(), ui_.sans, 13, hex(MUTE));
-                    ui_.text(r.x + w, y + 10, jtext(it.value(), 48), ui_.mono, 12.5f, hex(INK), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-                    y += 21;
-                    ui_.hline(r.x, r.x + w, std::round(y) + 0.5f, hex(LINE), 1);
+                // slrigd's analysis: sections (rest, drift, encoder, ...) of findings {metric, value, note} and the
+                // tuning values they suggest
+                bool any = false;
+                // a test's analysis has its findings at the top; a session's, in sections
+                std::vector<std::pair<std::string, const json*>> secs;
+                auto hasFindings = [](const json& j) {
+                    return j.is_object() && j.contains("findings") && j["findings"].is_array();
+                };
+                if (hasFindings(a)) secs.push_back({js(a, "test"), &a});
+                for (auto it = a.begin(); it != a.end(); ++it)
+                    if (hasFindings(it.value())) secs.push_back({it.key(), &it.value()});
+                for (auto& [title, secp] : secs) {
+                    const json& sec = *secp;
+                    any = true;
+                    y += 4;
+                    std::string head = title.empty() ? "FINDINGS" : upper(title);
+                    float gw = pxText(vg_, PX_SMALL, r.x, std::round(y + 6), 2, head.c_str(), hex(ACCENT));
+                    ui_.hline(r.x + gw + 10, r.x + w, std::round(y + 11) + 0.5f, hex(LINE), 1.5f);
+                    y += 22;
+                    for (auto& f : sec["findings"]) {
+                        std::string metric = js(f, "metric"), note = js(f, "note");
+                        std::string val = f.contains("value") ? compactJson(f["value"]) : "";
+                        float mw = std::min(w * 0.46f, ui_.textW(metric, ui_.sans, 13) + 4);
+                        ui_.text(r.x, y + 9, ui_.fit(metric, ui_.sans, 13, w * 0.46f), ui_.sans, 13, hex(MUTE));
+                        ui_.text(r.x + w, y + 9, ui_.fit(val, ui_.mono, 12.5f, w - mw - 12), ui_.mono, 12.5f, hex(INK),
+                                 NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+                        y += 19;
+                        if (!note.empty()) {
+                            nvgTextLineHeight(vg_, 1.3f);
+                            y += ui_.wrap(r.x + 10, y, w - 10, note, ui_.sans, 12, hex(DIM), 1.3f) + 4;
+                        }
+                        ui_.hline(r.x, r.x + w, std::round(y + 2) + 0.5f, hex(LINE), 1);
+                        y += 6;
+                    }
+                    if (sec.contains("suggest") && sec["suggest"].is_object() && !sec["suggest"].empty()) {
+                        const json& sg = sec["suggest"];
+                        Rect ab{r.x + w - 84, y + 2, 84, 24};
+                        pxText(vg_, PX_SMALL, r.x, std::round(ab.cy() - 5), 2, "SUGGESTS", hex(MUTE));
+                        if (ui_.button(Ui::id("apply." + selSession_ + title), ab, "APPLY", BTN_OUTLINE, hex(ACCENT),
+                                       m_.connected))
+                            for (auto s2 = sg.begin(); s2 != sg.end(); ++s2)
+                                if (s2.value().is_number()) run("tune.set", {{"name", s2.key()}, {"value", s2.value()}});
+                        y += 30;
+                        for (auto s2 = sg.begin(); s2 != sg.end(); ++s2) {
+                            const TuneItem* ti = m_.findTune(s2.key());
+                            std::string now = ti ? "now " + ti->valueText(shownValue(*ti)) : "";
+                            float x = ui_.text(r.x + 10, y + 8, s2.key(), ui_.mono, 12.5f, hex(INK)) + 10;
+                            x = ui_.text(x, y + 8, compactJson(s2.value()), ui_.mono, 12.5f, hex(ACCENT)) + 10;
+                            ui_.text(r.x + w, y + 8, now, ui_.sans, 12, hex(DIM), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+                            y += 18;
+                        }
+                        y += 6;
+                    }
                 }
+                if (!any)       // anything else: every field as a row
+                    for (auto it = a.begin(); it != a.end(); ++it) {
+                        if (it.key() == "summary" || it.value().is_null()) continue;
+                        ui_.text(r.x, y + 10, it.key(), ui_.sans, 13, hex(MUTE));
+                        ui_.text(r.x + w, y + 10, ui_.fit(compactJson(it.value()), ui_.mono, 12.5f, w * 0.6f), ui_.mono,
+                                 12.5f, hex(INK), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+                        y += 21;
+                        ui_.hline(r.x, r.x + w, std::round(y) + 0.5f, hex(LINE), 1);
+                    }
             }
         }
     }

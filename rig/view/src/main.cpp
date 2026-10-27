@@ -31,6 +31,10 @@ struct Args {
     std::string socket, shot, tab = "tune";
     int w = 1600, h = 1000, waitMs = 1500, bench = 0;
     float scale = 1.0f;
+    bool camera = false;
+    float camYaw = 0, camElev = 38, camZoom = 1;
+    struct Act { float x, y, wheel; };                   // wheel 0: a click
+    std::vector<Act> acts;
 };
 
 void usage()
@@ -44,6 +48,9 @@ void usage()
         "  --wait-ms N        shot only: how long to collect data first (default 1500)\n"
         "  --tab NAME         tune, gestures, settings or session\n"
         "  --bench N          shot only: render N frames first and print the frame times\n"
+        "  --camera Y,E[,Z]   start the 3D view at yaw Y and elevation E degrees, zoom Z (1 fits the stack)\n"
+        "  --click X,Y        shot only, repeatable: click there (units) after the wait, then draw the result\n"
+        "  --wheel X,Y,N      shot only, repeatable: turn the mouse wheel N notches there (negative: down)\n"
         "keys: 1-4 tabs, up/down/left/right tune the focused value, R reset the view, A axes, G pixel grid,\n"
         "      P panel colours, F freeze the plots, [ ] plot window, ctrl+Q quit\n");
 }
@@ -63,7 +70,24 @@ bool parse(int argc, char** argv, Args& a)
         else if (s == "--wait-ms") a.waitMs = std::max(0, std::atoi(val("--wait-ms")));
         else if (s == "--bench") a.bench = std::max(0, std::atoi(val("--bench")));
         else if (s == "--scale") a.scale = std::clamp(static_cast<float>(std::atof(val("--scale"))), 0.5f, 4.0f);
-        else if (s == "--size") {
+        else if (s == "--click") {
+            float x = 0, y = 0;
+            if (std::sscanf(val("--click"), "%f,%f", &x, &y) != 2) {
+                std::fprintf(stderr, "slrig-view: --click wants X,Y\n");
+                return false;
+            }
+            a.acts.push_back({x, y, 0});
+        } else if (s == "--wheel") {
+            float x = 0, y = 0, n = 0;
+            if (std::sscanf(val("--wheel"), "%f,%f,%f", &x, &y, &n) != 3 || n == 0) {
+                std::fprintf(stderr, "slrig-view: --wheel wants X,Y,N\n");
+                return false;
+            }
+            a.acts.push_back({x, y, n});
+        } else if (s == "--camera") {
+            a.camera = std::sscanf(val("--camera"), "%f,%f,%f", &a.camYaw, &a.camElev, &a.camZoom) >= 2;
+            if (!a.camera) { std::fprintf(stderr, "slrig-view: --camera wants YAW,ELEV[,ZOOM]\n"); return false; }
+        } else if (s == "--size") {
             if (std::sscanf(val("--size"), "%dx%d", &a.w, &a.h) != 2 || a.w < 320 || a.h < 240) {
                 std::fprintf(stderr, "slrig-view: --size wants WxH, at least 320x240\n");
                 return false;
@@ -151,7 +175,7 @@ int runShot(const Args& a, Options opt)
         return 1;
     }
 
-    NVGcontext* vg = nvgCreateGL3(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
+    NVGcontext* vg = nvgCreateGL3(NVG_ANTIALIAS);
     if (!vg) { std::fprintf(stderr, "slrig-view: NanoVG failed\n"); return 1; }
     int code = 0;
     {
@@ -176,11 +200,33 @@ int runShot(const Args& a, Options opt)
         }
         if (!app.model().connected)
             std::fprintf(stderr, "slrig-view: no daemon at %s; the shot shows that\n", opt.socket.c_str());
+        // scripted clicks: press and release on two frames, as a hand would, then let the replies come
+        for (auto [cx, cy, wheel] : a.acts) {
+            app.mouseMove(cx, cy);
+            app.frame(fbo, a.w, a.h, fbW, fbH, now());
+            if (wheel != 0) {
+                app.scroll(wheel);
+                app.frame(fbo, a.w, a.h, fbW, fbH, now());
+                std::fprintf(stderr, "slrig-view: wheel %+.0f at %.0f,%.0f\n", static_cast<double>(wheel),
+                             static_cast<double>(cx), static_cast<double>(cy));
+                continue;
+            }
+            app.mouseButton(GLFW_MOUSE_BUTTON_LEFT, true, 0, now());
+            app.frame(fbo, a.w, a.h, fbW, fbH, now());
+            app.mouseButton(GLFW_MOUSE_BUTTON_LEFT, false, 0, now());
+            app.frame(fbo, a.w, a.h, fbW, fbH, now());
+            double t1 = now();
+            while (now() - t1 < 0.4) {
+                app.update(now());
+                std::this_thread::sleep_for(std::chrono::milliseconds(4));
+            }
+            std::fprintf(stderr, "slrig-view: clicked %.0f,%.0f\n", static_cast<double>(cx), static_cast<double>(cy));
+        }
 
         if (a.bench > 0) {
             GLuint q = 0;
             glGenQueries(1, &q);
-            std::vector<double> cpu, gpu, wall;
+            std::vector<double> cpu, gpu, wall, sScene, sPanels, sFlush;
             for (int i = 0; i < a.bench; i++) {
                 app.update(now());
                 auto w0 = std::chrono::steady_clock::now();
@@ -193,6 +239,9 @@ int runShot(const Args& a, Options opt)
                 glGetQueryObjectui64v(q, GL_QUERY_RESULT, &ns);
                 app.presented(now());
                 cpu.push_back(app.cpuMs());
+                sScene.push_back(app.split().scene);
+                sPanels.push_back(app.split().panels);
+                sFlush.push_back(app.split().flush);
                 gpu.push_back(ns / 1e6);
                 wall.push_back(wms);
             }
@@ -206,6 +255,9 @@ int runShot(const Args& a, Options opt)
             };
             std::printf("slrig-view bench: %d frames at %dx%d (%dx%d px)\n", a.bench, a.w, a.h, fbW, fbH);
             stat(cpu, "CPU (frame(), no finish)");
+            stat(sScene, "  of it: 3D submit");
+            stat(sPanels, "  of it: 2D build");
+            stat(sFlush, "  of it: NanoVG flush");
             stat(gpu, "GPU (GL_TIME_ELAPSED)");
             stat(wall, "CPU + GPU (with glFinish)");
         }
@@ -272,7 +324,7 @@ int runLive(const Args& a, const Options& opt)
         return 1;
     }
     glfwSwapInterval(1);
-    NVGcontext* vg = nvgCreateGL3(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
+    NVGcontext* vg = nvgCreateGL3(NVG_ANTIALIAS);
     int code = 0;
     {
         App app(opt);
@@ -324,6 +376,10 @@ int main(int argc, char** argv)
     opt.socket = a.socket.empty() ? NetClient::defaultPath() : a.socket;
     opt.tab = a.tab;
     opt.assets = findAssets();
+    opt.camera = a.camera;
+    opt.camYaw = a.camYaw;
+    opt.camElev = a.camElev;
+    opt.camZoom = a.camZoom;
     if (!a.shot.empty()) return runShot(a, opt);
     return runLive(a, opt);
 }

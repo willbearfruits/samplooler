@@ -277,7 +277,7 @@ bool Ui::slider(uint64_t wid, Rect r, float& v, float lo, float hi, float step, 
 float Ui::segmentedMinWidth(const std::vector<std::string>& labels)
 {
     float w = 0;
-    for (auto& l : labels) w += textW(l, mono, 11.5f) + 12;
+    for (auto& l : labels) w += textW(l, mono, 11.5f) + 8;
     return w + 3.0f * static_cast<float>(labels.empty() ? 0 : labels.size() - 1);
 }
 
@@ -290,7 +290,7 @@ int Ui::segmented(uint64_t wid, Rect r, const std::vector<std::string>& labels, 
     // widths in proportion to the labels, filling the row
     std::vector<float> ws(n);
     float sum = 0;
-    for (int i = 0; i < n; i++) { ws[i] = textW(labels[i], mono, 11.5f) + 12; sum += ws[i]; }
+    for (int i = 0; i < n; i++) { ws[i] = textW(labels[i], mono, 11.5f) + 8; sum += ws[i]; }
     float extra = (r.w - gap * (n - 1) - sum) / n;
     float x = r.x;
     for (int i = 0; i < n; i++) {
@@ -313,12 +313,13 @@ int Ui::segmented(uint64_t wid, Rect r, const std::vector<std::string>& labels, 
 float Ui::beginScroll(uint64_t wid, Rect r, Scroll& s)
 {
     (void)wid;
-    float maxOff = std::max(0.0f, s.content - r.h);
     if (!wheelUsed && in.wheel != 0 && over(r)) {
         s.off -= in.wheel * 48.0f;
         wheelUsed = true;
     }
-    s.off = std::clamp(s.off, 0.0f, maxOff);
+    // the content's height is known from the last frame; before the first one, any offset stands
+    if (s.content > 0) s.off = std::clamp(s.off, 0.0f, std::max(0.0f, s.content - r.h));
+    else s.off = std::max(0.0f, s.off);
     pushClip(r);
     return r.y - s.off;
 }

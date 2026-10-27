@@ -11,8 +11,8 @@ What it does:
 2. Reads the VRML (Transform/Group/Shape/IndexedFaceSet with DEF/USE, as lab/tools/showcase/vrml.py).
 3. Puts the boards together: the bottom board, and the top board 12.6 mm above it (11 mm gap + 1.6 mm PCB),
    hex standoffs at the four holes. Then moves everything into the device axes of rig/PROTOCOL.md:
-   x to the screen's right, y towards the screen's bottom edge (the player), z out of the screen, in mm,
-   origin at the stack's centre (the board outline's centre, half way between the two boards).
+   x to the screen's right edge, y to its top edge (the nose, away from the player), z out of the screen, in
+   mm, right-handed: KiCad's VRML frame, centred. Origin at the stack's centre (the board outline's centre, half way between the two boards).
 4. Merges the triangles by material (the solder mask keeps its transparency: the viewer draws it over the
    copper and the core as KiCad does), takes the OLED's active area (material colour 0.05 0.25 0.45) out of the mesh and records its corners: the
    viewer draws the live screen there.
@@ -66,7 +66,6 @@ SCREEN = (0.05, 0.25, 0.45)            # the OLED's active area (lab/tools/showc
 MASK = (0.078, 0.2, 0.141)             # KiCad's solder mask (drawn with its transparency)
 SILK = (0.961, 0.961, 0.961)
 COPPER = (0.75, 0.61, 0.23)
-CORE = (0.0, 0.0, 0.0)
 STEEL = (0.62, 0.63, 0.65)
 SCALE = 1.0 / 256.0                    # int16 positions: ±128 mm in 1/256 mm steps
 
@@ -252,12 +251,12 @@ def hex_prism(cx, cy, z0, z1, across=5.5, hole=3.2):
 
 
 def board_to_device(tris, z_off):
-    """VRML (x right, y up = toward the nose, z up out of the front) to device axes."""
+    """VRML (x right, y up = toward the nose, z up out of the front) to device axes: the same axes, centred.
+    The board outline runs from y = -46 (the player's edge) to 0 (the nose) in the export."""
     out = np.empty_like(tris)
     out[..., 0] = tris[..., 0] - W / 2
-    out[..., 1] = -tris[..., 1] - H / 2
+    out[..., 1] = tris[..., 1] + H / 2
     out[..., 2] = tris[..., 2] + z_off - TOP_Z / 2
-    # y is mirrored, so the stored winding is mirrored too; the viewer mirrors y back when it draws
     return out
 
 
@@ -297,8 +296,8 @@ def build(wrl_dir):
     x0, x1, y0, y1, zs = screen
     print(f'  screen (board mm): x {x0:.2f}..{x1:.2f}  y {y0:.2f}..{y1:.2f}  z {zs:.2f}'
           f'  = {x1 - x0:.2f} x {y1 - y0:.2f} mm')
-    dev = lambda bx, by: (bx - W / 2, by - H / 2, zs - TOP_Z / 2)  # noqa: E731
-    # the module's header is at the nose (y = 0 side) and the firmware sets segment remap + COM scan
+    dev = lambda bx, by: (bx - W / 2, H / 2 - by, zs - TOP_Z / 2)  # noqa: E731  (board y runs down from the nose)
+    # the module's header is at the nose (board y = 0, device +y) and the firmware sets segment remap + COM scan
     # reversed (oled.c 0xA1 0xC8), the usual upright image: pixel (0, 0) at the nose-left corner
     corners = [dev(x0, y0), dev(x1, y0), dev(x1, y1), dev(x0, y1)]
     return groups, corners

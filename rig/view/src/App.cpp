@@ -44,6 +44,7 @@ bool App::init(NVGcontext* vg, std::string& err)
     nvgAddFallbackFontId(vg, ui_.mono, ui_.sans);
     sceneOk_ = scene_.init(opt_.assets + "/stack.mesh", sceneErr_);
     if (!sceneOk_) std::fprintf(stderr, "slrig-view: 3D view off: %s\n", sceneErr_.c_str());
+    if (sceneOk_ && opt_.camera) scene_.setCamera(opt_.camYaw, opt_.camElev, opt_.camZoom);
     net_.start();
     return true;
 }
@@ -85,6 +86,20 @@ static const json& itemsOf(const json& r)
     if (r.is_array()) return r;
     if (r.is_object() && r.contains("items") && r["items"].is_array()) return r["items"];
     return empty;
+}
+
+// a session.list item: "date" (the mock) or "started" (slrigd, ISO time)
+static Session sessionOf(const json& s)
+{
+    std::string when = js(s, "date", js(s, "started"));
+    if (when.size() >= 16 && when[10] == 'T') when = when.substr(0, 10) + " " + when.substr(11, 5);
+    return {js(s, "name"), when, js(s, "test"), jd(s, "secs")};
+}
+
+// newest first, whatever order the daemon lists them in (the names start with the date and time)
+static void sortSessions(std::vector<Session>& v)
+{
+    std::stable_sort(v.begin(), v.end(), [](const Session& a, const Session& b) { return a.name > b.name; });
 }
 
 void App::onConnected()
@@ -131,9 +146,10 @@ void App::onConnected()
         if (!ok) return;
         m_.sessions.clear();
         for (auto& s : itemsOf(r))
-            m_.sessions.push_back({js(s, "name"), js(s, "date"), js(s, "test"), jd(s, "secs")});
+            m_.sessions.push_back(sessionOf(s));
+        sortSessions(m_.sessions);
         if (selSession_.empty() && !m_.sessions.empty()) {
-            selSession_ = m_.sessions.back().name;
+            selSession_ = m_.sessions.front().name;
             std::string name = selSession_;
             run("session.analyze", {{"name", name}}, [this, name](bool ok2, const json& a, const json& e) {
                 m_.analysisFor = name;
@@ -145,12 +161,17 @@ void App::onConnected()
         if (!ok) return;
         m_.tests.clear();
         for (auto& t : itemsOf(r))
-            m_.tests.push_back({js(t, "name"), js(t, "title", js(t, "name")), js(t, "help"), ji(t, "steps"), jd(t, "secs")});
+            m_.tests.push_back({js(t, "name"), js(t, "title", js(t, "name")), js(t, "help", js(t, "why")),
+                                t.contains("steps") && t["steps"].is_array() ? static_cast<int>(t["steps"].size())
+                                                                               : ji(t, "steps"),
+                                jd(t, "secs")});
     });
     run("log.tail", {{"n", 40}}, [this](bool ok, const json& r, const json&) {
-        if (!ok || !r.is_object() || !r.contains("lines") || !r["lines"].is_array()) return;
+        // a list of lines, or {"lines": [...]} (the mock)
+        const json& lines = r.is_array() ? r : (r.is_object() && r.contains("lines") ? r["lines"] : json());
+        if (!ok || !lines.is_array()) return;
         std::deque<LogLine> old;
-        for (auto& l : r["lines"]) {
+        for (auto& l : lines) {
             std::string lv = js(l, "level", "info");
             std::string text = js(l, "text");
             int level = lv == "error" ? 2 : lv == "warn" || lv == "warning" ? 1 : 0;
@@ -159,6 +180,13 @@ void App::onConnected()
         }
         for (auto& l : m_.logs) old.push_back(l);
         m_.logs = std::move(old);
+        // a daemon that keeps the commands too (the mock does): the strip starts with them
+        if (r.contains("cmds") && r["cmds"].is_array() && m_.cmds.empty())
+            for (auto& c : r["cmds"]) {
+                json push = c;
+                push["ev"] = "cmds";
+                m_.apply(push, now_, now_);
+            }
     });
 }
 
@@ -185,8 +213,26 @@ void App::requestCurve()
             c.full = jf(t, "full", 45);
             c.hyst = jf(t, "hyst", 0);
             c.sign = jf(t, "sign", 1);
-            c.speedMin = jf(t, "speed_min", 0);
-            c.speedMax = jf(t, "speed_max", 0);
+            c.speedMin = jf(t, "speed_min", jf(r, "spd_min", 0));
+            c.speedMax = jf(t, "speed_max", jf(r, "spd_max", 0));
+            // slrigd: "detent", per angle point, 0 or the speed held there; runs of it become ranges
+            std::vector<float> held = floats(t, "detent");
+            if (held.size() == c.angle.size() && c.speed.size() == c.angle.size()) {
+                for (size_t i = 0; i < held.size();) {
+                    if (!(held[i] > 0)) { i++; continue; }
+                    size_t j = i;
+                    float sgn = c.speed[i] < 0 ? -1.0f : 1.0f;
+                    while (j + 1 < held.size() && held[j + 1] == held[i] && (c.speed[j + 1] < 0 ? -1.0f : 1.0f) == sgn) j++;
+                    Curve::Det x;
+                    x.speed = sgn * held[i];
+                    x.lo = c.angle[i];
+                    x.hi = c.angle[j];
+                    x.range = true;
+                    c.detents.push_back(x);
+                    i = j + 1;
+                }
+            }
+            // or "detents": plain speeds, or {speed, lo, hi}
             if (t.contains("detents") && t["detents"].is_array())
                 for (auto& d : t["detents"]) {
                     Curve::Det x;
@@ -230,6 +276,17 @@ void App::handleReply(const json& msg)
     cb(ok, msg.contains("result") ? msg["result"] : none, msg.contains("error") ? msg["error"] : none);
 }
 
+// a value on the item's step, as a double, so 0.67 goes out as 0.67 and not as a float's 0.6699999570846558
+static double onStep(const TuneItem& it, float v)
+{
+    double d = v;
+    if (it.step > 0) d = it.min + std::round((d - it.min) / it.step) * static_cast<double>(it.step);
+    if (it.kind != "float") d = std::round(d);
+    double dec = it.step > 0 ? std::max(0.0, std::ceil(-std::log10(static_cast<double>(it.step)) - 1e-9)) : 6;
+    double k = std::pow(10.0, std::min(dec, 9.0));
+    return std::round(d * k) / k;
+}
+
 void App::update(double now)
 {
     now_ = now;
@@ -254,7 +311,20 @@ void App::update(double now)
             run("session.list", json::object(), [this](bool ok, const json& r, const json&) {
                 if (!ok) return;
                 m_.sessions.clear();
-                for (auto& s : itemsOf(r)) m_.sessions.push_back({js(s, "name"), js(s, "date"), js(s, "test"), jd(s, "secs")});
+                for (auto& s : itemsOf(r)) m_.sessions.push_back(sessionOf(s));
+                sortSessions(m_.sessions);
+                // the session that just ended: shown with its analysis
+                std::string name = m_.sessionName;
+                if (!name.empty() && std::any_of(m_.sessions.begin(), m_.sessions.end(),
+                                                 [&](const Session& x) { return x.name == name; })) {
+                    selSession_ = name;
+                    m_.analysis = json();
+                    m_.analysisFor = name;
+                    run("session.analyze", {{"name", name}}, [this, name](bool ok2, const json& a, const json& e) {
+                        m_.analysisFor = name;
+                        m_.analysis = ok2 ? a : json{{"error", js(e, "message", "failed")}};
+                    });
+                }
             });
     }
     if (curveDirty_ && m_.connected && (!curveInFlight_ || now - curveAskedAt_ > 2.0) && now - curveAskedAt_ > 0.08)
@@ -263,7 +333,8 @@ void App::update(double now)
     for (auto it = tuneSend_.begin(); it != tuneSend_.end();) {
         auto& [name, w] = *it;
         if (w.second < 0 || now - w.second >= 0.05) {
-            run("tune.set", {{"name", name}, {"value", w.first}});
+            const TuneItem* ti = m_.findTune(name);
+            run("tune.set", {{"name", name}, {"value", ti ? onStep(*ti, w.first) : static_cast<double>(w.first)}});
             it = tuneSend_.erase(it);
         } else ++it;
     }
@@ -435,6 +506,7 @@ void App::frame(unsigned target, int winW, int winH, int fbW, int fbH, double no
         }
     }
 
+    auto t1 = std::chrono::steady_clock::now();
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glViewport(0, 0, fbW, fbH);
     glClearColor(((BG >> 16) & 255) / 255.0f, ((BG >> 8) & 255) / 255.0f, (BG & 255) / 255.0f, 1.0f);
@@ -469,7 +541,12 @@ void App::frame(unsigned target, int winW, int winH, int fbW, int fbH, double no
         ui_.text(t.cx(), t.cy(), toast_, ui_.sans, 14, hex(INK, a), NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
     }
     ui_.end();
+    auto t2 = std::chrono::steady_clock::now();
     nvgEndFrame(vg_);
+    auto t3 = std::chrono::steady_clock::now();
+    split_.scene = std::chrono::duration<float, std::milli>(t1 - t0).count();
+    split_.panels = std::chrono::duration<float, std::milli>(t2 - t1).count();
+    split_.flush = std::chrono::duration<float, std::milli>(t3 - t2).count();
 
     in_.pressed = in_.released = in_.dbl = in_.rpressed = false;
     in_.wheel = 0;
@@ -578,69 +655,77 @@ void App::drawStatus(Rect r)
 {
     ui_.fill(r, hex(PANEL));
     ui_.hline(r.x, r.r(), r.y + 0.75f, hex(LINE), 1.5f);
-    float x = r.x + 16, cy = r.cy() + 0.5f;
-    const float fs = 12.5f;
-    auto sep = [&] { ui_.vline(std::round(x + 8) + 0.5f, r.y + 7, r.b() - 7, hex(LINE), 1); x += 17; };
-    auto put = [&](const std::string& s, unsigned col) { x = ui_.text(x, cy, s, ui_.mono, fs, hex(col)); };
-    const Status& st = m_.status;
+    const float fs = 12.5f, cy = r.cy() + 0.5f;
     char b[160];
-    if (!m_.connected) {
-        nvgBeginPath(vg_);
-        nvgCircle(vg_, x + 3, cy, 3);
-        nvgFillColor(vg_, hex(DIM));
-        nvgFill(vg_);
-        x += 12;
-        put("no daemon", MUTE);
-        sep();
-        put(net_.path(), DIM);
-        sep();
-        put("retrying every second", DIM);
-    } else {
-        std::string src = st.valid ? st.source : "?";
-        nvgBeginPath(vg_);
-        nvgCircle(vg_, x + 3, cy, 3);
-        nvgFillColor(vg_, src == "none" ? hex(YELLOW) : hex(GOOD));
-        nvgFill(vg_);
-        x += 12;
-        put(src, src == "none" ? YELLOW : INK);
-        sep();
-        if (!st.boardName.empty()) {
-            std::snprintf(b, sizeof b, "%s %s  %s", st.boardName.c_str(), st.version.c_str(), st.serial.c_str());
-            put(b, MUTE);
-            sep();
-        }
-        std::snprintf(b, sizeof b, "motion %.0f/s", static_cast<double>(m_.rMotion.perSec));
-        put(b, MUTE);
-        std::snprintf(b, sizeof b, "  state %.0f/s", static_cast<double>(m_.rState.perSec));
-        put(b, MUTE);
-        std::snprintf(b, sizeof b, "  screen %.1f/s", static_cast<double>(m_.rScreen.perSec));
-        put(b, MUTE);
-        sep();
-        long drops = st.dropMotion + st.dropState + st.dropScreen;
-        std::snprintf(b, sizeof b, "drops %ld/%ld/%ld", st.dropMotion, st.dropState, st.dropScreen);
-        put(b, drops ? ORANGE : DIM);
-        if (m_.state.valid) {
-            sep();
-            std::snprintf(b, sizeof b, "cpu %.0f%%  heap %.0f KB  i2c %d", static_cast<double>(m_.state.cpu),
-                          static_cast<double>(m_.state.heap_kb), m_.state.i2c_fail);
-            put(b, m_.state.i2c_fail ? ORANGE : DIM);
-        }
-        if (st.recording || m_.sessionState == "recording") {
-            sep();
-            put("● recording", BAD);
-        }
-    }
     // the right: this viewer's own numbers
     float mx = 0;
     for (int i = 0; i < cpuHistN_; i++) mx = std::max(mx, cpuHist_[i]);
     std::snprintf(b, sizeof b, "frame %.2f ms (max %.2f)", static_cast<double>(cpuLast_), static_cast<double>(mx));
     std::string right = b;
     if (latLast_ > 0) {
-        std::snprintf(b, sizeof b, "   rx→draw %.1f ms (max %.1f)", static_cast<double>(latAvg_),
+        std::snprintf(b, sizeof b, "   rx to draw %.1f ms (max %.1f)", static_cast<double>(latAvg_),
                       static_cast<double>(std::max(latMax_, latWinMax_)));
         right += b;
     }
+    float rightW = ui_.textW(right, ui_.mono, fs);
+    if (rightW > r.w * 0.45f) {         // narrow: the frame time alone
+        std::snprintf(b, sizeof b, "frame %.2f ms", static_cast<double>(cpuLast_));
+        right = b;
+        rightW = ui_.textW(right, ui_.mono, fs);
+    }
     ui_.text(r.r() - 16, cy, right, ui_.mono, fs, hex(DIM), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+
+    // the left: the source first; then what fits, the least needed dropped first
+    struct Item { std::string text; unsigned colour; int prio; bool dot; };
+    std::vector<Item> items;
+    const Status& st = m_.status;
+    if (!m_.connected) {
+        items.push_back({"no daemon", MUTE, 0, true});
+        items.push_back({net_.path(), DIM, 1, false});
+        items.push_back({"retrying every second", DIM, 2, false});
+    } else {
+        std::string src = st.valid ? st.source : "?";
+        items.push_back({src, src == "none" ? YELLOW : INK, 0, true});
+        if (!st.boardName.empty()) {
+            std::snprintf(b, sizeof b, "%s %s  %s", st.boardName.c_str(), st.version.c_str(), st.serial.c_str());
+            items.push_back({b, MUTE, 5, false});
+        }
+        std::snprintf(b, sizeof b, "motion %.0f/s  state %.0f/s  screen %.1f/s", static_cast<double>(m_.rMotion.perSec),
+                      static_cast<double>(m_.rState.perSec), static_cast<double>(m_.rScreen.perSec));
+        items.push_back({b, MUTE, 2, false});
+        long drops = st.dropMotion + st.dropState + st.dropScreen;
+        std::snprintf(b, sizeof b, "drops %ld/%ld/%ld", st.dropMotion, st.dropState, st.dropScreen);
+        items.push_back({b, drops ? ORANGE : DIM, drops ? 1 : 3, false});
+        if (m_.state.valid) {
+            std::snprintf(b, sizeof b, "cpu %.0f%%  heap %.0f KB  i2c %d", static_cast<double>(m_.state.cpu),
+                          static_cast<double>(m_.state.heap_kb), m_.state.i2c_fail);
+            items.push_back({b, m_.state.i2c_fail ? ORANGE : DIM, m_.state.i2c_fail ? 1 : 4, false});
+        }
+        if (st.recording || m_.sessionState == "recording") items.push_back({"recording", BAD, 1, true});
+    }
+    float avail = r.w - 32 - rightW - 24;
+    auto widthOf = [&](const std::vector<Item>& v) {
+        float w = 0;
+        for (auto& it : v) w += ui_.textW(it.text, ui_.mono, fs) + (it.dot ? 12 : 0) + 17;
+        return w;
+    };
+    while (items.size() > 1 && widthOf(items) > avail) {
+        auto worst = std::max_element(items.begin(), items.end(), [](const Item& a, const Item& c) { return a.prio < c.prio; });
+        items.erase(worst);
+    }
+    float x = r.x + 16;
+    for (size_t i = 0; i < items.size(); i++) {
+        const Item& it = items[i];
+        if (i) { ui_.vline(std::round(x + 8) + 0.5f, r.y + 7, r.b() - 7, hex(LINE), 1); x += 17; }
+        if (it.dot) {
+            nvgBeginPath(vg_);
+            nvgCircle(vg_, x + 3, cy, 3);
+            nvgFillColor(vg_, it.colour == BAD ? hex(BAD) : !m_.connected ? hex(DIM) : it.colour == YELLOW ? hex(YELLOW) : hex(GOOD));
+            nvgFill(vg_);
+            x += 12;
+        }
+        x = ui_.text(x, cy, ui_.fit(it.text, ui_.mono, fs, std::max(20.0f, r.x + 16 + avail - x)), ui_.mono, fs, hex(it.colour));
+    }
 }
 
 // ------------------------------------------------------------------------------------------- logs
@@ -674,11 +759,12 @@ void App::drawLogs(Rect r)
             if (mcp && age < 2.0) ui_.fill({in.x - 6, y - lh * 0.5f, in.w + 12, lh}, hex(BY_MCP, 0.10f * static_cast<float>(2.0 - age)));
             std::string by = c.by;
             for (auto& ch : by) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-            Rect tag{x, std::round(y - 6.5f), 34, 13};
+            Rect tag{x, std::round(y - 7.5f), 38, 15};
             if (mcp) ui_.fill(tag, hex(BY_MCP), 2);
             else ui_.stroke(tag, hex(col, 0.6f), 1, 2);
-            pxTextC(vg_, PX_TINY, tag.cx(), tag.y + 4, 1, by.c_str(), mcp ? nvgRGBf(0, 0, 0) : hex(col));
-            x += 42;
+            ui_.text(tag.cx(), tag.cy() + 0.5f, by, ui_.mono, 10.5f, mcp ? nvgRGBf(0, 0, 0) : hex(col),
+                     NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+            x += 46;
             x = ui_.text(x, y, c.cmd, ui_.mono, fs, mcp ? hex(INK) : hex(LOGTXT)) + 8;
             char ms[32];
             std::snprintf(ms, sizeof ms, "%d ms", c.ms);
@@ -760,9 +846,8 @@ void App::draw3dView(Rect r)
         auto tip = [&](V3 p, const char* s, unsigned col) {
             float sx, sy;
             if (!scene_.project(p, sx, sy)) return;
-            sx = r.x + sx / ui_.pxRatio;
-            sy = r.y + sy / ui_.pxRatio;
-            if (!r.shrink(8).has(sx, sy)) return;
+            sx = std::clamp(r.x + sx / ui_.pxRatio, r.x + 14, r.r() - 14);
+            sy = std::clamp(r.y + sy / ui_.pxRatio, r.y + 44, r.b() - 14);
             pxTextC(vg, PX_SMALL, sx, std::round(sy - 5), 2, s, hex(col));
         };
         if (showAxes_) {
@@ -776,8 +861,8 @@ void App::draw3dView(Rect r)
     // toggles, top right
     float bx = r.r() - 12;
     auto tgl = [&](const char* lab, bool on, const char* key) {
-        float w = pxWidth(PX_SMALL, lab, 1) + 16;
-        Rect b{bx - w, r.y + 10, w, 22};
+        float w = Ui::btnW(lab, 16);
+        Rect b{bx - w, r.y + 10, w, 24};
         bx -= w + 6;
         return ui_.button(Ui::id(key), b, lab, on ? BTN_ON : BTN_OUTLINE, hex(MUTE));
     };
@@ -812,17 +897,19 @@ void App::draw3dView(Rect r)
         std::snprintf(b, sizeof b, "%.3f g", static_cast<double>(len(m_.acc)));
         ui_.text(x2 + 62, y + 44, b, ui_.mono, 15, hex(INK));
 
-        // the ghost's legend, bottom right
+        // the ghost's legend: bottom right, or above the numbers when the view is narrow
+        float numbersR = x2 + 62 + ui_.textW("0.000 g", ui_.mono, 15) + 16;
         float gx = r.r() - 16, gy = r.b() - 20;
         if (m_.haveRef) {
             float ang = qangle(s.quat, m_.refQuat);
             std::snprintf(b, sizeof b, "%.1f°", static_cast<double>(ang));
-            float w = ui_.text(gx, gy, b, ui_.mono, 13, hex(INK), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-            (void)w;
-            float tw = ui_.textW(b, ui_.mono, 13);
-            ui_.text(gx - tw - 8, gy, "ghost: the host's fusion, off by", ui_.sans, 13, hex(MUTE),
-                     NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-            gy -= 20;
+            const char* words = "ghost: the host's fusion, off by";
+            float tw = ui_.textW(b, ui_.mono, 13), ww = ui_.textW(words, ui_.sans, 13);
+            if (gx - tw - 8 - ww < numbersR) { gx = r.x + 16 + tw + 8 + ww; gy = y - 30; }
+            ui_.text(gx, gy, b, ui_.mono, 13, hex(INK), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+            ui_.text(gx - tw - 8, gy, words, ui_.sans, 13, hex(MUTE), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+            gx = r.r() - 16;
+            gy = r.b() - 20 - (gy == r.b() - 20 ? 20 : 0);
         }
         std::string chips;
         if (s.rest) chips += "REST  ";
@@ -830,7 +917,7 @@ void App::draw3dView(Rect r)
         if (s.injected || m_.injected) chips += "INJECTED  ";
         if (!chips.empty()) pxTextR(vg, PX_SMALL, gx, std::round(gy - 5), 2, chips.c_str(), hex(ORANGE));
     }
-    if (m_.prompt.active) drawPrompt(r);
+    if (m_.prompt.active && !(m_.prompt.phase == "done" && now_ - m_.prompt.rxLocal > 8.0)) drawPrompt(r);
 }
 
 void App::drawNoDaemon(Rect r)
@@ -851,15 +938,21 @@ void App::drawPrompt(Rect r)
     double left = std::max(0.0, p.secs - (now_ - p.rxLocal));
     double total = p.total > 0 ? p.total : std::max(p.secs, 1.0);
     unsigned col = p.phase == "go" ? GOOD : p.phase == "done" ? INK : ACCENT;
-    float cw = std::min(r.w - 40, 640.0f);
+    float cw = std::min(r.w - 32, 640.0f);
+    bool small = cw < 520;
+    bool done = p.phase == "done";
+    float fsz = done ? (small ? 15.0f : 18.0f) : small ? 22.0f : 30.0f;
+    int textFont = done ? ui_.sans : ui_.bold;
     Rect card{std::round(r.cx() - cw * 0.5f), r.y + 44, cw, 0};
-    float textW = card.w - 150;
-    float th = ui_.wrapHeight(textW, p.text, ui_.bold, 30, 1.2f);
-    card.h = std::max(118.0f, th + 64);
+    float ringX = small ? 44.0f : 64.0f;
+    float tx0 = small ? 92.0f : 128.0f;
+    float textW = card.w - tx0 - 20;
+    float th = ui_.wrapHeight(textW, p.text, textFont, fsz, 1.25f);
+    card.h = std::max(small ? 96.0f : 118.0f, th + 76);
     ui_.fill(card, hex(0x0d0d0c, 0.93f), 4);
     ui_.stroke(card, hex(col, 0.9f), 1.5f, 4);
     // the countdown ring
-    float cx = card.x + 64, cy = card.y + card.h * 0.5f, rad = 38;
+    float cx = card.x + ringX, cy = card.y + card.h * 0.5f, rad = small ? 28.0f : 38.0f;
     nvgBeginPath(vg_);
     nvgCircle(vg_, cx, cy, rad);
     nvgStrokeColor(vg_, hex(LINE));
@@ -878,21 +971,22 @@ void App::drawPrompt(Rect r)
     char b[32];
     std::snprintf(b, sizeof b, "%d", static_cast<int>(std::ceil(left)));
     if (p.phase == "done") std::snprintf(b, sizeof b, "OK");
-    float bw = pxWidth(PX_BIG, b, 2);
-    pxText(vg_, PX_BIG, std::round(cx - bw * 0.5f), std::round(cy - 18), 2, b, hex(INK));
+    float bc = small ? 1.0f : 2.0f;
+    float bw = pxWidth(PX_BIG, b, bc);
+    pxText(vg_, PX_BIG, std::round(cx - bw * 0.5f), std::round(cy - 9 * bc), bc, b, hex(INK));
     // step, phase, the words
-    float tx = card.x + 128;
+    float tx = card.x + tx0;
     std::string ph = p.phase == "go" ? "GO" : p.phase == "done" ? "DONE" : "GET READY";
     std::snprintf(b, sizeof b, "STEP %d OF %d", p.step, p.of);
     float w = pxText(vg_, PX_SMALL, tx, card.y + 18, 2, ph.c_str(), hex(col));
-    pxText(vg_, PX_SMALL, tx + w + 14, card.y + 18, 2, b, hex(MUTE));
+    if (p.of > 0 && !done) pxText(vg_, PX_SMALL, tx + w + 14, card.y + 18, 2, b, hex(MUTE));
     if (!p.test.empty()) {
         std::string t = p.test;
         for (auto& c : t) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
         pxTextR(vg_, PX_SMALL, card.r() - 16, card.y + 18, 2, t.c_str(), hex(DIM));
     }
     nvgTextLineHeight(vg_, 1.2f);
-    ui_.wrap(tx, card.y + 40, textW, p.text, ui_.bold, 30, hex(INK), 1.2f);
+    ui_.wrap(tx, card.y + 40, textW, p.text, textFont, fsz, hex(INK), 1.25f);
     // abort
     Rect ab{card.r() - 86, card.b() - 34, 74, 24};
     if (p.phase != "done" && ui_.button(Ui::id("prompt.abort"), ab, "ABORT", BTN_QUIET)) run("test.abort");

@@ -146,6 +146,19 @@ void main() {
 }
 )";
 
+const char* LINE_VS = R"(#version 330 core
+layout(location = 0) in vec3 aPos;
+uniform mat4 uModel;
+uniform mat4 uVP;
+void main() { gl_Position = uVP * uModel * vec4(aPos, 1.0); }
+)";
+
+const char* LINE_FS = R"(#version 330 core
+uniform vec4 uColor;
+out vec4 o;
+void main() { o = uColor; }
+)";
+
 unsigned compile(unsigned type, const char* src, std::string& err)
 {
     unsigned s = glCreateShader(type);
@@ -194,9 +207,9 @@ void rgb(unsigned hex, float out[3])
     out[2] = (hex & 255) / 255.0f;
 }
 
-// device axes to the render world: y mirrored (device y points to the player; the world's y away from him),
-// so the world is right-handed for GL. See PROTOCOL.md "Frames".
-const M4 MIRROR = m_scale({1, -1, 1});
+// Device axes (PROTOCOL.md "Frames"): x to the screen's right edge, y to its top edge (the nose), z out of the
+// screen, right-handed, as the mesh is stored. The quaternion takes them into the world (z up) and the world is
+// drawn as it is: the player stands on the world's -y side.
 
 constexpr float GROUND_Z = -58.0f;
 constexpr float SHADOW_EXT = 95.0f;
@@ -209,7 +222,8 @@ bool Scene3D::buildShaders(std::string& err)
     progShadow_ = link(MESH_VS, SHADOW_FS, err);
     progGround_ = link(GROUND_VS, GROUND_FS, err);
     progOled_ = link(OLED_VS, OLED_FS, err);
-    return progMesh_ && progShadow_ && progGround_ && progOled_;
+    progLine_ = link(LINE_VS, LINE_FS, err);
+    return progMesh_ && progShadow_ && progGround_ && progOled_ && progLine_;
 }
 
 bool Scene3D::init(const std::string& meshPath, std::string& err)
@@ -331,6 +345,32 @@ bool Scene3D::init(const std::string& meshPath, std::string& err)
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 20, reinterpret_cast<void*>(12));
         glBindVertexArray(0);
     }
+    // the ghost's lines: both boards as slabs (94 x 46 x 1.6 mm, mid planes 12.6 mm apart, as tools/build_mesh.py
+    // puts them) and the screen
+    {
+        std::vector<float> l;
+        auto L = [&](V3 a, V3 b) { l.insert(l.end(), {a.x, a.y, a.z, b.x, b.y, b.z}); };
+        const float hx = 47.0f, hy = 23.0f, ht = 0.8f;
+        for (float zc : {-6.3f, 6.3f}) {
+            V3 c[8];
+            for (int i = 0; i < 8; i++)
+                c[i] = {(i & 1) ? hx : -hx, (i & 2) ? hy : -hy, zc + ((i & 4) ? ht : -ht)};
+            for (int i = 0; i < 8; i++)
+                for (int bit : {1, 2, 4})
+                    if (!(i & bit)) L(c[i], c[i | bit]);
+        }
+        V3 n{0, 0, 0.05f};
+        for (int i = 0; i < 4; i++) L(screen_[i] + n, screen_[(i + 1) % 4] + n);
+        lineVerts_ = static_cast<int>(l.size() / 3);
+        glGenVertexArrays(1, &lineVao_);
+        glBindVertexArray(lineVao_);
+        glGenBuffers(1, &lineVbo_);
+        glBindBuffer(GL_ARRAY_BUFFER, lineVbo_);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(l.size() * 4), l.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, nullptr);
+        glBindVertexArray(0);
+    }
     // the OLED texture and the shadow target
     glGenTextures(1, &oledTex_);
     glBindTexture(GL_TEXTURE_2D, oledTex_);
@@ -357,11 +397,11 @@ bool Scene3D::init(const std::string& meshPath, std::string& err)
 
 void Scene3D::destroy()
 {
-    unsigned vaos[] = {vao_, arrowVao_, quadVao_};
-    glDeleteVertexArrays(3, vaos);
-    unsigned bufs[] = {vbo_, ibo_, arrowVbo_, quadVbo_};
-    glDeleteBuffers(4, bufs);
-    for (unsigned p : {progMesh_, progGround_, progOled_, progShadow_})
+    unsigned vaos[] = {vao_, arrowVao_, quadVao_, lineVao_};
+    glDeleteVertexArrays(4, vaos);
+    unsigned bufs[] = {vbo_, ibo_, arrowVbo_, quadVbo_, lineVbo_};
+    glDeleteBuffers(5, bufs);
+    for (unsigned p : {progMesh_, progGround_, progOled_, progShadow_, progLine_})
         if (p) glDeleteProgram(p);
     unsigned fbos[] = {msFbo_, shFbo_, resolveFbo_};
     glDeleteFramebuffers(3, fbos);
@@ -407,7 +447,7 @@ void Scene3D::ensureTargets(int w, int h)
     texGeneration_++;
 }
 
-M4 Scene3D::boardModel(Quat q) const { return MIRROR * m_quat(q); }
+M4 Scene3D::boardModel(Quat q) const { return m_quat(q); }
 
 void Scene3D::orbit(float dxDeg, float dyDeg)
 {
@@ -420,11 +460,18 @@ void Scene3D::zoom(float steps) { zoom_ = std::clamp(zoom_ * std::pow(0.9f, step
 void Scene3D::resetCamera()
 {
     yaw_ = 0;
-    elev_ = 34;
+    elev_ = 38;
     zoom_ = 1;
 }
 
-bool Scene3D::cameraMoved() const { return yaw_ != 0 || elev_ != 34 || zoom_ != 1; }
+void Scene3D::setCamera(float yawDeg, float elevDeg, float zoom)
+{
+    yaw_ = yawDeg;
+    elev_ = std::clamp(elevDeg, -85.0f, 89.0f);
+    zoom_ = std::clamp(zoom, 0.25f, 4.0f);
+}
+
+bool Scene3D::cameraMoved() const { return yaw_ != 0 || elev_ != 38 || zoom_ != 1; }
 
 bool Scene3D::project(V3 world, float& sx, float& sy) const
 {
@@ -474,7 +521,7 @@ void Scene3D::render(const SceneInput& in, int w, int h)
     const float fovy = 28.0f;
     float aspect = static_cast<float>(w) / static_cast<float>(h);
     float tv = std::tan(fovy * 0.5f * 3.14159265f / 180.0f), th = tv * aspect;
-    float fit = std::max(66.0f / th, 52.0f / tv);
+    float fit = std::max(60.0f / th, 48.0f / tv);
     float dist = fit * zoom_;
     float ey = elev_ * 3.14159265f / 180.0f, ez = yaw_ * 3.14159265f / 180.0f;
     V3 target{0, 0, -4};
@@ -605,23 +652,23 @@ void Scene3D::render(const SceneInput& in, int w, int h)
         rgb(theme::AX_Y, cy);
         rgb(theme::AX_Z, cz);
         rgb(theme::GRAV, cg);
-        const float L = 64.0f;
+        const float L = 58.0f;
         V3 ex = norm(xform(model, {1, 0, 0}) - o), ey2 = norm(xform(model, {0, 1, 0}) - o),
            ez2 = norm(xform(model, {0, 0, 1}) - o);
         if (in.axes) {
             drawArrow(o, ex, L, cx, 1.0f, true);
-            drawArrow(o, ey2, L * 0.72f, cy, 1.0f, true);
-            drawArrow(o, ez2, L * 0.72f, cz, 1.0f, true);
+            drawArrow(o, ey2, L * 0.7f, cy, 1.0f, true);
+            drawArrow(o, ez2, L * 0.7f, cz, 1.0f, true);
         }
         tipX = o + ex * (L + 5);
-        tipY = o + ey2 * (L * 0.72f + 5);
-        tipZ = o + ez2 * (L * 0.72f + 5);
+        tipY = o + ey2 * (L * 0.7f + 5);
+        tipZ = o + ez2 * (L * 0.7f + 5);
         if (in.gravity && in.haveAcc) {
             V3 a = in.acc;
             float g = len(a);
             if (g > 0.05f && std::isfinite(g)) {
                 V3 down = -norm(xform(model, a) - o);       // the measured gravity, in the world
-                float gl = 46.0f * std::clamp(g, 0.2f, 2.5f);
+                float gl = 40.0f * std::clamp(g, 0.2f, 2.5f);
                 drawArrow(o, down, gl, cg, 1.0f, true);
                 tipG = o + down * (gl + 5);
             } else tipG = o;
@@ -629,34 +676,28 @@ void Scene3D::render(const SceneInput& in, int w, int h)
         tipsValid = true;
     }
 
-    // the ghost: the host's reference fusion, drawn once (nearest surface only) and faint
+    // the ghost: where the host's reference fusion has the boards, as outlines (faint where the stack hides them)
     ghostAlpha = 0;
     if (in.live && in.haveRef) {
         float ang = qangle(in.q, in.ref);
-        ghostAlpha = std::clamp((ang - 1.0f) / 4.0f, 0.0f, 1.0f);
+        ghostAlpha = std::clamp((ang - 1.0f) / 3.0f, 0.0f, 1.0f);
         if (ghostAlpha > 0.01f) {
             M4 gm = boardModel(in.ref);
-            glUseProgram(progMesh_);
-            glUniformMatrix4fv(U(progMesh_, "uModel"), 1, GL_FALSE, gm.m);
-            glUniform1f(U(progMesh_, "uScale"), scale_);
-            glUniform1f(U(progMesh_, "uUseTint"), 1.0f);
-            glUniform4f(U(progMesh_, "uTint"), 0.80f, 0.86f, 0.95f, 1.0f);
-            glUniform1f(U(progMesh_, "uFlat"), 0.3f);
-            glBindVertexArray(vao_);
-            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-            glDrawElements(GL_TRIANGLES, opaqueCount_ + transCount_, GL_UNSIGNED_INT, nullptr);
-            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            glUseProgram(progLine_);
+            glUniformMatrix4fv(U(progLine_, "uModel"), 1, GL_FALSE, gm.m);
+            glUniformMatrix4fv(U(progLine_, "uVP"), 1, GL_FALSE, vp_.m);
+            glBindVertexArray(lineVao_);
             glEnable(GL_BLEND);
-            glDepthFunc(GL_LEQUAL);
             glDepthMask(GL_FALSE);
-            glUniform1f(U(progMesh_, "uAlpha"), 0.22f * ghostAlpha);
-            glDrawElements(GL_TRIANGLES, opaqueCount_ + transCount_, GL_UNSIGNED_INT, nullptr);
-            glDepthMask(GL_TRUE);
+            glDepthFunc(GL_GREATER);
+            glUniform4f(U(progLine_, "uColor"), 0.82f, 0.90f, 1.0f, 0.22f * ghostAlpha);
+            glDrawArrays(GL_LINES, 0, lineVerts_);
+            glDepthFunc(GL_LEQUAL);
+            glUniform4f(U(progLine_, "uColor"), 0.86f, 0.93f, 1.0f, 0.85f * ghostAlpha);
+            glDrawArrays(GL_LINES, 0, lineVerts_);
             glDepthFunc(GL_LESS);
+            glDepthMask(GL_TRUE);
             glDisable(GL_BLEND);
-            glUniform1f(U(progMesh_, "uUseTint"), 0.0f);
-            glUniform1f(U(progMesh_, "uFlat"), 0.0f);
-            glUniform1f(U(progMesh_, "uAlpha"), 1.0f);
         }
     }
 

@@ -18,6 +18,8 @@ struct Options {
     std::string tab = "tune";
     std::string assets;
     bool shot = false;
+    bool camera = false;
+    float camYaw = 0, camElev = 38, camZoom = 1;
 };
 
 enum Tab { TAB_TUNE, TAB_GESTURES, TAB_SETTINGS, TAB_SESSION, TAB_N };
@@ -43,6 +45,8 @@ public:
 
     // stats
     float cpuMs() const { return cpuLast_; }
+    struct Split { float scene = 0, panels = 0, flush = 0; };     // where a frame's CPU time went, ms
+    Split split() const { return split_; }
     Model& model() { return m_; }
     bool haveInitialData() const;
 
@@ -84,10 +88,9 @@ private:
     float yRange(const Series& s, const Trace* tr, int ntr, double t0, double t1, float minSpan, bool symmetric,
                  float& lo, float& hi);
 
-    std::map<std::string, std::pair<float, float>> plotRange_;   // eased y ranges, by title
+    struct PlotRange { float lo = 0, hi = 0; double shrinkSince = -1; };
+    std::map<std::string, PlotRange> plotRange_;                 // y ranges by title: grow at once, shrink late
     std::function<void(Rect, float, float)> plotUnderlayFn_;     // drawn under a plot's traces (once)
-    Rect plotUnderlay_;
-    float plotLo_ = 0, plotHi_ = 1;
 
     void setTune(TuneItem& it, float v, bool final);
     void stepTune(TuneItem& it, int dir, bool big);
@@ -122,7 +125,7 @@ private:
     float orbitX_ = 0, orbitY_ = 0;
     Rect view3d_;
     std::string focusTune_;
-    bool scrollToFocus_ = false;
+    bool scrollToFocus_ = false, scrollCenter_ = false;
     double focusFlash_ = -10;
     Ui::Scroll tuneScroll_, gestScroll_, setScroll_, sessScroll_;
     std::string selSession_;
@@ -150,6 +153,7 @@ private:
 
     // stats
     float cpuLast_ = 0;
+    Split split_;
     float cpuHist_[120] = {};
     int cpuHistN_ = 0, cpuHistI_ = 0;
     double drawnStateRx_ = 0;

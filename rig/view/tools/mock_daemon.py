@@ -69,9 +69,10 @@ def qaxis(axis, ang):
 
 
 def q_from_angles(pitch, roll, yaw):
-    """Device axes into the world: yaw about world z, then pitch (nose down +) about x, roll (right edge down +)
-    about y. Rx(+) takes the nose (-y) down and Ry(+) the right edge (+x) down, as PROTOCOL.md's frames say."""
-    return qmul(qmul(qaxis((0, 0, 1), yaw * D2R), qaxis((1, 0, 0), pitch * D2R)), qaxis((0, 1, 0), roll * D2R))
+    """Device axes (x right edge, y top edge = the nose, z out of the screen; right-handed) into the world (z up):
+    yaw about z, then the nose down by `pitch` (a turn about +x by -pitch), then the right edge down by `roll` (about
+    +y by +roll). Nose down 30: q = (cos -15, sin -15, 0, 0). Flat, screen up, yaw 0: the identity."""
+    return qmul(qmul(qaxis((0, 0, 1), yaw * D2R), qaxis((1, 0, 0), -pitch * D2R)), qaxis((0, 1, 0), roll * D2R))
 
 
 def qyaw(q):
@@ -324,9 +325,9 @@ class Mock:
         self.gest = {g[0]: {'name': g[0], 'group': g[1], 'rule': g[2], 'tune': [n for n in g[3] if n in self.tname],
                             'count': 0, 'last_t': None} for g in GESTURES}
         self.sessions = [
-            {'name': '2026-10-26-still', 'date': '2026-10-26 22:41', 'secs': 13.0, 'test': 'still', 'samples': 6500},
-            {'name': '2026-10-26-steps', 'date': '2026-10-26 22:44', 'secs': 32.0, 'test': 'steps', 'samples': 16000},
-            {'name': '2026-10-26-play', 'date': '2026-10-26 22:52', 'secs': 41.5, 'test': '', 'samples': 20750},
+            {'name': '2026-10-26-224110-test-still', 'started': '2026-10-26T22:41:10', 'secs': 13.0, 'test': 'still'},
+            {'name': '2026-10-26-224402-test-steps', 'started': '2026-10-26T22:44:02', 'secs': 32.0, 'test': 'steps'},
+            {'name': '2026-10-26-225217-play', 'started': '2026-10-26T22:52:17', 'secs': 41.5, 'test': None},
         ]
         self.recording = None           # (name, start t)
         self.test_task = None
@@ -359,6 +360,7 @@ class Mock:
         self.next_event = 2.0
         self.next_mcp = 4.0
         self.mcp_step = 0
+        self.pose = 'hand'
 
     def now(self):
         return time.monotonic() - self.t0
@@ -375,7 +377,10 @@ class Mock:
 
     # ------------------------------------------------------------------ the hand
     def angles(self, t):
-        """The true orientation: a slow hand, tremor, now and then a flick."""
+        """The true orientation (pitch, roll, yaw): a slow hand, tremor, now and then a flick; or a still pose."""
+        still = {'flat': (0, 0), 'nose-down': (30, 0), 'right-down': (0, 30)}.get(self.pose)
+        if still:
+            return still[0] + 0.02 * math.sin(t * 3.1), still[1] - 0.015 * math.sin(t * 2.3), 0.0
         pitch = 24 * math.sin(2 * math.pi * t / 9.0) + 9 * math.sin(2 * math.pi * t / 3.7 + 0.4)
         roll = 21 * math.sin(2 * math.pi * t / 13.0 + 1.0) + 4 * math.sin(2 * math.pi * t / 2.9)
         yaw = 28 * math.sin(2 * math.pi * t / 21.0) + 5 * math.sin(2 * math.pi * t / 5.3)
@@ -430,34 +435,24 @@ class Mock:
         n = max(5, min(2001, int(n)))
         sign = 1.0 if int(self.tv('tilt.sign', 1)) else -1.0
         full = self.tv('tilt.full', 45)
-        lim = max(60.0, full * 1.33)
-        angle, speed, det = [], [], {}
-        for k in range(n):
-            a = -lim + 2 * lim * k / (n - 1)
+        angle = [round(-90 + 180 * k / (n - 1), 3) for k in range(n)]
+        speed, detent = [], []
+        for a in angle:
             s, held = self.speed_of(a * sign / full)
-            angle.append(round(a, 3))
-            speed.append(round(s, 4))
-            if held:
-                key = (held, a > 0)
-                lo, hi = det.get(key, (a, a))
-                det[key] = (min(lo, a), max(hi, a))
+            speed.append(round(s, 5))
+            detent.append(round(held, 3))
         rd, rf = self.tv('roll.dead', 15), self.tv('roll.full', 45)
         rsign = 1.0 if int(self.tv('roll.sign', 1)) else -1.0
         on = int(self.tv('roll.on', 1))
-        ra, dl, stt = [], [], []
-        for k in range(n):
-            a = -lim + 2 * lim * k / (n - 1)
+        dl, stt = [], []
+        for a in angle:
             r = a * rsign if on else 0
             x = 0.0 if abs(r) < rd else min(1.0, (abs(r) - rd) / max(1e-6, rf - rd))
-            ra.append(round(a, 3))
             dl.append(round(x if r < 0 else 0.0, 4))
             stt.append(round(x if r > 0 else 0.0, 4))
-        return {'tilt': {'angle': angle, 'speed': speed, 'dead': self.tv('tilt.dead', 5), 'full': full,
-                         'hyst': self.tv('tilt.hyst', 0), 'sign': sign,
-                         'speed_min': self.setting('Speed min'), 'speed_max': self.setting('Speed max'),
-                         'detents': [{'speed': (k[0] if k[1] else -k[0]) * sign, 'lo': v[0], 'hi': v[1]}
-                                     for k, v in sorted(det.items())]},
-                'roll': {'angle': ra, 'delay': dl, 'stutter': stt, 'dead': rd, 'full': rf, 'sign': rsign}}
+        return {'tilt': {'angle': angle, 'speed': speed, 'detent': detent, 'dead': self.tv('tilt.dead', 5), 'full': full},
+                'roll': {'angle': angle, 'delay': dl, 'stutter': stt, 'dead': rd, 'full': rf},
+                'spd_min': self.setting('Speed min'), 'spd_max': self.setting('Speed max')}
 
     # ------------------------------------------------------------------ pushes
     async def push(self, ev, msg, stream=None):
@@ -518,7 +513,7 @@ class Mock:
             a = samples[-1][0]
             self.acc_f = [f + k * (x - f) for f, x in zip(self.acc_f, a)]
             ax, ay, az = self.acc_f
-            pitch = math.atan2(ay, math.hypot(ax, az)) * R2D
+            pitch = math.atan2(-ay, math.hypot(ax, az)) * R2D
             roll = math.atan2(-ax, math.hypot(ay, az)) * R2D
             sign = 1.0 if int(self.tv('tilt.sign', 1)) else -1.0
             full = self.tv('tilt.full', 45)
@@ -528,7 +523,10 @@ class Mock:
             live = abs(u) >= self.tv('tilt.dead', 5) / full
             zone = 'detent' if held else ('dead' if not live else 'fwd' if u >= 0 else 'back')
             if zone != self.zone and self.stream['events']:
-                await self.event('tilt.zone', {'dead': 0, 'fwd': 1, 'back': 2, 'detent': 3}[zone], 0, zone)
+                if zone == 'detent':
+                    await self.event('tilt.detent', round(held, 3), 0, f'{held:g}x')
+                else:
+                    await self.event('tilt.zone', {'dead': 0, 'fwd': 1, 'back': 2}[zone], 0, zone)
             self.zone = zone
             slew = max(0.001, self.tv('tilt.slew', 50) / 1000)
             self.speed_now += (speed_cmd - self.speed_now) * min(1.0, TICK / slew)
@@ -633,34 +631,32 @@ class Mock:
     async def run_test(self, name):
         spec = next((x for x in TESTS if x[0] == name), None)
         steps = spec[3]
-        sess = f'{time.strftime("%Y-%m-%d")}-{name}'
+        sess = f'{time.strftime("%Y-%m-%d-%H%M%S")}-test-{name}'
         self.recording = (sess, self.now())
         await self.push('session', {'state': 'recording', 'name': sess, 'secs': 0})
         try:
             for i, (text, secs) in enumerate(steps):
-                for phase, dur in (('ready', 3.0), ('go', float(secs))):
-                    end = time.monotonic() + dur
-                    while True:
-                        left = end - time.monotonic()
-                        if left <= 0:
-                            break
-                        self.prompt = {'test': name, 'step': i + 1, 'of': len(steps),
-                                       'text': text if phase == 'go' else f'Get ready: {text.lower()}',
-                                       'secs': round(left, 2), 'phase': phase, 'total': dur}
-                        await self.push('prompt', self.prompt)
-                        await asyncio.sleep(min(0.5, left))
-            self.prompt = {'test': name, 'step': len(steps), 'of': len(steps), 'text': 'Done', 'secs': 0,
-                           'phase': 'done', 'total': 0}
-            await self.push('prompt', self.prompt)
-            await asyncio.sleep(1.5)
+                base = {'test': name, 'step': i + 1, 'of': len(steps), 'text': text}
+                for left in (3, 2, 1):
+                    self.prompt = dict(base, secs=left, phase='ready', total=3)
+                    await self.push('prompt', self.prompt)
+                    await asyncio.sleep(1.0)
+                end = time.monotonic() + secs
+                while (left := end - time.monotonic()) > 0:
+                    self.prompt = dict(base, secs=round(left, 1), phase='go', total=secs)
+                    await self.push('prompt', self.prompt)
+                    await asyncio.sleep(min(0.5, left))
+            await asyncio.sleep(0.3)
         finally:
             secs = round(self.now() - self.recording[1], 1)
-            self.sessions.append({'name': sess, 'date': time.strftime('%Y-%m-%d %H:%M'), 'secs': secs,
-                                  'test': name, 'samples': int(secs * MOTION_HZ)})
+            self.sessions.append({'name': sess, 'started': time.strftime('%Y-%m-%dT%H:%M:%S'), 'secs': secs,
+                                  'test': name})
             self.recording = None
-            self.prompt = None
-            await self.push('prompt', {'test': name, 'step': 0, 'of': 0, 'text': '', 'secs': 0, 'phase': 'done'})
             await self.push('session', {'state': 'idle', 'name': sess, 'secs': secs})
+            summary = self.analyze(sess).get('summary', 'done')
+            self.prompt = {'test': name, 'text': summary, 'phase': 'done', 'secs': 0}
+            await self.push('prompt', self.prompt)
+            self.prompt = None
             self.test_task = None
 
     def analyze(self, name):
@@ -668,24 +664,26 @@ class Mock:
         if s is None:
             raise KeyError(name)
         rnd = random.Random(name)
-        b = [v + rnd.gauss(0, 0.02) for v in self.bias]
-        rows = [
-            ['gyro bias', *[round(v, 3) for v in b], '°/s'],
-            ['gyro noise (rms)', *[round(0.08 + rnd.random() * 0.02, 3) for _ in range(3)], '°/s'],
-            ['accel noise (rms)', *[round(0.0038 + rnd.random() * 0.0008, 4) for _ in range(3)], 'g'],
-            ['accel mean', round(rnd.gauss(0, 0.004), 4), round(rnd.gauss(0, 0.004), 4), round(1 + rnd.gauss(0, 0.003), 4), 'g'],
-            ['yaw drift', '', '', round(0.4 + rnd.random() * 0.3, 2), '°/min'],
-            ['speed jitter at rest', round(0.002 + rnd.random() * 0.002, 4), '', '', 'x (rms)'],
-            ['step lag (63 %)', round(70 + rnd.random() * 30, 0), '', '', 'ms'],
-            ['overshoot', round(rnd.random() * 2, 1), '', '', '%'],
-            ['saturated samples', 0, 0, 0, ''],
-            ['I2C failures', 0, '', '', ''],
-            ['motion drops', rnd.randint(0, 3), '', '', 'messages'],
-        ]
-        return {'name': name, 'secs': s['secs'], 'test': s['test'],
-                'summary': 'still enough for a bias: |gyro| < 3 °/s for the whole take' if s['test'] == 'still'
-                else 'looks clean: no saturation, no NaN, no I2C failures',
-                'table': {'columns': ['', 'x', 'y', 'z', 'unit'], 'rows': rows}}
+        b = [round(v + rnd.gauss(0, 0.02), 3) for v in self.bias]
+        noise = [round(0.06 + rnd.random() * 0.03, 3) for _ in range(3)]
+        rest = {'metrics': {'secs': s['secs'], 'still': True},
+                'findings': [
+                    {'metric': 'gyro bias', 'value': b,
+                     'note': f"deg/s, device x y z. Measured over {s['secs']:.1f} s."},
+                    {'metric': 'gyro noise', 'value': noise, 'note': 'deg/s rms per sample, device x y z.'},
+                    {'metric': 'tilt noise', 'value': [round(0.2 + rnd.random() * 0.05, 3)] * 2,
+                     'note': 'deg rms of pitch and roll from gravity alone, per sample, before any smoothing.'},
+                    {'metric': 'accelerometer offset', 'value': [round(rnd.gauss(0, 0.006), 4) for _ in range(3)],
+                     'note': 'g, chip axes, assuming the board lay flat.'}],
+                'suggest': {'imu.gyro_bias_x': b[1], 'imu.gyro_bias_y': -b[0], 'imu.gyro_bias_z': b[2]}}
+        drift = {'metrics': {}, 'findings': [
+            {'metric': 'yaw drift', 'value': round(0.4 + rnd.random() * 0.3, 2),
+             'note': "deg/min of the board's yaw while it thinks it is still. It has no compass: it drifts by design."},
+            {'metric': 'pitch drift', 'value': round(rnd.gauss(0, 0.2), 3), 'note': "deg/min of the board's pitch while still."}],
+            'suggest': {}}
+        summary = ('Still enough for a bias: the gyro stayed under 3 deg/s.' if s['test'] == 'still'
+                   else 'Looks clean: no saturation, no gaps, no I2C failures.')
+        return {'test': s['test'], 'summary': summary, 'rest': rest, 'drift': drift}
 
     # ------------------------------------------------------------------ commands
     async def run_cmd(self, client, cmd, args):
@@ -798,7 +796,7 @@ class Mock:
         if cmd == 'record.start':
             if self.recording:
                 raise CmdError('record.busy', 'already recording', 'record.stop first')
-            name = f"{time.strftime('%Y-%m-%d')}-{args.get('name') or 'take'}"
+            name = f"{time.strftime('%Y-%m-%d-%H%M%S')}-{args.get('name') or 'take'}"
             self.recording = (name, self.now())
             await self.push('session', {'state': 'recording', 'name': name, 'secs': 0})
             await self.push('status', self.status())
@@ -808,14 +806,14 @@ class Mock:
                 raise CmdError('record.idle', 'not recording', '')
             name, t0 = self.recording
             secs = round(self.now() - t0, 1)
-            self.sessions.append({'name': name, 'date': time.strftime('%Y-%m-%d %H:%M'), 'secs': secs, 'test': '',
-                                  'samples': int(secs * MOTION_HZ)})
+            self.sessions.append({'name': name, 'started': time.strftime('%Y-%m-%dT%H:%M:%S'), 'secs': secs,
+                                  'test': None})
             self.recording = None
             await self.push('session', {'state': 'idle', 'name': name, 'secs': secs})
             await self.push('status', self.status())
             return {'name': name, 'secs': secs}
         if cmd == 'session.list':
-            return {'items': self.sessions}
+            return sorted(self.sessions, key=lambda x: x['name'], reverse=True)
         if cmd == 'session.info':
             s = next((x for x in self.sessions if x['name'] == args.get('name')), None)
             if s is None:
@@ -829,8 +827,9 @@ class Mock:
         if cmd in ('session.replay', 'session.compare', 'audio.measure', 'screen.png', 'view.shot', 'plot'):
             raise CmdError('mock.missing', f'{cmd} is not in the mock daemon', 'the real slrigd has it')
         if cmd == 'test.list':
-            return {'items': [{'name': n, 'title': ti, 'help': h, 'steps': len(st), 'secs': sum(s for _, s in st) + 3 * len(st)}
-                              for n, ti, h, st in TESTS]}
+            return [{'name': n, 'title': ti, 'why': h, 'secs': sum(s for _, s in st),
+                     'steps': [{'label': f'step{k + 1}', 'prompt': p, 'secs': sec} for k, (p, sec) in enumerate(st)]}
+                    for n, ti, h, st in TESTS]
         if cmd == 'test.run':
             name = args.get('name', '')
             if not any(x[0] == name for x in TESTS):
@@ -847,8 +846,7 @@ class Mock:
             return {'out': f"{args.get('out_host', '127.0.0.1')}:{args.get('out_port', 9001)}",
                     'in': args.get('in_port', 9000), 'on': args.get('on', True)}
         if cmd == 'log.tail':
-            n = int(args.get('n', 50))
-            return {'lines': self.log_lines[-n:], 'cmds': self.cmd_log[-n:]}
+            return self.log_lines[-int(args.get('n', 50)):]
         raise CmdError('cmd.unknown', f"no command '{cmd}'", 'help lists them')
 
 
@@ -931,8 +929,9 @@ class Client:
                                                 'hint': 'hello, run, subscribe, unsubscribe'})
 
 
-async def serve(path):
+async def serve(path, pose='hand'):
     mock = Mock()
+    mock.pose = pose
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if os.path.exists(path):
         os.unlink(path)
@@ -992,12 +991,15 @@ def main():
     ap.add_argument('--socket', default=default_socket())
     ap.add_argument('--send', metavar='JSON', help='send one request to a running daemon and print the reply')
     ap.add_argument('--seed', type=int, default=1)
+    ap.add_argument('--pose', choices=['hand', 'flat', 'nose-down', 'right-down'], default='hand',
+                    help='hand: tilting and rolling (default); flat: still, screen up; nose-down / right-down: '
+                         'still at 30 degrees')
     a = ap.parse_args()
     random.seed(a.seed)
     if a.send:
         return send(a.socket, a.send)
     try:
-        asyncio.run(serve(a.socket))
+        asyncio.run(serve(a.socket, a.pose))
     except KeyboardInterrupt:
         pass
     return 0

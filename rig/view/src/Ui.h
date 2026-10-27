@@ -88,6 +88,8 @@ public:
     int segmented(uint64_t wid, Rect r, const std::vector<std::string>& labels, int cur,
                   NVGcolor accent = theme::hex(theme::ACCENT));
     float segmentedMinWidth(const std::vector<std::string>& labels);
+    // the width a button needs for its pixel label (2 px cells)
+    static float btnW(const char* pxLabel, float pad = 18) { return pxWidth(PX_SMALL, pxLabel, 2) + pad; }
 
     struct Scroll {
         float off = 0, content = 0;

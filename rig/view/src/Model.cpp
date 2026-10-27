@@ -457,14 +457,18 @@ unsigned Model::apply(const json& msg, double localNow, double rxLocal)
         while (cmds.size() > 300) cmds.pop_front();
     } else if (ev == "prompt") {
         Prompt& p = prompt;
+        std::string test = js(msg, "test"), phase = js(msg, "phase");
+        int step = ji(msg, "step", p.step);
+        double secs = jd(msg, "secs");
+        // the countdown's full length: what the first push of this step and phase said (or "total" if sent)
+        bool same = p.active && test == p.test && phase == p.phase && step == p.step;
+        p.total = jd(msg, "total", same ? std::max(p.total, secs) : secs);
         p.text = js(msg, "text");
-        p.test = js(msg, "test");
-        p.phase = js(msg, "phase");
-        p.step = ji(msg, "step");
-        p.of = ji(msg, "of");
-        p.secs = jd(msg, "secs");
-        p.total = jd(msg, "total", 0);
-        if (p.total < p.secs) p.total = std::max(p.total, p.secs);
+        p.test = test;
+        p.phase = phase;
+        p.step = step;
+        p.of = ji(msg, "of", p.of);
+        p.secs = secs;
         p.rxLocal = localNow;
         p.active = !p.text.empty();
         ch |= CH_PROMPT;

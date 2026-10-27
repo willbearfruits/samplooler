@@ -69,12 +69,12 @@ void App::drawOled(Rect r, int scale)
     float bx = head.r();
     {
         const char* lab = PANELS[panel_];
-        float w = pxWidth(PX_SMALL, lab, 1) + 16;
-        Rect b{bx - w, head.y + 1, w, 20};
+        float w = Ui::btnW(lab, 16);
+        Rect b{bx - w, head.y, w, 22};
         if (ui_.button(Ui::id("oled.panel"), b, lab, BTN_OUTLINE)) panel_ = (panel_ + 1) % 3;
         bx -= w + 6;
-        w = pxWidth(PX_SMALL, "GRID", 1) + 16;
-        Rect g{bx - w, head.y + 1, w, 20};
+        w = Ui::btnW("GRID", 16);
+        Rect g{bx - w, head.y, w, 22};
         if (ui_.button(Ui::id("oled.grid"), g, "GRID", pixelGrid_ ? BTN_ON : BTN_OUTLINE, hex(MUTE))) pixelGrid_ = !pixelGrid_;
         bx -= w + 12;
     }
@@ -105,6 +105,10 @@ void App::drawOled(Rect r, int scale)
     if (!m_.haveScreen)
         ui_.text(pix.cx(), pix.cy(), m_.connected ? "no screen yet" : "", ui_.sans, 14, hex(DIM),
                  NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+    else if (!m_.connected || m_.status.source == "none") {   // the last frame, no longer live
+        ui_.fill(pix, nvgRGBAf(0, 0, 0, 0.6f));
+        pxTextC(vg_, PX_SMALL, pix.cx(), std::round(pix.cy() - 5), 2, "LAST FRAME", hex(MUTE));
+    }
 }
 
 // ------------------------------------------------------------------------------------------- curves
@@ -122,7 +126,17 @@ void App::drawCurveTilt(Rect r)
 {
     NVGcontext* vg = vg_;
     Rect head = r.cutTop(20);
-    ui_.label(head, "TILT → SPEED");
+    char ro[64] = "";
+    bool liveT = m_.connected && m_.state.valid && m_.curve.valid;
+    TuneItem* axisT = m_.findTune("tilt.axis");
+    bool useRollT = axisT && shownValue(*axisT) >= 0.5f;
+    if (liveT)
+        std::snprintf(ro, sizeof ro, "%+.1f°  %+.2f×", static_cast<double>(useRollT ? m_.state.roll : m_.state.pitch),
+                      static_cast<double>(m_.state.speed_cmd));
+    float roW = ro[0] ? ui_.textW(ro, ui_.mono, 12) + 12 : 0;
+    if (pxWidth(PX_SMALL, "TILT → SPEED", 2) + 12 + roW > head.w) { ro[0] = 0; roW = 0; }
+    ui_.label({head.x, head.y, head.w - roW, head.h}, "TILT → SPEED");
+    if (ro[0]) ui_.text(head.r(), head.cy(), ro, ui_.mono, 12, hex(ACCENT), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
     r.cutTop(6);
     ui_.fill(r, hex(PANEL), 3);
     ui_.stroke(r, hex(LINE), 1.5f, 3);
@@ -142,6 +156,7 @@ void App::drawCurveTilt(Rect r)
     if (c.speedMax > smax) smax = c.speedMax;
     smax = niceUp(smax * 1.05f);
     if (amax <= 0) amax = 60;
+    amax = std::min(amax, std::max(60.0f, std::round(c.full * 1.4f / 5.0f) * 5.0f));   // the part that matters
     auto X = [&](float a) { return p.x + (a + amax) / (2 * amax) * p.w; };
     auto Y = [&](float s) { return p.y + (1 - (s + smax) / (2 * smax)) * p.h; };
 
@@ -155,18 +170,15 @@ void App::drawCurveTilt(Rect r)
         }
         if (X(d) - X(-d) > 22) pxTextC(vg, PX_TINY, X(0), p.b() - 8, 1, "DEAD", hex(DIM));
     }
-    // detents
+    // detents: where each holds, as a bar along the angle axis, and its speed as a tick on the speed axis
     for (auto& d : c.detents) {
+        if (std::fabs(d.speed) > smax) continue;
         if (d.range) {
-            ui_.fill({X(std::min(d.lo, d.hi)), p.y, std::max(1.0f, std::fabs(X(d.hi) - X(d.lo))), p.h}, hex(ACCENT, 0.10f));
+            float x0 = std::max(p.x, X(std::min(d.lo, d.hi)) - 1), x1 = std::min(p.r(), X(std::max(d.lo, d.hi)) + 1);
+            if (x1 > x0) ui_.fill({x0, p.b() - 4, std::max(2.0f, x1 - x0), 3}, hex(ACCENT, 0.7f), 1);
         }
-        float y = Y(d.speed);
-        nvgBeginPath(vg);
-        nvgMoveTo(vg, p.x, y);
-        nvgLineTo(vg, p.r(), y);
-        nvgStrokeColor(vg, hex(ACCENT, 0.25f));
-        nvgStrokeWidth(vg, 1);
-        nvgStroke(vg);
+        float y = std::round(Y(d.speed)) + 0.5f;
+        ui_.hline(p.x - 4, p.x + 3, y, hex(ACCENT, 0.8f), 1.5f);
     }
     // axes, full angle
     ui_.hline(p.x, p.r(), std::round(Y(0)) + 0.5f, hex(PH), 1);
@@ -206,6 +218,22 @@ void App::drawCurveTilt(Rect r)
     nvgStrokeWidth(vg, 1.5f);
     nvgLineJoin(vg, NVG_ROUND);
     nvgStroke(vg);
+    // the stretches a detent holds, over it in the accent colour
+    for (auto& d : c.detents) {
+        if (!d.range) continue;
+        float lo = std::min(d.lo, d.hi), hi = std::max(d.lo, d.hi);
+        nvgBeginPath(vg);
+        bool started = false;
+        for (size_t i = 0; i < c.angle.size(); i++) {
+            if (c.angle[i] < lo - 1e-3f || c.angle[i] > hi + 1e-3f) continue;
+            if (!started) { nvgMoveTo(vg, X(c.angle[i]), Y(c.speed[i])); started = true; }
+            else nvgLineTo(vg, X(c.angle[i]), Y(c.speed[i]));
+        }
+        if (started && hi - lo < 1e-3f) nvgLineTo(vg, X(hi) + 1, Y(d.speed));
+        nvgStrokeColor(vg, hex(ACCENT, 0.9f));
+        nvgStrokeWidth(vg, 2.5f);
+        nvgStroke(vg);
+    }
 
     // the live point and its last second
     if (m_.connected && m_.state.valid) {
@@ -235,8 +263,6 @@ void App::drawCurveTilt(Rect r)
         nvgStrokeWidth(vg, 1.5f);
         nvgStroke(vg);
         ui_.popClip();
-        std::snprintf(b, sizeof b, "%+.1f°  %+.2f×", static_cast<double>(a), static_cast<double>(sp));
-        ui_.text(head.r(), head.cy(), b, ui_.mono, 12, hex(ACCENT), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
         return;
     }
     ui_.popClip();
@@ -246,7 +272,19 @@ void App::drawCurveRoll(Rect r)
 {
     NVGcontext* vg = vg_;
     Rect head = r.cutTop(20);
-    ui_.label(head, "ROLL → FX");
+    char ro[64] = "";
+    unsigned roC = MUTE;
+    if (m_.connected && m_.state.valid && m_.curve.valid) {
+        const State& s = m_.state;
+        std::snprintf(ro, sizeof ro, "%+.1f°  %s %.2f", static_cast<double>(s.roll),
+                      s.delay > 0 ? "delay" : s.stutter > 0 ? "stutter" : "off",
+                      static_cast<double>(std::max(s.delay, s.stutter)));
+        roC = s.delay > 0 ? VIOLET : s.stutter > 0 ? ORANGE : MUTE;
+    }
+    float roW = ro[0] ? ui_.textW(ro, ui_.mono, 12) + 12 : 0;
+    if (pxWidth(PX_SMALL, "ROLL → FX", 2) + 12 + roW > head.w) { ro[0] = 0; roW = 0; }
+    ui_.label({head.x, head.y, head.w - roW, head.h}, "ROLL → FX");
+    if (ro[0]) ui_.text(head.r(), head.cy(), ro, ui_.mono, 12, hex(roC), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
     r.cutTop(6);
     ui_.fill(r, hex(PANEL), 3);
     ui_.stroke(r, hex(LINE), 1.5f, 3);
@@ -263,6 +301,7 @@ void App::drawCurveRoll(Rect r)
     float amax = 0;
     for (float a : c.rAngle) amax = std::max(amax, std::fabs(a));
     if (amax <= 0) amax = 60;
+    amax = std::min(amax, std::max(60.0f, std::round(c.rFull * 1.4f / 5.0f) * 5.0f));
     auto X = [&](float a) { return p.x + (a + amax) / (2 * amax) * p.w; };
     auto Y = [&](float v) { return p.y + (1 - v) * p.h; };
     ui_.fill({X(-c.rDead), p.y, X(c.rDead) - X(-c.rDead), p.h}, hex(INK, 0.06f));
@@ -291,8 +330,10 @@ void App::drawCurveRoll(Rect r)
         nvgStrokeWidth(vg, 1.5f);
         nvgStroke(vg);
     };
+    ui_.pushClip(p.shrink(-2));
     curve(c.delay, VIOLET);
     curve(c.stutter, ORANGE);
+    ui_.popClip();
     if (m_.connected && m_.state.valid) {
         float a = m_.state.roll;
         float v = std::max(m_.state.delay, m_.state.stutter);
@@ -303,9 +344,6 @@ void App::drawCurveRoll(Rect r)
         nvgCircle(vg, x, y, 4.5f);
         nvgFillColor(vg, hex(col));
         nvgFill(vg);
-        std::snprintf(b, sizeof b, "%+.1f°  %s %.2f", static_cast<double>(a),
-                      m_.state.delay > 0 ? "delay" : m_.state.stutter > 0 ? "stutter" : "off", static_cast<double>(v));
-        ui_.text(head.r(), head.cy(), b, ui_.mono, 12, hex(col == INK ? MUTE : col), NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
     }
 }
 
@@ -349,37 +387,48 @@ void App::plotSeries(Rect r, const char* title, const char* unit, const Series& 
         float minSpan = hi > 0 ? hi : 1;
         float nlo, nhi;
         yRange(s, tr, ntr, t0, t1, minSpan, symmetric, nlo, nhi);
-        auto& st = plotRange_[title];
-        if (st.second <= st.first) st = {nlo, nhi};
-        else if (nhi > st.second || nlo < st.first) st = {std::min(nlo, st.first), std::max(nhi, st.second)};
-        else {
-            st.first += (nlo - st.first) * 0.04f;
-            st.second += (nhi - st.second) * 0.04f;
+        PlotRange& st = plotRange_[title];
+        bool fresh = st.hi <= st.lo;
+        if (fresh || nhi > st.hi || nlo < st.lo) {
+            st.lo = fresh ? nlo : std::min(nlo, st.lo);
+            st.hi = fresh ? nhi : std::max(nhi, st.hi);
+            st.shrinkSince = -1;
         }
-        lo = st.first;
-        hi = st.second;
+        else if (nhi - nlo < (st.hi - st.lo) * 0.45f) {
+            if (st.shrinkSince < 0) st.shrinkSince = now_;
+            else if (now_ - st.shrinkSince > 1.5) { st.lo = nlo; st.hi = nhi; st.shrinkSince = -1; }
+        } else st.shrinkSince = -1;
+        lo = st.lo;
+        hi = st.hi;
     }
     Rect p = r.shrink(8, 6);
     Rect head = p.cutTop(16);
     p.cutLeft(34);
     p.cutTop(2);
     float tw = pxText(vg, PX_SMALL, head.x, head.y + 3, 2, title, hex(MUTE));
-    if (unit && *unit) ui_.text(head.x + tw + 6, head.cy() + 1, unit, ui_.sans, 12, hex(DIM));
-    // legend with the newest values, right-aligned
+    if (unit && *unit && head.w > 300) ui_.text(head.x + tw + 6, head.cy() + 1, unit, ui_.sans, 12, hex(DIM));
+    else if (unit && *unit && std::string(unit).size() <= 3) ui_.text(head.x + tw + 6, head.cy() + 1, unit, ui_.sans, 12, hex(DIM));
+    else unit = "";
+    // legend with the newest values, right-aligned; values alone (in the trace's colour) when it is tight
     {
-        float x = head.r();
         char b[48];
-        for (int k = ntr - 1; k >= 0; k--) {
-            float v = s.count ? s.vAt(s.count - 1, tr[k].ch) : 0;
-            std::snprintf(b, sizeof b, fmt, static_cast<double>(v));
-            x -= ui_.textW(b, ui_.mono, 11.5f);
-            ui_.text(x, head.cy() + 1, b, ui_.mono, 11.5f, hex(INK));
-            x -= 4;
-            float nw = ui_.textW(tr[k].name, ui_.mono, 11.5f);
-            x -= nw;
-            ui_.text(x, head.cy() + 1, tr[k].name, ui_.mono, 11.5f, hex(tr[k].colour));
-            x -= 14;
-        }
+        float titleR = head.x + tw + 6 + (unit && *unit ? ui_.textW(unit, ui_.sans, 12) : 0) + 10;
+        auto legend = [&](bool names, bool draw) {
+            float x = head.r();
+            for (int k = ntr - 1; k >= 0; k--) {
+                float v = s.count ? s.vAt(s.count - 1, tr[k].ch) : 0;
+                std::snprintf(b, sizeof b, fmt, static_cast<double>(v));
+                x -= ui_.textW(b, ui_.mono, 11.5f);
+                if (draw) ui_.text(x, head.cy() + 1, b, ui_.mono, 11.5f, names ? hex(INK) : hex(tr[k].colour));
+                if (names) {
+                    x -= 4 + ui_.textW(tr[k].name, ui_.mono, 11.5f);
+                    if (draw) ui_.text(x, head.cy() + 1, tr[k].name, ui_.mono, 11.5f, hex(tr[k].colour));
+                }
+                x -= names ? 14 : 8;
+            }
+            return x;
+        };
+        legend(legend(true, false) >= titleR, true);
     }
     auto Y = [&](float v) { return p.y + (1 - (v - lo) / (hi - lo)) * p.h; };
     // grid: zero, the range's ends, the seconds
@@ -400,9 +449,6 @@ void App::plotSeries(Rect r, const char* title, const char* unit, const Series& 
         float x = std::round(p.x + static_cast<float>((t - t0) / span) * p.w) + 0.5f;
         ui_.vline(x, p.y, p.b(), hex(STRIPE), 1);
     }
-    plotUnderlay_ = {p.x, p.y, p.w, p.h};
-    plotLo_ = lo;
-    plotHi_ = hi;
     if (plotUnderlayFn_) plotUnderlayFn_(p, lo, hi);
     // the traces: per pixel column, min and max, so a dense stream draws as it is
     ui_.pushClip(p);
@@ -456,7 +502,7 @@ void App::drawPlots(Rect r)
         Rect seg{head.r() - 176, head.y, 176, 20};
         int k = ui_.segmented(Ui::id("plots.win"), seg, W, plotWindowIdx_, hex(MUTE));
         if (k >= 0) plotWindowIdx_ = k;
-        float fw = pxWidth(PX_SMALL, "FREEZE", 1) + 16;
+        float fw = Ui::btnW("FREEZE", 16);
         Rect fz{seg.x - 8 - fw, head.y, fw, 20};
         if (ui_.button(Ui::id("plots.freeze"), fz, "FREEZE", plotsFrozen_ ? BTN_ON : BTN_OUTLINE, hex(ORANGE))) {
             plotsFrozen_ = !plotsFrozen_;

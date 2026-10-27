@@ -38,6 +38,7 @@ public:
     void orbit(float dxDeg, float dyDeg);
     void zoom(float steps);
     void resetCamera();
+    void setCamera(float yawDeg, float elevDeg, float zoom);     // zoom 1 = the stack fits
     bool cameraMoved() const;
 
     // after render(): a world point to viewport pixels (0,0 = top-left of the viewport, in framebuffer pixels)
@@ -64,8 +65,11 @@ private:
     int arrowVerts_ = 0;
     // quads
     unsigned quadVao_ = 0, quadVbo_ = 0;
+    // the ghost: the boards' outlines and the screen's, as lines
+    unsigned lineVao_ = 0, lineVbo_ = 0;
+    int lineVerts_ = 0;
     // shaders
-    unsigned progMesh_ = 0, progGround_ = 0, progOled_ = 0, progShadow_ = 0;
+    unsigned progMesh_ = 0, progGround_ = 0, progOled_ = 0, progShadow_ = 0, progLine_ = 0;
     // targets
     unsigned msFbo_ = 0, msColor_ = 0, msDepth_ = 0, resolveFbo_ = 0, resolveTex_ = 0, texGeneration_ = 0;
     int msW_ = 0, msH_ = 0, samples_ = 4;
@@ -74,7 +78,7 @@ private:
     unsigned oledTex_ = 0;
     uint32_t oledVersion_ = 0xffffffffu;
     // camera
-    float yaw_ = 0, elev_ = 34, zoom_ = 1;
+    float yaw_ = 0, elev_ = 38, zoom_ = 1;
     M4 view_, proj_, vp_;
     V3 eye_;
     int vw_ = 1, vh_ = 1;
