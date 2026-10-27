@@ -311,6 +311,11 @@ int runLive(const Args& a, const Options& opt)
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     glfwWindowHint(GLFW_STENCIL_BITS, 8);
     glfwWindowHint(GLFW_SAMPLES, 0);
+    // Tests of the window itself, on a private X server (rig/view/tools/live-test.sh): an EGL context (no GLX
+    // there), quit after a while, and keep the last frame that was really swapped.
+    if (const char* e = std::getenv("SLRIG_VIEW_EGL"); e && *e == '1') glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
+    const char* envSecs = std::getenv("SLRIG_VIEW_SECONDS");
+    const char* liveShot = std::getenv("SLRIG_VIEW_LIVE_SHOT");
     GLFWwindow* win = glfwCreateWindow(a.w, a.h, "Samplooler Rig", nullptr, nullptr);
     if (!win) {
         std::fprintf(stderr, "slrig-view: no window\n");
@@ -342,6 +347,8 @@ int runLive(const Args& a, const Options& opt)
             glfwSetKeyCallback(win, [](GLFWwindow* w, int key, int, int action, int mods) {
                 if (action == GLFW_PRESS || action == GLFW_REPEAT) appOf(w)->key(key, mods);
             });
+            const double quitAt = envSecs ? now() + std::atof(envSecs) : 0.0;
+            long frames = 0;
             while (!glfwWindowShouldClose(win) && !app.quitRequested()) {
                 glfwPollEvents();
                 double t = now();
@@ -354,8 +361,20 @@ int runLive(const Args& a, const Options& opt)
                     continue;
                 }
                 app.frame(0, w, h, fw, fh, t);
+                if (quitAt > 0.0 && t >= quitAt) {
+                    if (liveShot) {
+                        std::vector<unsigned char> px((size_t)fw * fh * 4), flip(px.size());
+                        glReadPixels(0, 0, fw, fh, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+                        for (int y = 0; y < fh; ++y)
+                            std::memcpy(&flip[(size_t)y * fw * 4], &px[(size_t)(fh - 1 - y) * fw * 4], (size_t)fw * 4);
+                        stbi_write_png(liveShot, fw, fh, 4, flip.data(), fw * 4);
+                    }
+                    std::fprintf(stderr, "slrig-view: live window, %ld frames swapped\n", frames);
+                    break;
+                }
                 glfwSwapBuffers(win);
                 app.presented(now());
+                ++frames;
             }
             app.shutdown();
         }
