@@ -81,6 +81,7 @@ static inline uint32_t fnv(const char *s) { uint32_t h = 2166136261u; while (*s)
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_log.h"
+#include "audio.h"
 static const char *TAG = "tune";
 typedef struct { uint32_t h; float v; } pair_t;
 
@@ -112,6 +113,7 @@ bool tune_save(void)
     for (int i = 0; i < TU_N; i++) if (tune_def[i].kind != TK_ACTION) p[n++] = (pair_t){ fnv(tune_def[i].name), tune_v[i] };
     nvs_handle_t h;
     if (nvs_open("tune", NVS_READWRITE, &h) != ESP_OK) return false;
+    audio_flash_hint();                         // the write stalls the cache: count it as a flash stall, as settings.c does
     bool ok = nvs_set_blob(h, "t", p, n * sizeof(pair_t)) == ESP_OK && nvs_commit(h) == ESP_OK;
     nvs_close(h);
     if (ok) dirty = false;
@@ -122,7 +124,7 @@ bool tune_save(void)
 void tune_erase(void)
 {
     nvs_handle_t h;
-    if (nvs_open("tune", NVS_READWRITE, &h) == ESP_OK) { nvs_erase_all(h); nvs_commit(h); nvs_close(h); }
+    if (nvs_open("tune", NVS_READWRITE, &h) == ESP_OK) { audio_flash_hint(); nvs_erase_all(h); nvs_commit(h); nvs_close(h); }
 }
 #else
 void tune_load(void) { tune_defaults(); dirty = false; }

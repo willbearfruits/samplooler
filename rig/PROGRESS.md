@@ -84,3 +84,21 @@ These come from the firmware's own code, with synthetic hands and the twin's sen
 ### Next
 
 `MORNING.md`.
+
+## 2026-10-27 13:00: first board, 7275FBD4
+
+- Flashed the rig firmware (esptool on the board's own by-id port; `tools/flash.sh` was not used, because it can
+  send its reboot message to a TWOFOLD).
+- Measured: CPU 9-11 %, internal heap 41 KB free, the UI loop 3-5 ms, no wire drops, no I2C failures. The state
+  stream arrives at 24-35 Hz instead of 50: the loop has time to spare, so the cause is in how the state is sent.
+- The axes: on this board y and z were reversed (a 180° turn about x). Flat and screen up, it read z = -1.12 g; with
+  the nose (the USB-C edge, the top of the screen) down, it read nose up. So with the v1 map the nose down played
+  backward, against the manual. The user wants nose down forward. Saved on this board only: `motion.ax_y=+x`,
+  `motion.ax_z=+z` (everything else back to the defaults). 727600D0 must be checked the same way before the
+  firmware's defaults change: the IMU module may be soldered on either way round.
+- |a| reads 1.12 g flat: the accelerometer's z needs an offset or a scale (later, with the still test).
+- At rest the gyro's spread was 0.7-2.3 deg/s with a loop playing: far above the twin's 0.06. To check with the
+  loop stopped (the speaker may shake the board).
+- The tuning save wrote flash without `audio_flash_hint()`: 14 overruns and 15 underruns came with it. Fixed in
+  tune.c, not yet on the board.
+- Wanted: guided tests paced by the player (each step waits for a click), not only timed.
