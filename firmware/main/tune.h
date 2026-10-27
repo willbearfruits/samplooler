@@ -34,8 +34,8 @@ X(MO_KP,       "motion.kp",       TK_FLOAT,  0,     20,   0.1f,  2,    "",    ""
 X(MO_KI,       "motion.ki",       TK_FLOAT,  0,     2,    0.01f, 0.05f, "",   "", "MAHONY: integral gain (learns the gyro's drift while moving)") \
 X(MO_ACC_GATE, "motion.acc_gate", TK_FLOAT,  0,     1,    0.01f, 0.2f, "g",   "", "COMP/MAHONY: trust gravity less as |a| leaves 1 g, not at all past this (0: always)") \
 X(MO_AX_X,     "motion.ax_x",     TK_ENUM,   0,     5,    1,     3,    "",    "+x|-x|+y|-y|+z|-z", "the chip axis behind the screen's x (to the right edge)") \
-X(MO_AX_Y,     "motion.ax_y",     TK_ENUM,   0,     5,    1,     0,    "",    "+x|-x|+y|-y|+z|-z", "the chip axis behind the screen's y (to the bottom edge)") \
-X(MO_AX_Z,     "motion.ax_z",     TK_ENUM,   0,     5,    1,     4,    "",    "+x|-x|+y|-y|+z|-z", "the chip axis behind the screen's z (out of the screen)") \
+X(MO_AX_Y,     "motion.ax_y",     TK_ENUM,   0,     5,    1,     1,    "",    "+x|-x|+y|-y|+z|-z", "the chip axis behind the screen's y (to the top edge, the nose)") \
+X(MO_AX_Z,     "motion.ax_z",     TK_ENUM,   0,     5,    1,     5,    "",    "+x|-x|+y|-y|+z|-z", "the chip axis behind the screen's z (out of the screen)") \
 X(MO_YAW_RESET,"motion.yaw_reset",TK_ACTION, 0,     1,    1,     0,    "",    "", "turn the yaw back to 0 (it has no compass and drifts)") \
 X(TI_AXIS,     "tilt.axis",       TK_ENUM,   0,     1,    1,     0,    "",    "pitch|roll", "which lean sets the speed") \
 X(TI_SIGN,     "tilt.sign",       TK_ENUM,   0,     1,    1,     1,    "",    "-1|+1", "+1: nose down plays forward") \

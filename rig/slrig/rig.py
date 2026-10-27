@@ -299,7 +299,7 @@ class Rig:
         def v(n, d):
             i = self.tune_index(n)
             return int(self.tune[i]['value']) if i is not None else d
-        return v('motion.ax_x', 3), v('motion.ax_y', 0), v('motion.ax_z', 4)
+        return v('motion.ax_x', 3), v('motion.ax_y', 1), v('motion.ax_z', 5)
 
     def _motion(self, r: dict) -> None:
         raw = r['raw']
@@ -471,10 +471,11 @@ class Rig:
     # ------------------------------------------------------------ status
     def status(self) -> dict:
         with self.lock:
+            busy = {k: v for k, v in self.busy.items() if not k.startswith('_')}     # no threads or events on the wire
             return {'source': self.source, 'board': self.board, 'rates': dict(self.rates),
                     'drops': {k: int(v) for k, v in self.drops.items()},
                     'recording': self.recorder.summary() if self.recorder else None,
-                    'osc': self.osc.info(), 'busy': self.busy or None,
+                    'osc': self.osc.info(), 'busy': busy or None,
                     'streams': self.want, 'imu': {'rate_hz': self.motion_rate, 'acc_range_g': 2 << self.acc_range,
                                                   'gyro_range_dps': 250 << self.gyro_range}}
 

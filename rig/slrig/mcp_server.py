@@ -18,8 +18,8 @@ rig_plot(session) a recorded session. Results are {"ok": true, "result": ...} or
 
 Tuning a gesture: record it (test.run name=steps, or record.start / record.stop while the user plays), then
 session.analyze, then session.compare a=v1 b=gyro (the same recorded hand through two tunings), then tune.set and
-ask the user to play again. Axes: device x to the screen's right, y to its bottom edge, z out of the screen; pitch +
-with the nose (top edge) down, roll + with the right edge down. Never flash a board: the rig cannot, and only the user
+ask the user to play again. Axes (right-handed): device x to the screen's right edge, y to its top edge (the nose),
+z out of the screen; pitch + with the nose down (forward), roll + with the right edge down (stutter). Never flash a board: the rig cannot, and only the user
 says when."""
 
 

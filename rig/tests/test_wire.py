@@ -12,10 +12,10 @@ from slrig import port, wire
 def twin_bytes():
     exe = port.ensure_twin()
     msgs = wire.go(True, True, True, True) + wire.info() + wire.tune_list() + wire.describe()
-    # an injected tilt (nose down 30 degrees, chip axes: x = device y) for 0.3 s, then the scene again
-    g = 16384 * np.array([0.0, 0.0, 1.0])
+    # an injected tilt for 0.25 s, then the scene again: nose down 30 degrees, device acc (0, -sin, cos), which the
+    # default axis map puts on the chip as (-dev y, -dev x, -dev z) = (sin, 0, -cos)
     s = np.sin(np.radians(30)); c = np.cos(np.radians(30))
-    raw = np.tile(np.array([16384 * s, 0, 16384 * c, 0, 0, 0]).round().astype(np.int16), (125, 1))   # the board queues 128
+    raw = np.tile(np.array([16384 * s, 0, -16384 * c, 0, 0, 0]).round().astype(np.int16), (125, 1))   # the board queues 128
     for m in wire.inject(raw):
         msgs += m
     msgs += wire.key_enc(3) + wire.key_switch(True)
@@ -50,7 +50,7 @@ def test_motion_decodes_and_counts(twin_bytes):
     inj = [r for r in rs if r['flags'] & 1]
     assert inj, 'the injected samples are flagged'
     x = np.concatenate([r['raw'] for r in inj])
-    assert abs(np.median(x[:, 0]) - 16384 * 0.5) < 2 and abs(np.median(x[:, 2]) - 16384 * np.cos(np.radians(30))) < 2
+    assert abs(np.median(x[:, 0]) - 16384 * 0.5) < 2 and abs(np.median(x[:, 2]) + 16384 * np.cos(np.radians(30))) < 2
 
 
 def test_state_follows_the_injected_tilt(twin_bytes):

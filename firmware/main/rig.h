@@ -40,3 +40,4 @@ typedef struct { int counts; int sw, rec; int jx, jy; } rig_keys_t;   // sw, rec
 void rig_keys(rig_keys_t *k, int steps, int dir);          // what the PC presses and turns (counts are consumed)
 void rig_event(const char *name, float v, int ms, const char *text);  // a gesture fired (gest_on_event)
 uint32_t rig_drops(void);                                  // messages that did not fit on the wire
+void rig_hold(bool on);                                    // streams never time out (rig/twin's tests pipe everything in at once)

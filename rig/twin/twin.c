@@ -148,7 +148,7 @@ static void pose_q(float pitch, float roll, float yaw, float q[4])
 {
     const float d = 0.0174533f;
     float th = pitch * d, ph = roll * d;
-    float ux = -sinf(ph) * cosf(th), uy = sinf(th), uz = cosf(th) * cosf(ph);
+    float ux = -sinf(ph) * cosf(th), uy = -sinf(th), uz = cosf(th) * cosf(ph);   // nose (+y) down: up leans to -y
     float n = sqrtf(ux * ux + uy * uy + uz * uz); ux /= n; uy /= n; uz /= n;
     float a[4] = { 1 + uz, uy, -ux, 0 };
     float an = sqrtf(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
@@ -178,8 +178,8 @@ static void sample_at(double t, float dt, float acc_lsb, float gyro_lsb, int16_t
     float up[3] = { 2 * (q0[1] * q0[3] - q0[0] * q0[2]), 2 * (q0[0] * q0[1] + q0[2] * q0[3]),
                     q0[0] * q0[0] - q0[1] * q0[1] - q0[2] * q0[2] + q0[3] * q0[3] };
     if (sh > 0) for (int k = 0; k < 3; k++) up[k] += sh * sinf((float)t * 6.2831853f * (7.0f + 2.0f * (float)k)) * 1.5f;
-    // device to chip: x = device y, y = -device x, z = device z
-    float ac[3] = { up[1], -up[0], up[2] }, gc[3] = { w[1], -w[0], w[2] };
+    // device to chip, the default axis map backwards: chip = (-device y, -device x, -device z)
+    float ac[3] = { -up[1], -up[0], -up[2] }, gc[3] = { -w[1], -w[0], -w[2] };
     for (int k = 0; k < 3; k++) {
         float a = (ac[k] + AOFF[k] + 0.004f * gauss()) * acc_lsb, g = (gc[k] + GBIAS[k] + 0.06f * gauss()) * gyro_lsb;
         out[k] = (int16_t)fmaxf(-32768.0f, fminf(32767.0f, roundf(a)));
@@ -350,6 +350,7 @@ int main(int argc, char **argv)
     tune_defaults();
     gest_on_event(ev_to_rig);
     rig_init();
+    rig_hold(keep_on_eof);                 // --secs: the test's input came all at once, keepalives included
     motion_init();
     fx_init();
     oled_init(NULL);

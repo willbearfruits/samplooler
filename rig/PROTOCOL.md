@@ -78,17 +78,25 @@ so 18 bytes a sample. The board treats injected samples exactly like FIFO sample
 
 ## Frames (axes)
 
-- **Chip axes:** the MPU-6050's own. Only `r`, `J` and the session's `motion.take` use them.
-- **Device axes:** the core's screen axes.
-  - x points to the screen's right edge, y towards the screen's bottom edge, z out of the screen.
+- **Chip axes:** the MPU-6050's own. Only `r`, `J` and a session's `raw.txt` use them.
+- **Device axes** are right-handed:
+  - x points to the screen's right edge, y to its top edge (the nose: the edge away from a player reading the
+    screen), z out of the screen.
   - Flat on a table with the screen up, acc = (0, 0, +1 g).
-  - The tuning values `motion.ax_*` / `motion.sign_*` map chip axes to device axes.
+  - Nose down by θ, acc = (0, -sin θ, cos θ). Right edge down by φ, acc = (-sin φ, 0, cos φ).
+  - The tuning values `motion.ax_*` map chip axes to device axes. The default is (-y, -x, -z), which gives the old
+    firmware's pitch and roll.
   - Every `motion` push, plot and analysis uses device axes.
-- **The nose** is the screen's top edge (-y). "Nose down" means the top edge goes down.
-  - `pitch` is positive with the nose down; `roll` is positive with the right edge down.
-  - Tilt nose down plays forward faster, nose up plays backwards (with today's sign).
-- **World:** z up. `quat` and `ref_quat` rotate device-axis vectors into the world (q · v · q*). Flat,
-  screen up and yaw 0 is the identity.
+- **Angles:**
+  - `pitch` = atan2(-a_y, √(a_x² + a_z²)), positive with the nose down. Nose down plays forward, faster.
+  - `roll` = atan2(-a_x, √(a_y² + a_z²)), positive with the right edge down: the stutter. Left is the delay.
+- **World:** z up.
+  - `quat` and `ref_quat` rotate device-axis vectors into the world (q · v · q*). Flat, screen up and yaw 0 is the
+    identity.
+  - Nose down 30° is a turn about +x by -30°, q = (cos(-15°), sin(-15°), 0, 0).
+  - Right edge down 30° is a turn about +y by +30°.
+- **The 3D model:** KiCad's VRML frame (x right, y towards the board's top edge in the front view, z out of the
+  top side), centred, is the device frame.
 - **Yaw** has no absolute reference (no magnetometer). It drifts, and `motion.yaw_reset` zeroes it.
 
 ## 2. Daemon ↔ clients (unix socket, JSON lines)
@@ -124,7 +132,7 @@ Socket: `$XDG_RUNTIME_DIR/slrig/daemon.sock` (0600). One JSON object per line, U
 | `settings` | `items` [setting item …] | on subscribe and on change |
 | `log` | `text`, `level` | each board log line and daemon notice |
 | `cmds` | `by` ("view", "cli", "mcp" or "osc"), `cmd`, `args`, `ok`, `ms` | after every command anyone runs (the viewer's log strip) |
-| `prompt` | `test`, `step`, `of`, `text`, `secs` (countdown), `phase` ("ready", "go", "done") | during a guided test; `text` "" clears it |
+| `prompt` | `test`, `step`, `of`, `text`, `secs` (left), `total` (the countdown's full length), `phase` ("ready", "go", "done") | during a guided test; `text` "" clears it |
 | `session` | `state` ("idle" or "recording"), `name`, `secs` | on change, and once a second while recording |
 
 **`state` fields** (also the `q` field names):

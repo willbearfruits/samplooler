@@ -647,7 +647,8 @@ def session_compare(rig: Rig, name: str = 'last', a: str = 'v1', b: str = 'gyro'
     out['table'] = _compare_replays(p, ra['csv'], rb['csv'])
     if plot:
         from . import plots
-        out['png'] = plots.plot_replays({a: ra['csv'], b: rb['csv']}, str(p / f'compare-{a}-{b}.png'.replace(' ', '-')))
+        out['png'] = plots.plot_replays({a: ra['csv'], b: rb['csv']}, str(p / f'compare-{a}-{b}.png'.replace(' ', '-')),
+                                        title=f'The same hand, two tunings: {a} against {b} ({p.name})')
     return out
 
 
@@ -746,7 +747,7 @@ def test_run(rig: Rig, name: str, inject: bool | None = None, countdown: float =
         n = len(test.steps)
         for k, step in enumerate(test.steps, 1):
             for left in range(int(round(countdown)), 0, -1):
-                rig.push('prompt', {'test': name, 'step': k, 'of': n, 'text': step.prompt, 'secs': left, 'phase': 'ready'})
+                rig.push('prompt', {'test': name, 'step': k, 'of': n, 'text': step.prompt, 'secs': left, 'total': countdown, 'phase': 'ready'})
                 if abort.wait(1.0):
                     raise RigError('test.aborted', 'aborted', '')
             t_start = max(0.0, rig.state_t - (rec.t0 if rec.t0 is not None else rig.state_t))
@@ -763,7 +764,7 @@ def test_run(rig: Rig, name: str, inject: bool | None = None, countdown: float =
                 threading.Thread(target=_play_keys, args=(rig, keys), daemon=True).start()
             end = time.monotonic() + step.secs
             while (left := end - time.monotonic()) > 0:
-                rig.push('prompt', {'test': name, 'step': k, 'of': n, 'text': step.prompt, 'secs': round(left, 1), 'phase': 'go'})
+                rig.push('prompt', {'test': name, 'step': k, 'of': n, 'text': step.prompt, 'secs': round(left, 1), 'total': step.secs, 'phase': 'go'})
                 if abort.wait(min(0.5, left)):
                     raise RigError('test.aborted', 'aborted', '')
             t_end = max(t_start, rig.state_t - (rec.t0 if rec.t0 is not None else rig.state_t))

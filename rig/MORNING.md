@@ -37,8 +37,9 @@ What to check:
 
 Two notes on the table:
 
-- **The axis map was never checked on a board.** The defaults reproduce the old code's pitch and roll, and the
-  `axes` test confirms the z axis too. If z is upside down, `tune.set motion.ax_z -z`.
+- **The axis map was never checked on a board.** The default (-y, -x, -z) reproduces the old code's pitch and roll.
+  The old code never used the z axis, so z's sign is a guess: flat with the screen up must read acc_z = +1 g.
+  The `axes` test checks all three and suggests the fix (`tune.set motion.ax_z +z` if z comes out upside down).
 - **The gyro bias learns itself** when the board lies still (`imu.auto_bias`). `tune.set imu.bias_keep 1` then
   `tune.save` keeps it.
 

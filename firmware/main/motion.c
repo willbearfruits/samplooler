@@ -119,10 +119,11 @@ void motion_tick(bool hold)
     if (hold) { fresh = false; return; }               // frozen: the control angles stay (v1 did not read the sensor)
     if (TI(TU_MO_FUSION) == 0) {
         // v1, exactly: the old imu_poll() worked in the chip's axes (roll from y, pitch from -x) and main.c
-        // flipped the pitch (TILT_SIGN -1). The default axis map (x = -y, y = +x, z = +z) gives the same numbers.
+        // flipped the pitch (TILT_SIGN -1). The default axis map (x = -y, y = -x, z = -z) gives the same numbers.
+        // The nose is +y: nose down, gravity's reaction leans towards -y.
         if (fresh) {
             float ax = a_dev[0], ay = a_dev[1], az = a_dev[2];
-            float pitch = atan2f(ay, sqrtf(ax * ax + az * az)) * R2D;
+            float pitch = atan2f(-ay, sqrtf(ax * ax + az * az)) * R2D;
             float roll  = atan2f(-ax, sqrtf(ay * ay + az * az)) * R2D;
             float k = TV(TU_MO_ACC_SMOOTH);
             roll_f  += k * (roll - roll_f);
@@ -130,7 +131,7 @@ void motion_tick(bool hold)
         }
         M.pitch = pitch_f; M.roll = roll_f;
     } else {
-        M.pitch = atan2f(vy, sqrtf(vx * vx + vz * vz)) * R2D;
+        M.pitch = atan2f(-vy, sqrtf(vx * vx + vz * vz)) * R2D;
         M.roll  = atan2f(-vx, sqrtf(vy * vy + vz * vz)) * R2D;
         pitch_f = M.pitch; roll_f = M.roll;           // a switch back to ACC starts from here, not from zero
     }

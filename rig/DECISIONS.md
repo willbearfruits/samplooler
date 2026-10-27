@@ -100,6 +100,15 @@ never re-implements the firmware.
 While 'J' samples arrive, the board's FIFO samples are dropped, until 0.5 s after the last one. The daemon sends
 them at their own rate, and the twin takes them at the FIFO's pace.
 
+## D15. Right-handed device axes, y to the nose
+
+The first protocol said x right, y to the bottom edge, z out of the screen. That frame is left-handed, so no real
+sensor fits it; the viewer agent caught it. The old firmware's behaviour (nose down plays forward, roll right
+stutters) fixes x to the right edge and the nose. A right-handed frame with z out of the screen then needs y to point
+to the nose. So: x right, y top (the nose), z out, and the default map is (-y, -x, -z). The v1 check still passes
+with 0 differences. The z axis's sign stays a guess until the `axes` test runs on a board, because the old code
+never used it.
+
 ## Log
 
 - 2026-10-27. The Samplooler's control code runs at 50 Hz (`tick % 2`) inside a 10 ms loop.

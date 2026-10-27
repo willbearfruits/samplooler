@@ -1,6 +1,6 @@
 // Motion: IMU samples to the board's orientation, by the tuning table (tune.h: imu.*, motion.*). Pure C, also built
-// on the PC (rig/twin, the v1 check). Axes (rig/PROTOCOL.md): device x to the screen's right edge, y to its bottom
-// edge, z out of the screen; flat, screen up, the accelerometer reads (0, 0, +1 g).
+// on the PC (rig/twin, the v1 check). Axes (rig/PROTOCOL.md), right-handed: device x to the screen's right edge, y to
+// its top edge (the nose), z out of the screen; flat, screen up, the accelerometer reads (0, 0, +1 g).
 #pragma once
 #include <stdbool.h>
 

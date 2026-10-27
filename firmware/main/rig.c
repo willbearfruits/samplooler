@@ -11,7 +11,7 @@
 
 static bool m_on, q_on, o_on, e_on;
 static uint32_t last_g_ms, last_j_ms;
-static bool injecting, q_announced;
+static bool injecting, q_announced, hold;
 static uint8_t seq_r, seq_q;
 static uint32_t drops;
 
@@ -53,6 +53,7 @@ static bool send_text(uint8_t cmd, const char *s)
 }
 
 uint32_t rig_drops(void) { return drops; }
+void rig_hold(bool on) { hold = on; }
 bool rig_motion_on(void) { return m_on; }
 bool rig_state_on(void) { return q_on; }
 
@@ -251,7 +252,7 @@ void rig_tick(int dt_ms)
 {
     (void)dt_ms;
     uint32_t now = rig_port_ms();
-    if ((m_on || q_on || o_on || e_on || key_sw >= 0 || key_rec >= 0 || key_jx >= 0) && now - last_g_ms > KEEPALIVE_MS) streams_off();
+    if (!hold && (m_on || q_on || o_on || e_on || key_sw >= 0 || key_rec >= 0 || key_jx >= 0) && now - last_g_ms > KEEPALIVE_MS) streams_off();
     // the tuning table, three lines a tick
     for (int s = 0; s < 3 && list_next >= 0; s++) {
         if (list_next >= TU_N) {
