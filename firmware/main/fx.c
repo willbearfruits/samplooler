@@ -37,10 +37,14 @@ static float  stt_mix;          // slewed dry/wet so entry and exit do not click
 
 void fx_init(void)
 {
-    dly = heap_caps_calloc(DLY_N, sizeof(float), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    stt = heap_caps_calloc(STT_N, sizeof(float), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (!dly) dly = heap_caps_calloc(DLY_N, sizeof(float), MALLOC_CAP_SPIRAM);
-    if (!stt) stt = heap_caps_calloc(STT_N, sizeof(float), MALLOC_CAP_SPIRAM);
+    // Both are streams: the delay reads and writes one place that moves a sample at a time, the stutter writes one and
+    // reads two. In PSRAM the cache fetches eight samples at once, so a stream costs a miss every eighth sample. The
+    // internal RAM is kept for the voice's reverb lines (vox_init, after this), which are read all over every sample:
+    // with these two in it, the lines had to go to PSRAM and the voice's bus took 1.4 ms of every 2 ms block.
+    dly = heap_caps_calloc(DLY_N, sizeof(float), MALLOC_CAP_SPIRAM);
+    stt = heap_caps_calloc(STT_N, sizeof(float), MALLOC_CAP_SPIRAM);
+    if (!dly) dly = heap_caps_calloc(DLY_N, sizeof(float), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!stt) stt = heap_caps_calloc(STT_N, sizeof(float), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     diag_ram("fx.dly", dly, DLY_N * sizeof(float), false);
     diag_ram("fx.stt", stt, STT_N * sizeof(float), false);
     ESP_LOGI(TAG, "delay %d ms, stutter %d..%d ms%s", DLY_MS, STT_MIN_MS, STT_MAX_MS, dly && stt ? "" : " (NO MEMORY, effects off)");
