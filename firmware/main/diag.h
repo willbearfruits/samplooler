@@ -19,3 +19,11 @@ void        diag_mark_alive(void);          // the app has run normally for a wh
 size_t      diag_crash_report(char *buf, size_t n);   // the last abnormal reset, or "OK ..."
 size_t      diag_status(char *buf, size_t n);         // version, uptime, heap, stacks, audio counters
 void        diag_log_status(void);                    // both of the above, as log lines
+
+// Where a big buffer landed, noted at init for the status line ("ram:"). fast: the audio task reads it all over every
+// sample, so it belongs in internal RAM; in PSRAM its cache lines collide and the audio task spends its block waiting.
+#ifdef ESP_PLATFORM
+void        diag_ram(const char *name, const void *p, unsigned bytes, bool fast);
+#else
+static inline void diag_ram(const char *name, const void *p, unsigned bytes, bool fast) { (void)name; (void)p; (void)bytes; (void)fast; }
+#endif

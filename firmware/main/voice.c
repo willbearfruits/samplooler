@@ -8,6 +8,8 @@
 // moving between OFF and a voice crossfades over about 8 ms.
 #include "voice.h"
 #include "voice_engines.h"
+#include "prof.h"
+#include "diag.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,7 +27,9 @@ void *app_alloc(size_t n)
 {
 #ifdef ESP_PLATFORM
     void *p = heap_caps_calloc(1, n, MALLOC_CAP_SPIRAM);
-    return p ? p : heap_caps_calloc(1, n, MALLOC_CAP_8BIT);
+    if (!p) p = heap_caps_calloc(1, n, MALLOC_CAP_8BIT);
+    diag_ram("vox", p, (unsigned)n, false);
+    return p;
 #else
     return calloc(1, n);
 #endif
@@ -34,7 +38,9 @@ void *app_alloc_fast(size_t n)
 {
 #ifdef ESP_PLATFORM
     void *p = heap_caps_calloc(1, n, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    return p ? p : heap_caps_calloc(1, n, MALLOC_CAP_SPIRAM);
+    if (!p) p = heap_caps_calloc(1, n, MALLOC_CAP_SPIRAM);
+    diag_ram("vox.fast", p, (unsigned)n, true);
+    return p;
 #else
     return calloc(1, n);
 #endif
@@ -275,6 +281,7 @@ void IRAM_ATTR vox_run(float *io, int n, float out_env)
     if (want == 0.0f && g_on == 0.0f) return;                      // OFF: the input as it is
     memcpy(x, io, (size_t)n * sizeof(float));
     vfx_input(x, n, out_env);
+    prof_lap(PROF_VIN);
     // the voice engine only when the sound needs it (CLEAN, VOCODER, WHISPER and the echo and reverb voices do not:
     // its pitch tracker and grains would run for nothing); it keeps running for a moment so a voice fades out
     bool need = need_voice != 0;
@@ -285,15 +292,18 @@ void IRAM_ATTR vox_run(float *io, int n, float out_env)
         for (int i = 0; i < n; i++) { float a = fabsf(lead[i]) + fabsf(extra[i]); if (a > pk) pk = a; }
         if (pk < 1e-4f) voice_ran = false;
     } else voice_ran = need;
+    prof_lap(PROF_VOICE);
     const float td = t_dry, tv = t_voc;
     if (tv > 0.0f || g_voc > 1e-4f) vocoder_process(x, voc, n);
     else memset(voc, 0, (size_t)n * sizeof(float));
+    prof_lap(PROF_VOC);
     for (int i = 0; i < n; i++) {
         g_dry += 0.002f * (td - g_dry); g_voc += 0.002f * (tv - g_voc);
         v[i] = x[i] * g_dry + lead[i] + extra[i] + voc[i] * g_voc;
     }
     memcpy(x, v, (size_t)n * sizeof(float));
     vfx_bus(x, v, n);                                              // the echo and the reverb, added
+    prof_lap(PROF_BUS);
     for (int i = 0; i < n; i++) {                                  // a peak limiter (instant attack), then
         float a = fabsf(v[i]);                                     // 30 ms between OFF and the voice
         lim_env = a > lim_env ? a : lim_env * LIM_REL;

@@ -4,6 +4,7 @@
 #include "usb.h"
 #include "fx.h"
 #include "voice.h"
+#include "prof.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -159,6 +160,7 @@ static void IRAM_ATTR audio_task(void *arg)
             __atomic_add_fetch(&epoch_seq, 1, __ATOMIC_ACQ_REL);
         }
         uint32_t c0 = esp_cpu_get_cycle_count();
+        prof_start();
         // the output mute: one step per block towards the request
         float mg = mute_g, mt = mute_req ? 0.0f : 1.0f;
         if (mg < mt) { mg += MUTE_STEP; if (mg > mt) mg = mt; } else if (mg > mt) { mg -= MUTE_STEP; if (mg < mt) mg = mt; }
@@ -210,11 +212,15 @@ static void IRAM_ATTR audio_task(void *arg)
         }
         if (pk > in_peak) in_peak = pk;
         in_clips += clips;
-        vox_run(in, frames, out_env);                    // the voice on the input (OFF: untouched)
+        prof_lap(PROF_IN);
+        vox_run(in, frames, out_env);                    // the voice on the input (OFF: untouched); its stages lap inside
+        prof_lap(PROF_VMIX);
         recorder_process(in, out, frames);
+        prof_lap(PROF_REC);
         if (monitor_on && recorder_state() != REC_RECORDING)       // Monitor: the voice live over the loop
             for (int f = 0; f < frames; f++) out[f] += in[f];
         fx_process(out, frames);
+        prof_lap(PROF_FX);
         frame_now += (uint32_t)frames;
         frames64 += (uint64_t)frames;
         float opk = 0;
@@ -232,6 +238,8 @@ static void IRAM_ATTR audio_task(void *arg)
         if (opk > out_peak) out_peak = opk;
         out_env = opk > out_env ? opk : out_env * 0.95f;
         usb_audio_out_push(usb_out, usb_mode ? usb_in_l : NULL, frames);
+        prof_lap(PROF_OUT);
+        prof_block(frames);
         uint32_t used = esp_cpu_get_cycle_count() - c0;
         int pct = (int)((uint64_t)used * 100 / budget);
         cpu_pct += (pct - cpu_pct) / 8;

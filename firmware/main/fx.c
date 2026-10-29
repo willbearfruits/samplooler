@@ -5,6 +5,7 @@
 #include "esp_heap_caps.h"
 #include "esp_attr.h"
 #include "esp_log.h"
+#include "diag.h"
 
 static const char *TAG = "fx";
 
@@ -40,6 +41,8 @@ void fx_init(void)
     stt = heap_caps_calloc(STT_N, sizeof(float), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (!dly) dly = heap_caps_calloc(DLY_N, sizeof(float), MALLOC_CAP_SPIRAM);
     if (!stt) stt = heap_caps_calloc(STT_N, sizeof(float), MALLOC_CAP_SPIRAM);
+    diag_ram("fx.dly", dly, DLY_N * sizeof(float), false);
+    diag_ram("fx.stt", stt, STT_N * sizeof(float), false);
     ESP_LOGI(TAG, "delay %d ms, stutter %d..%d ms%s", DLY_MS, STT_MIN_MS, STT_MAX_MS, dly && stt ? "" : " (NO MEMORY, effects off)");
 }
 

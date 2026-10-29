@@ -12,6 +12,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "audio.h"
+#include "prof.h"
+#include "esp_memory_utils.h"
 #include "esp_cpu.h"
 #include "esp_cpu_utils.h"
 #include "esp_debug_helpers.h"
@@ -171,6 +173,57 @@ size_t diag_status(char *buf, size_t n)
     return (size_t)k < n ? (size_t)k : n - 1;
 }
 
+// ---- where the big buffers landed
+#define RAM_N 16
+static struct { const char *name; unsigned bytes; uint8_t where, fast; } s_ram[RAM_N];   // where: 0 internal, 1 PSRAM, 2 none
+static int s_ram_n;
+
+void diag_ram(const char *name, const void *p, unsigned bytes, bool fast)
+{
+    if (s_ram_n >= RAM_N) return;
+    s_ram[s_ram_n].name = name; s_ram[s_ram_n].bytes = bytes; s_ram[s_ram_n].fast = fast;
+    s_ram[s_ram_n].where = !p ? 2 : esp_ptr_external_ram(p) ? 1 : 0;
+    s_ram_n++;
+}
+
+// "ram:" lines, as many as the table needs (a log line over MIDI holds about 190 characters); a fast buffer that is
+// not in internal RAM is marked SLOW
+static void log_ram(void)
+{
+    static const char *const W[3] = { "int", "psram", "NONE" };
+    char b[180];
+    int k = 0, slow = 0;
+    for (int i = 0; i < s_ram_n; i++) slow += s_ram[i].fast && s_ram[i].where != 0;
+    k = snprintf(b, sizeof b, "%d hot buffer%s outside internal RAM |", slow, slow == 1 ? "" : "s");
+    for (int i = 0; i < s_ram_n; i++) {
+        char e[48];
+        int m = snprintf(e, sizeof e, " %s %uK %s%s", s_ram[i].name, (s_ram[i].bytes + 512u) / 1024u, W[s_ram[i].where],
+                         s_ram[i].fast && s_ram[i].where != 0 ? " SLOW" : "");
+        if (k + m >= (int)sizeof b - 1) { ESP_LOGI(TAG, "ram: %s", b); k = 0; }
+        memcpy(b + k, e, (size_t)m + 1); k += m;
+    }
+    if (k) ESP_LOGI(TAG, "ram: %s", b);
+}
+
+// "prof:" the microseconds each stage of the audio block takes, on average and at most, over the last second
+static void log_prof(void)
+{
+    prof_t p;
+    if (!prof_get(&p)) { ESP_LOGI(TAG, "prof: not yet"); return; }
+    char b[180];
+    uint32_t tot = 0, top = 0;
+    int k = snprintf(b, sizeof b, "us avg/max per block of %lu:", (unsigned long)p.budget_us);
+    for (int s = 0; s < PROF_N; s++) {
+        tot += p.avg_us[s]; top += p.max_us[s];
+        k += snprintf(b + k, sizeof b - (size_t)k, " %s %lu/%lu", prof_name(s), (unsigned long)p.avg_us[s], (unsigned long)p.max_us[s]);
+        if (k >= (int)sizeof b) break;
+    }
+    ESP_LOGI(TAG, "prof: %s", b);
+    ESP_LOGI(TAG, "prof: all %lu us of %lu on average (%lu%%), the worst of each stage added up %lu us",
+             (unsigned long)tot, (unsigned long)p.budget_us, (unsigned long)(tot * 100u / (p.budget_us ? p.budget_us : 1)),
+             (unsigned long)top);
+}
+
 void diag_log_status(void)
 {
     char b[400];
@@ -178,5 +231,7 @@ void diag_log_status(void)
     char *nl = strchr(b, '\n');
     if (nl) { *nl = 0; ESP_LOGI(TAG, "status: %s", b); ESP_LOGI(TAG, "status: %s", nl + 1); }
     else ESP_LOGI(TAG, "status: %s", b);
+    log_prof();
+    log_ram();
     diag_crash_report(b, sizeof b); ESP_LOGI(TAG, "crash: %s", b);
 }

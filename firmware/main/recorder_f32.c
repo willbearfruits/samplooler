@@ -1,4 +1,5 @@
 #include "recorder.h"
+#include "diag.h"
 #include <string.h>
 #include <math.h>
 #include "esp_heap_caps.h"
@@ -67,6 +68,7 @@ static grain_t gr[NGRAIN];
 bool recorder_init(void)
 {
     buf = heap_caps_malloc((MAX_SAMPLES + GUARD) * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+    diag_ram("rec.take", buf, (MAX_SAMPLES + GUARD) * sizeof(int16_t), false);
     if (!buf) { ESP_LOGE(TAG, "no PSRAM for the take buffer"); return false; }
     memset(buf, 0, (MAX_SAMPLES + GUARD) * sizeof(int16_t));
     for (int i = 0; i < XF; i++) xf_w[i] = 0.5f - 0.5f * cosf((float)M_PI * (float)i / (float)XF);
