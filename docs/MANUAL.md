@@ -122,7 +122,7 @@ vocoder ones (TALKBOX was measured at 81 % on a board).
 
 ## With the other instruments
 
-Boards running WRECK, MANTRA or HUFF (and SING, BAND and JAM) talk to each other over the radio: no router, no
+Boards running HUFF, WRECK, MANTRA, BAND or SING talk to each other over the radio: no router, no
 pairing, just the same Group. The Samplooler joins them. What is shared:
 
 | | |
@@ -358,6 +358,6 @@ and runs this firmware. Rev D, the board files in [hardware/](../hardware/), is 
 
 ## Other instruments
 
-The same Stack can run other firmwares, WRECK, MANTRA and HUFF among them, and be flashed back to the Samplooler.
+The same Stack can run HUFF, WRECK, MANTRA or BAND, and be flashed back to the Samplooler.
 Install them from the [page](https://willbearfruits.github.io/samplooler/#instruments) or the desktop app in
 [app/](../app/). The list, what each one does and how far it is tested: [instruments/](../instruments/README.md).

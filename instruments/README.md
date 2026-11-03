@@ -6,14 +6,11 @@ and flash the Samplooler back the same way. Anyone can add an instrument.
 <!-- list -->
 | | What | Status |
 | - | - | - |
-| [AIR](air) | Drum on nothing. Swing the box like a stick: forward the hi-hat, left the kick, right the snare, back the open hat, every hit on the beat. Tap REC and make a sound: it is a pad. Hold REC and play: a loop of whole bars, four of them stacked. | Runs on a board |
 | [HUFF](huff) | Blow at the mic, tilt for the notes. Ocarina, flutes, clarinet, brass, a didgeridoo, a guitar, a synth lead and a choir, an amp behind them; links to the other boards. | Runs on a board |
 | [MANTRA](mantra) | A formant voice and a seated Buddha who sings it: monks chanting OM, overtone singing, Daisy Bell, and a wall of amps behind him. Tilt for the vowels, turn it for the overtones. | Runs on a board |
-| [SIFT](sift) | A granular recorder that takes language apart. Daisy Bell plays whole; tilt it and syllables stammer, swap and drop out until only dust is left. Also a map of grains by sound. | Runs on a board |
 | [WRECK](wreck) | A breakcore machine that turns into a doom machine: one knob from a chopped, rolled, crushed break at twice the tempo down to one chord held under a break slowed into thunder. | Runs on a board |
-| [WRECK2](wreck2) | WRECK with the dice in your hand: the break plays straight from breakcore to doom, roll the box for chaos, tap to catch the bar you just heard, draw the drums, the riff and the bars. | Simulator only |
 
-Also in this folder, still in progress and not on the list: [AIRDWELLER](airdweller), [BAND](band), [CHIRP](chirp), [DWELL](dwell), [ETHER](ether), [HOWL](howl), [JAM](jam), [KNOCK](knock), [NYLON](nylon), [SING](sing), [SNIFF](sniff) ([ROADMAP.md](../ROADMAP.md)).
+Also in this folder, still in progress and not on the list: [BAND](band), [SING](sing) ([ROADMAP.md](../ROADMAP.md)).
 <!-- /list -->
 
 "Runs on a board" means it has started and kept up on real hardware but has not been played much yet.

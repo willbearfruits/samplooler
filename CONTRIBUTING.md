@@ -14,14 +14,9 @@ an encoder and a joystick) and builds with ESP-IDF 5.5.1 can go in: an instrumen
 
 | Copy | If yours |
 | - | - |
-| [KNOCK](instruments/knock) | reacts to hits on the box, loops events (notes), not audio |
 | [HUFF](instruments/huff) | uses the mic as a sensor (breath), plays a physical model |
-| [HOWL](instruments/howl) | runs the mic through filters back out of the speaker |
-| [SNIFF](instruments/sniff) | listens to the Wi-Fi radio |
-| [CHIRP](instruments/chirp) | listens to Bluetooth LE |
-| [ETHER](instruments/ether) | uses both radios at once |
-| [JAM](instruments/jam) | has several instruments as layers sharing a tempo and key |
-| [BAND](instruments/band) | plays with other boards (the link), or needs an editor of its own on the knob (the drum grid) |
+| [MANTRA](instruments/mantra) | makes a voice or a drone of its own, plays by itself |
+| [BAND](instruments/band) | has several instruments as layers sharing a tempo and key, plays with other boards (the link), or needs an editor of its own on the knob (the drum grid) |
 | [SING](instruments/sing) | processes the voice (pitch, harmonies, vocoder) or loops on the song's bars |
 | [WRECK](instruments/wreck) | samples from the mic or the USB input, chops breaks, or moves between two styles on one knob |
 

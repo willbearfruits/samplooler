@@ -6,7 +6,7 @@ the knob to pick who you play; the others keep playing. Everything is in one key
 same chords. Next to a [SING](../sing) the two boards play in time: same tempo, same bars, same chords.
 
 Firmware for the Samplooler's ESP32-S3 boards (the Stack, the Mini, the breadboard kit). It grew out of
-[JAM](../jam). It runs on a board but has not been played much yet (see Status).
+an older instrument, JAM. It runs on a board but has not been played much yet (see Status).
 
 ![The splash](images/band-splash.gif) ![Drawing a beat](images/band-drums-grid.gif)
 
