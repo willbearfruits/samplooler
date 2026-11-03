@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 project(SamploolerPlugin VERSION 0.1.0 LANGUAGES C CXX)
 
 # JUCE: pass -DFETCHCONTENT_SOURCE_DIR_JUCE=<checkout> to use a local copy (8.0.13 is on disk
-# at ~/Projects/hikim/build/_deps/juce-src), otherwise it is fetched.
+# at ~/Projects/audio/hikim/build/_deps/juce-src), otherwise it is fetched.
 include(FetchContent)
 FetchContent_Declare(JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git

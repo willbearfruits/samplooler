@@ -1,94 +1,114 @@
 # SIFT
 
-A granular synthesizer and recorder. Chaos on one side, order on the other.
+A granular recorder that takes language apart.
 
-Everything SIFT hears goes into one memory of 20 seconds. It cuts that memory into small pieces of 32 ms and
-listens to each one: how loud, how bright, how noisy, and its pitch if it has one. Each piece is a dot on the
-screen, placed by what it sounds like: low to high across, clean to noisy up. Tilt the box and a cursor moves over
-the dots. The grains come from the dots near the cursor.
+SIFT holds 20 seconds of sound and plays it with a head that moves through it. At one end of the knob it plays the
+recording whole. Turn it, or tilt the box, and the recording comes apart as speech does when it is torn. First the
+tape wears. Then the syllables come loose: one is stammered, the next swapped with its neighbour, one dropped, one
+backwards. Then the grains shrink to phonemes, pulled from wherever sounds like this moment. Then dust: a few
+milliseconds of sound from anywhere, thrown up and down in pitch, driven and crushed.
 
-One knob runs from ORDER to CHAOS. At ORDER the dots nearest the cursor play as a pattern on the beat, low to
-high, each one tuned to the key. At CHAOS grains fly from a wide ring around the cursor at random times, thrown up
-and down in pitch, some backwards. In between, the pattern thins out as the swarm thickens. Shake the box and it
-goes wild for a moment, then settles.
+It starts with Daisy Bell, sung by MANTRA's voice: "Daisy, Daisy, give me your answer, do! I'm half crazy, all for
+the love of you!" Record your own voice, or anything, and it comes apart the same way.
 
-Firmware for the Samplooler Stack (ESP32-S3). Built on 2026-10-22 and checked in the host simulator (`tools/sim`,
-92 checks). It runs on a board (CPU 16 %, the whole 20 s memory fits) but has not been played much yet.
+Firmware for the Samplooler Stack (ESP32-S3). Version 0.2, built 2026-10-22, checked in the host simulator
+(`tools/sim`, 114 checks) and running on a board (CPU 17 %, 19 % torn to dust with the feedback on). It has not been
+played much yet.
 
-> VIDEO: SIFT on a board, tilting over the grains, ORDER to CHAOS, a shake.
+> VIDEO: SIFT on a board: Daisy whole, tilted apart, brought back.
 
-![from order to chaos](images/sift-sweep.gif)
+![Daisy, whole, then in pieces](images/sift-decompose.gif)
+
+## How far it comes apart
+
+A speech recogniser (whisper.cpp, on this computer) listened to 18 seconds at each setting and counted Daisy's 16
+words:
+
+| CHAOS | 0 | 10 | 20 | 30 | 40 | 50 | 60 |
+| - | - | - | - | - | - | - | - |
+| words heard | 15 | 15 | 10 | 11 | 8 | 3 | 0 |
+
+At 20 it heard "Daisy, da-da-daisy". At 50, "crazy, crazy, crazy, crazy". From 60 on there are no words, only voice.
 
 ## Playing
 
-1. Switch it on. It starts with its own sounds (plucked strings, bells, a voice, breaths, clicks), already sorted
-   on the screen. Tilt the box: the cursor rolls to the low side, and the grains near it play.
-2. Turn the knob. Left is ORDER: a tuned pattern on the beat, the dots snap to a grid and the pattern is drawn as
-   lines between them. Right is CHAOS: the dots swarm and a wide ring opens around the cursor.
-3. Hold REC and make a sound: sing, talk, clap, play something into the mic. Let go. Your sound is now grains on
-   the map, next to the old ones. Each take is added (TAKE > TAKES ADD). When the 20 s are full, the oldest go first.
-4. Tap REC instead of holding it: it keeps listening (LIVE). Everything you play goes in, and the oldest drops
-   out, so the grains are always the last 20 s. Tap again to stop.
-5. Shake the box: the grains scatter and it throws itself towards chaos, then settles in a second or two.
-6. MAP > CURSOR > VOICE: the mic moves the cursor. Sing or beatbox and the grains that sound most like you play.
-   With SING ALONG on, the pitched grains take your note. Use headphones or the line out (SYSTEM > SPEAKER OFF),
-   or it hears itself.
+1. Switch it on. Daisy Bell plays whole. The screen shows the song as a waveform with the head running through it
+   and the words along the top.
+2. Turn the knob up slowly. The words go one by one, then the voice turns to dust. The waveform crumbles with it and
+   the letters scramble and fall.
+3. Tilt the box right: it comes apart at once. Level: whole again. Tilt left from wherever the knob is: it comes back
+   together. The knob sets where you are; the tilt throws you there and back.
+4. Tip the box towards you: the head slows down, stops half way (a frozen moment), and runs backwards when tipped all
+   the way. Away from you it runs up to twice as fast.
+5. Hold REC and say something into the mic. Let go. Now your words come apart.
+6. DIRT: DRIVE and CRUSH for distortion, FEEDBACK to send the sound back into itself, ROT to write the damage into the
+   recording, so it stays torn when you come back. Choosing a Daisy sound again sings Daisy again, whole.
 
-At power-on SIFT loads the bank you saved last (TAKE > BANK, SAVE). TAKE > LOAD can also read the Samplooler's
-slots: record on the Samplooler, save a slot, flash SIFT, load SLOT 1 to 8, and play it as grains.
-
-![the order side](images/sift-play.gif)
+![the tilt throws it apart and back](images/sift-tilt.gif)
 
 ## Controls
 
 | | |
 | - | - |
-| tilt | the cursor: the grains come from the dots near it |
-| turn the knob | ORDER to CHAOS (once you have edited another setting in the menu, the knob turns that one) |
-| press the knob | the menu: SOUND, GRAINS, ORDER, CHAOS, MAP, TAKE, SPACE, SONG, SYSTEM |
+| turn the knob | whole to pieces (CHAOS) |
+| tilt right / left | push it apart / bring it back, at once |
+| tip towards you / away | the head slower, stopped, backwards / faster |
+| hold the knob | the tilt stays where it is (a padlock shows); hold again to let go |
+| press the knob | the menu: SOUND, GRAINS, DECOMPOSE, DIRT, ORDER, CHAOS, MAP, TAKE, SPACE, SONG, SYSTEM |
 | press the knob twice | the knob turns the volume for a moment |
-| hold the knob | the cursor stays where it is (a padlock shows); hold again to let go |
-| REC held | record into the grains |
+| REC held | record into it |
 | REC tapped | LIVE: it keeps recording until you tap again |
-| shake | scatter: chaos for a moment, and a burst of grains |
+| shake | a burst: it flies apart for a moment |
 | stick left / right | shorter / longer grains |
 | stick up / down | pitch up / down, up to an octave |
 
-## The screen
-
-Every dot is a 32 ms piece of what SIFT heard. New ones fall in from the top as they are heard. The cursor is the
-small crosshair. The dashed ring is how far the chaos side reaches. The grain playing now lights up where it came
-from. The header shows REC, LIVE, LOAD or SAVE on the left, then the knob: a little grid at the ORDER end, a spray
-of dots at the CHAOS end. A hollow mark ahead of the knob's mark is the shake. Then a square that blinks on each
-beat, an antenna when another board is linked, and the meter.
-
 ## Sounds
 
-SIFT, LATTICE, MUSIC BOX, CHORDS, CHOIR, FREEZE, TAPE (the map across is time: a tape you scrub by tilting),
-STUTTER, MOSAIC (the cursor on your voice), RAIN, GLITCH, SWARM, DUST, UNDERWATER, STARS. Eight more places for
-your own, under SOUND > SAVE AS. The sounds change how the grains play, not what they are made of: your recordings
-stay when you change sound.
+DAISY, DAISY ROT, HAL (Daisy slowing and sinking), TONGUES (syllables stammered), GLOBALALIA (pieces from wherever
+sounds alike), SHRED, DUST TO DUST, FREEZE FRAME, BACKWARDS, FEEDBACK, AMEN, AMEN SHRED. Then the first version's
+sounds, on the map: MAP, LATTICE, MUSIC BOX, CHORDS, CHOIR, FREEZE, TAPE, STUTTER, MOSAIC, RAIN, GLITCH, SWARM, DUST,
+UNDERWATER, STARS. Eight more places for your own, under SOUND > SAVE AS.
+
+A sound with Daisy or the Amen in it brings that recording, unless you have recorded your own: yours stays.
+
+## What it is made of
+
+- **DAISY**: the first two lines of Daisy Bell (Harry Dacre, 1892, public domain), sung by MANTRA's formant voice the
+  way the IBM 7094 sang it in 1961. It is synthesized on the board, not a recording.
+- **AMEN**: the Amen break's pattern played on WRECK's synthesized kit and printed onto tape, four takes. The famous
+  recording is not in the firmware (it is someone else's). To use the real one, record it on the Samplooler, save it
+  to a slot, and load that slot here (TAKE > BANK > SLOT).
+- **STARTER**: the first version's sounds: plucks, bells, a voice, breaths, clicks.
+- Anything you record, and four banks to save it in.
+
+## The map
+
+MODE MAP is the first version of SIFT: every 32 ms piece of the recording is a dot placed by what it sounds like,
+the tilt moves a cursor over them, and the knob goes from a tuned pattern on the beat (ORDER) to a swarm (CHAOS). It
+is all still there: [docs/MANUAL.md](docs/MANUAL.md) has it.
+
+![the map](images/sift-play.gif)
 
 ## With other boards
 
-LINK on: SIFT plays on the flock's beat and in its key. Its tempo and key go out to the others when you change
-them (SONG > TEMPO, KEY, SCALE). It plays along with BAND, MANTRA, HUFF, WRECK 2, AIR and the Samplooler.
+LINK on: SIFT shares the tempo and the key with BAND, MANTRA, HUFF, WRECK 2, AIR and the Samplooler. In MAP mode its
+patterns play on the shared beat, tuned to the shared key.
 
 ## MIDI (USB)
 
 | Out | |
 | - | - |
-| notes | each pitched grain on the order side, at the note it plays |
-| CC 1, 2, 3 | the cursor across, the cursor up, how chaotic it is now |
-| CC 20 and up | every setting, when you change it |
+| notes | MAP: each pitched grain on the order side |
+| CC 1, 2, 3 | the cursor across, the cursor up, how far apart it is now |
+| CC 20 and up | every setting, as you change it |
 | program change | the sound |
 
 | In | |
 | - | - |
-| a note held | the order side plays at that note |
+| a note held | MAP: the order side plays at that note |
 | CC 20 and up, program change | settings, sounds |
 | note 60, CC 64 | REC |
-| note 64 | hold the cursor |
+| note 64 | hold the tilt |
 
 ## Building
 
@@ -97,8 +117,9 @@ ESP-IDF v5.5.1, as for the Samplooler (the core's files are copied in from `core
 ```sh
 . ~/esp/esp-idf/export.sh
 cd firmware && idf.py build
-../tools/flash.sh          # finds the board by name over USB and flashes only that one
-../tools/sim/run.sh        # the simulator: every check, screens, GIFs and sound in tools/sim/out/
+../tools/flash.sh                         # finds the board by name over USB and flashes only that one
+../tools/sim/run.sh                       # the simulator: every check, screens, GIFs and sound in tools/sim/out/
+SIFT_WHISPER=0,20,40,60 ../tools/sim/run.sh inst   # also count the words whisper.cpp hears at those settings
 ```
 
 The full manual is [docs/MANUAL.md](docs/MANUAL.md). All the screens: [images/screens.png](images/screens.png).

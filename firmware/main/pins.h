@@ -1,4 +1,4 @@
-// Pin map, identical to the ESP32-S3 SuperMini kit (~/Projects/kit/docs/pinmap.md).
+// Pin map, identical to the ESP32-S3 SuperMini kit (~/Projects/hardware/kit/docs/pinmap.md).
 #pragma once
 
 #define PIN_BOOT      0    // BOOT button, active low

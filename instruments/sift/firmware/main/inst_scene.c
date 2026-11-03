@@ -1,4 +1,10 @@
-// SIFT's screens. The play screen is the map: every unit of the corpus a dot, placed by what it sounds like. New
+// SIFT's screens. DECOMPOSE: the recording drawn as a waveform across the screen, the head running through it; as it
+// comes apart the waveform crumbles (its columns shake, lose their lines, turn to drifting dust), each grain lights the
+// place it came from, and a grain from far away draws a thread back to the head. Daisy's words run along the top, the
+// syllable heard underlined; they scramble and fall as the sound does. The stage (WHOLE, WEARING, SYLLABLES,
+// PHONEMES, DUST) and the head's speed sit in the bottom corners.
+//
+// MAP: every unit of the corpus a dot, placed by what it sounds like. New
 // units fall in from the top, like sand through a sieve, and land where they belong. Towards ORDER the dots snap to
 // a lattice and the pattern the cursor holds is drawn as a constellation, its notes lighting up in turn; towards
 // CHAOS the lattice melts, the dots circle their places faster and wider, and the cursor's catch opens into a turning
@@ -11,6 +17,7 @@
 #include "link.h"
 #include "dsp.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static UI_RAM float ds_x[NU_MAX], ds_y[NU_MAX];       // each dot's place on the map, eased
@@ -77,9 +84,20 @@ static void dot_pos(int u, float *x, float *y)
     *x = px; *y = py;
 }
 
+static int16_t tl_at_s[NU_MAX];                       // each unit's column on the waveform, from the last frame drawn (-1: none)
+static bool tl_have;
+
 void scene_spawn(const spawn_t *s)
 {
     if (s->unit < 0 || s->unit >= corp_units) return;
+    if (S.mode == MODE_DECOMP) {                       // on the waveform: a stammer rings, a piece from far away sparks
+        if (!tl_have || tl_at_s[s->unit] < 0 || s->kind == GK_ORDER) return;
+        float x = (float)tl_at_s[s->unit], y = 41.0f;
+        if (s->kind == GK_REPEAT) parts_emit(&parts, x, y, 0, 0, 0.25f, PART_RING, 1);
+        else parts_emit(&parts, x, y, 40.0f * rng_bi(&pseed), -30.0f - 30.0f * rng_uni(&pseed), s->kind == GK_BURST ? 0.5f : 0.3f,
+                        s->kind == GK_BURST ? PART_STREAK : PART_SPARK, 1);
+        return;
+    }
     float x, y; dot_pos(s->unit, &x, &y);
     if (s->kind == GK_ORDER) {
         if (s->frame != pulse_frame) { pulse = 1.0f; pulse_unit = s->unit; pulse_frame = s->frame; }
@@ -138,7 +156,8 @@ static void header(const view_t *v)
     const front_status_t *st = front_status();
     char b[24];
     int x_end;
-    if (S.job == JOB_LOAD) { snprintf(b, sizeof b, "LOAD %d%%", (int)(S.job_frac * 100.0f)); x_end = oled_pill(F_SMALL, 0, 2, b, true); }
+    if (S.job == JOB_RENDER) { snprintf(b, sizeof b, "%s %d%%", S.job_what == BK_DAISY ? "DAISY" : "AMEN", (int)(S.job_frac * 100.0f)); x_end = oled_pill(F_SMALL, 0, 2, b, true); }
+    else if (S.job == JOB_LOAD) { snprintf(b, sizeof b, "LOAD %d%%", (int)(S.job_frac * 100.0f)); x_end = oled_pill(F_SMALL, 0, 2, b, true); }
     else if (S.job == JOB_SAVE) { snprintf(b, sizeof b, "SAVE %d%%", (int)(S.job_frac * 100.0f)); x_end = oled_pill(F_SMALL, 0, 2, b, true); }
     else if (S.rec == REC_HOLD) { snprintf(b, sizeof b, "REC %.1f", (double)S.rec_s); x_end = oled_pill(F_SMALL, 0, 2, b, true); }
     else if (S.rec == REC_LIVE) x_end = oled_pill(F_SMALL, 0, 2, "LIVE", (v->frame / 8) % 2 == 0);
@@ -148,7 +167,8 @@ static void header(const view_t *v)
     if (gx < 40) gx = 40;
     int gw = 96 - gx;
     if (gw > 20) {
-        order_glyph(gx, 4);
+        if (S.mode == MODE_DECOMP) oled_rect(gx, 6, 6, 3, true);       // whole: a solid bar
+        else order_glyph(gx, 4);
         chaos_glyph(gx + gw - 7, 3);
         int tx = gx + 8, tw = gw - 17;
         oled_hline_pat(tx, 8, tw, 0x55, true);
@@ -296,15 +316,160 @@ static void draw_jar(const view_t *v)
     (void)v;
 }
 
+// ---------------------------------------------------------------- DECOMPOSE: the recording, crumbling
+static UI_RAM int16_t tl[NU_MAX];
+static UI_RAM int16_t tl_at[NU_MAX];                  // each unit's place in the timeline (-1: not in it)
+
+static float n2(int a, int b, float t)                 // a slow wander, -1..1
+{
+    return sin_turns(hash01(a, b) + t * (0.13f + 0.3f * hash01(a, b + 7)));
+}
+
+// Daisy's line, the syllable heard underlined, scrambled and falling as D rises
+static void draw_lyric(float D, int bottom)
+{
+    int j = S.syl_heard;
+    if (S.material != MAT_DAISY || j < 0) return;
+    int k = daisy_syl_line(j);
+    const char *line = daisy_line(k);
+    int len = (int)strlen(line);
+    // which letters belong to the syllable heard: walk the line's letters against each syllable's
+    int a = -1, b = -1, ci = 0;
+    for (int s = daisy_line_first(k); s < daisy_line_first(k + 1); s++) {
+        const char *t = daisy_syl(s);
+        int start = -1;
+        for (const char *q = t; *q; q++) {
+            if (*q == '\'') continue;
+            while (ci < len && line[ci] != *q) ci++;
+            if (ci >= len) break;
+            if (start < 0) start = ci;
+            ci++;
+        }
+        if (s == j) { a = start; b = ci; }
+    }
+    const gfx_font_t *f = oled_ftext_w(F_SMALL, line, 1) <= 124 ? F_SMALL : F_TINY;
+    int w = oled_ftext_w(f, line, 1), x = 64 - w / 2, y = 17;
+    float garble = D < 0.08f ? 0.0f : powf((D - 0.08f) / 0.92f, 1.2f);
+    int phase = (int)(t_now * (2.0f + 10.0f * D));
+    char one[2] = { 0, 0 };
+    for (int i = 0; i < len; i++) {
+        char ch = line[i];
+        int cw = oled_ftext_w(f, (char[2]){ ch, 0 }, 1);
+        if (ch >= 'A' && ch <= 'Z' && hash01(i * 31 + k, phase) < garble) ch = (char)('A' + (int)(hash01(i, phase + 3) * 25.99f));
+        float dy = D * D * 4.0f * n2(i, k, t_now * 3.0f);
+        if (D > 0.8f) dy += (D - 0.8f) * 140.0f * hash01(i, 11) * wrap1(t_now * 0.7f + hash01(i, 12));
+        int yy = y + (int)lroundf(dy);
+        one[0] = ch;
+        if (yy < bottom - 6) oled_ftext(f, x, yy, one);
+        if (i >= a && i < b && a >= 0) oled_hline_pat(x, y + (f == F_SMALL ? 8 : 6), cw, 0xFF, true);
+        x += cw + 1;
+    }
+}
+
+static void draw_decomp(const view_t *v)
+{
+    float D = S.chaos;
+    int bottom = v->cover ? OLED_H - v->cover : OLED_H;
+    int n = sift_timeline(tl, NU_MAX);
+    if (n <= 0) return;
+    for (int u = 0; u < corp_units; u++) tl_at[u] = -1;
+    for (int i = 0; i < n; i++) tl_at[tl[i]] = (int16_t)i;
+    const int x0 = MAP_X0, W = MAP_X1 - MAP_X0 + 1, cy = 41;
+    for (int u = 0; u < corp_units; u++) tl_at_s[u] = tl_at[u] < 0 ? -1 : (int16_t)(x0 + tl_at[u] * W / n);
+    tl_have = true;
+    bool lyric = S.material == MAT_DAISY;
+    int top = lyric ? 27 : 19;
+    float sol = 1.0f - smoothstep(0.3f, 0.62f, D);                       // how much of the line is still a line
+    float shake_px = D * sqrtf(D) * 9.0f + S.shake * 6.0f;
+    // the waveform, a column at a time
+    for (int c = 0; c < W; c++) {
+        int i0 = c * n / W, i1 = (c + 1) * n / W;
+        if (i1 <= i0) i1 = i0 + 1;
+        // its height: the loudest unit's level under its take's peak, 36 dB to the top (vowels and consonants show)
+        float amp = 0;
+        for (int i = i0; i < i1 && i < n; i++) {
+            const unit_t *un = &units[tl[i]];
+            if (un->state != U_OK || un->gain <= 0.0f) continue;
+            float peak_db = 20.0f * log10f(0.5f / (un->gain * 32768.0f));
+            float a = clampf((un->d[D_LOUD] - peak_db + 36.0f) / 30.0f, 0.0f, 1.0f);
+            if (a > amp) amp = a;
+        }
+        int h = (int)(amp * amp * 13.0f + 0.5f);
+        int x = x0 + c + (int)lroundf(D * D * 5.0f * n2(c, 2, t_now));
+        int yc = cy + (int)lroundf(shake_px * n2(c, 1, t_now * (0.5f + 2.0f * D)));
+        if (h == 0) { if (hash01(c, 9) < sol) oled_pixel(x, yc, true); continue; }
+        for (int y = -h; y <= h; y++) {
+            if (hash01(c * 64 + y, 5) >= sol) continue;
+            int yy = yc + y;
+            if (yy >= top && yy < bottom) oled_pixel(x, yy, true);
+        }
+        int dust = (int)((1.0f - sol) * (float)h * 0.7f);
+        for (int d = 0; d < dust; d++) {
+            float r = 1.0f + 1.6f * D;
+            int dx = (int)lroundf(D * 7.0f * n2(c * 13 + d, 3, t_now * (0.4f + D)));
+            int dy = (int)lroundf((float)h * r * n2(c * 13 + d, 4, t_now * (0.3f + 0.8f * D)));
+            int yy = yc + dy;
+            if (yy >= top && yy < bottom) oled_pixel(x + dx, yy, true);
+        }
+        // where syllables start: a tick under it, gone as the order goes
+        if (D < 0.55f) for (int i = i0; i < i1 && i < n; i++) if (eng_cut[tl[i]] && hash01(c, 21) > D * 1.6f) { if (58 < bottom) oled_pixel(x, 58, true); break; }
+    }
+    // the head
+    int hu = (int)(eng_head / (float)UNIT);
+    int hx = -1;
+    if (hu >= 0 && hu < corp_units && tl_at[hu] >= 0) {
+        float fi = (float)tl_at[hu] + (eng_head - (float)(hu * UNIT)) / (float)UNIT;
+        hx = x0 + (int)(fi * (float)W / (float)n);
+        int hb = bottom < 57 ? bottom : 57;
+        if (hb > top) oled_invert(hx, top, 1, hb - top);                // it cuts through the waveform
+        if (!lyric) { oled_pixel(hx - 1, top - 2, true); oled_pixel(hx + 1, top - 2, true); oled_pixel(hx, top - 1, true); }
+    }
+    // every grain sounding now: where it came from; a thread back to the head when it came from far
+    int threads = 0;
+    for (int i = 0; i < NV; i++) {
+        int u = eng_vis_unit[i];
+        if (u < 0 || u >= corp_units || tl_at[u] < 0) continue;
+        int gx = x0 + tl_at[u] * W / n;
+        int gy = cy + (int)lroundf(shake_px * 0.5f * n2(u, 6, t_now));
+        if (eng_vis_env[i] > 0.6f) oled_rect(gx - 1, gy - 1, 3, 3, true); else oled_pixel(gx, gy, true);
+        if (hx >= 0 && abs(gx - hx) > 6 && threads < 8) { dline(gx, gy, hx, cy, 0x11); threads++; }
+    }
+    parts_draw(&parts);
+    if (lyric) draw_lyric(D, bottom);
+    else {                                                                // what it is made of, where Daisy's words would be
+        const char *what = S.material == MAT_AMEN ? "AMEN" : S.material == MAT_STARTER ? "STARTER" : "YOUR TAKE";
+        oled_ftext_r(F_TINY, 126, 17, what, 1);
+    }
+    // the stage and the speed, in the corners
+    if (!v->cover) {
+        static const char *const stage[] = { "WHOLE", "WEARING", "SYLLABLES", "PHONEMES", "DUST" };
+        int st = D < 0.04f ? 0 : D < 0.2f ? 1 : D < 0.47f ? 2 : D < 0.76f ? 3 : 4;
+        oled_rect(0, 57, oled_ftext_w(F_TINY, stage[st], 1) + 2, 7, false);
+        oled_ftext_ex(F_TINY, 1, 58, stage[st], 1);
+        char b[16];
+        float sp = S.speed;
+        if (fabsf(sp - 1.0f) > 0.04f) {
+            if (sp == 0.0f) snprintf(b, sizeof b, "FROZEN");
+            else if (sp < 0.0f) snprintf(b, sizeof b, "BACK X%.1f", (double)-sp);
+            else snprintf(b, sizeof b, "X%.2f", (double)sp);
+            int w = oled_ftext_w(F_TINY, b, 1);
+            oled_rect(126 - w, 57, w + 2, 7, false);
+            oled_ftext_ex(F_TINY, 127 - w, 58, b, 1);
+        }
+    }
+    (void)v;
+}
+
 void scene_draw(const view_t *v)
 {
     t_now = v->t;
     physics();
     header(v);
-    if (S.empty && S.pending == 0 && S.job != JOB_LOAD) draw_empty(v);
+    if (S.empty && S.pending == 0 && S.job != JOB_LOAD && S.job != JOB_RENDER) draw_empty(v);
+    else if (S.mode == MODE_DECOMP) draw_decomp(v);
     else draw_map(v);
     if (S.job == JOB_SAVE) draw_jar(v);
-    if ((S.axes_shown > 0.0f || v->t < 7.0f) && !S.empty && !v->cover) axis_names();
+    if ((S.axes_shown > 0.0f || v->t < 7.0f) && !S.empty && !v->cover && S.mode == MODE_MAP) axis_names();
     // recording: what goes in, a bar up the left edge
     if (S.rec != REC_IDLE && !S.empty) {
         float e = clampf((20.0f * log10f(eng_rec_level + 1e-5f) + 50.0f) / 50.0f, 0.0f, 1.0f);
@@ -360,7 +525,7 @@ bool scene_splash(int f)
         oled_ftext_c(F_MED, 64, y, "SIFT", 3); oled_ftext_c(F_MED, 65, y, "SIFT", 3);
         if (f >= 54) {
             oled_rect(22, y + 17, 84, 8, false);
-            oled_ftext_c(F_TINY, 64, y + 18, "SCATTER IT, SORT IT", 1);
+            oled_ftext_c(F_TINY, 64, y + 18, "WHOLE, THEN IN PIECES", 1);
         }
     }
     return f < 96;
