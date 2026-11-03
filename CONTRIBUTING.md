@@ -116,3 +116,6 @@ USB product IDs so far (all with Espressif's vendor ID 0x303A, picked here, not 
 | 0x402C | WRECK2 |
 | 0x402D | AIR |
 | 0x402E | SIFT |
+| 0x402F | NYLON |
+| 0x4030 | DWELL |
+| 0x4031 | AIRDWELLER |

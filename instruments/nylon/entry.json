@@ -1,0 +1,26 @@
+{
+  "name": "NYLON",
+  "summary": "For a classical guitar: stick it on the top and lifting the neck is the pedal. A looper under ten effects: clouds, a bloom that holds your note, tape echo, wah, shimmer, octaves, golpe drums, a voice.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.2",
+  "chip": "esp32s3",
+  "uses": [
+    "mic",
+    "tilt",
+    "speaker"
+  ],
+  "hardware_note": "Stuck on the guitar's top, screen out. A footswitch wired in parallel with REC (GPIO 3 to ground) frees your hands. BLOOM ON WOOD wants the speaker amp's output on the top: the small speaker pressed against it, or a stick-on exciter.",
+  "status": "board",
+  "status_note": "Played on a guitar on 2026-10-24 (0.1.0, then 0.1.1 notes). 0.1.2 (the freeze on the stick, SLAP SETUP, no button click in the loop, bars and a count-in) passes the simulator.",
+  "listed": false,
+  "image": "images/nylon-tour.gif",
+  "more": [
+    "images/nylon-loop.gif",
+    "images/nylon-cloud.gif",
+    "images/nylon-bloom.gif",
+    "images/nylon-golpe.gif",
+    "images/nylon-splash.gif"
+  ],
+  "added": "2026-10-24"
+}
