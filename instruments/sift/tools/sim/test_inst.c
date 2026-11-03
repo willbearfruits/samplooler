@@ -1,10 +1,13 @@
-// SIFT on the host: the starter is sifted and plays; the order side (grains on the grid, a pattern that repeats,
-// sorted, tuned to the key; STACK; the grid's divisions); the chaos side (a Poisson swarm at DENSITY, off the grid,
-// a share backwards, pitches thrown); the tilt moves the cursor and the catch; REC held (a tone becomes units with
-// its pitch), TAKES NEW, REC tapped (it keeps listening), the ring wrapping, a NEW take filling the corpus; the
-// cursor on VOICE (it follows a sung note and the grains take it; silence closes the gate); a MIDI note held; the
-// shake; the link (a BAND's tempo and key are taken, our TEMPO goes out); save and load, a Samplooler slot, CLEAR
-// and STARTER; the USB and ITSELF sources; every sound; the CPU; screens and GIFs; the soak.
+// SIFT on the host. DECOMPOSE first: Daisy Bell is sung into the corpus at boot (its melody at its pitches, its 20
+// syllables cut where they start); at 0 the grains follow the head exactly and the recording comes out whole; as D
+// rises the grains get shorter, come from further away and fall out of order, syllables are caught and repeated;
+// the tilt throws it apart and back together in a moment, tipping it towards you slows the head, stops it and runs
+// it backwards; drive, crush and feedback stay bounded; ROT changes the recording and nothing else does; the Amen
+// prints and plays. Then MAP on the starter sounds: the order side (the grid, a pattern sorted and tuned), the chaos
+// side (a swarm at DENSITY), the tilt as the cursor, REC held and tapped and the ring wrapping, VOICE, a MIDI note,
+// the shake, the link, save and load, a Samplooler slot, the USB and ITSELF sources; every sound; the CPU; screens
+// and GIFs; the soak. SIFT_WHISPER=1 also asks whisper.cpp (tools/ear.py) how many of Daisy's words it hears at each
+// stage of the decomposition.
 #include "sim.h"
 #include "inst_sift.h"
 #include "link.h"
@@ -26,8 +29,11 @@ static void run(float s) { int n = (int)(s * 100.0f + 0.5f); for (int i = 0; i <
 static int  P(const char *tag) { int p = param_by_tag(tag); if (p < 0) { printf("no param %s\n", tag); exit(1); } return p; }
 static void set(const char *tag, float v) { param_set(P(tag), v); }
 static int preset_index(const char *name) { for (int i = 0; i < INST.npresets; i++) if (!strcmp(INST.presets[i].name, name)) return i; return 0; }
-static void load(const char *name) { front_midi(0xC0, (uint8_t)preset_index(name), 0); run(0.3f); }
+static void settle(void) { for (int i = 0; i < 1500 && (S.job != JOB_NONE || S.pending > 0); i++) sim_tick(); run(0.1f); }
+static void load(const char *name) { front_midi(0xC0, (uint8_t)preset_index(name), 0); run(0.3f); settle(); }
 static void act(int p) { INST.action(p); }
+static void bank_load(int bank) { set("bank", (float)bank); act(P_LOAD); run(0.05f); settle(); }
+static void starter(void) { bank_load(BK_STARTER); }
 
 // the mic: a quiet room and a tone (its pitch may glide)
 static float tone_hz, tone_amp, tone_glide;
@@ -51,10 +57,18 @@ static int usb_tone(int16_t *m, int n)
 }
 
 static void still(void) { sim_tilt(0, 0); }
-static void quiet_order(void)                                    // the order side, nothing random
+static void quiet_order(void)                                    // MAP, the order side, nothing random
 {
+    set("mode", MODE_MAP);
     set("chao", 0); set("drft", 0); set("shak", 0); set("ptch", 0); set("stak", 1); set("grid", 3);
     set("nseq", 6); set("patt", PAT_UP); set("tune", TUNE_SCALE); set("curs", CUR_TILT);
+}
+static void quiet_decomp(void)                                   // DECOMPOSE, the defaults, no room, nothing pushed
+{
+    set("mode", MODE_DECOMP);
+    set("chao", 0); set("drft", 0); set("shak", 0); set("ptch", 0); set("sped", 100); set("spce", 0);
+    set("stut", 50); set("jump", 50); set("gaps", 40); set("bite", 60); set("drve", 0); set("crsh", 0); set("fdbk", 0); set("rotw", 0);
+    set("size", 0.09f); still();
 }
 static int newest_take(void) { int t = 0; for (int u = 0; u < corp_units; u++) if (units[u].state != U_EMPTY && units[u].take > t) t = units[u].take; return t; }
 static int count_pitch(float note, float tol, int take)
@@ -109,38 +123,263 @@ static void shake_it(float s)
     for (int i = 0; i < n; i++) { SI.acc = (vec3_t){ (i & 1) ? 1.6f : -1.6f, 0.3f, 1.0f }; sim_tick(); }
     SI.acc = (vec3_t){ 0, 0, 1 };
 }
+static int32_t ring_d(uint32_t a, uint32_t b) { int32_t d = (int32_t)a - (int32_t)b, h = corp_frames / 2; if (d > h) d -= corp_frames; else if (d < -h) d += corp_frames; return d; }
 
 void inst_excite(void)
 {
-    if (map_count() == 0) { act(P_STARTER); run(1.0f); }
+    if (map_count() == 0) { starter(); run(0.5f); }
     SI.mic = mic; tone(0, 0);
 }
 
-// ---------------------------------------------------------------- the scenarios
+// ---------------------------------------------------------------- DECOMPOSE
 static void boot(void)
 {
-    section("boot");
+    section("boot: Daisy");
     SI.mic = mic;
     still();
-    run(2.0f);
-    int n = map_count(), np = 0;
-    for (int u = 0; u < corp_units; u++) np += units[u].state == U_OK && units[u].pitch >= 0.0f;
-    check(n > 250 && np > 120, "the starter is sifted: %d units on the map, %d with a pitch", n, np);
-    check(count_pitch(36.0f, 0.3f, -1) > 3 && count_pitch(84.0f, 0.3f, -1) > 2, "its lowest pluck (C2) and highest (C6) are heard at their pitch (%d, %d units)",
-          count_pitch(36.0f, 0.3f, -1), count_pitch(84.0f, 0.3f, -1));
-    float lo = 1, hi = 0, nlo = 1, nhi = 0;
-    for (int u = 0; u < corp_units; u++) if (units[u].state == U_OK) { float x = map_ux(u), y = map_uy(u); lo = fminf(lo, x); hi = fmaxf(hi, x); nlo = fminf(nlo, y); nhi = fmaxf(nhi, y); }
-    check(lo < 0.1f && hi > 0.9f && nlo < 0.1f && nhi > 0.9f, "the dots fill the map (across %.2f..%.2f, up %.2f..%.2f)", (double)lo, (double)hi, (double)nlo, (double)nhi);
-    run(3.0f);
-    float r = m_rms(sim_t - 3.0f, sim_t), pk = m_peak(sim_t - 3.0f, sim_t);
-    metric("default_rms", r); metric("default_peak", pk);
-    check(r > 0.01f && r < 0.2f && pk < 0.7f, "the default sound plays at a sane level (rms %.3f, peak %.2f)", (double)r, (double)pk);
-    sim_shot("play");
+    settle();
+    check(S.material == MAT_DAISY && S.mode == MODE_DECOMP && map_count() > 350, "at power-on Daisy Bell is sung into the corpus and sifted (%d units, material %d)", map_count(), S.material);
+    // the melody: "Dai-sy, Dai-sy" on D4 B3 G3 D3 (a man's octave)
+    static const float want[4] = { 62, 59, 55, 50 };
+    int good = 0;
+    for (int j = 0; j < 4; j++) {
+        int u0 = daisy_syl_at(j) / UNIT, u1 = (j < 3 ? daisy_syl_at(j + 1) : daisy_syl_at(j) + 30000) / UNIT, hit = 0, n = 0;
+        for (int u = u0; u < u1; u++) if (units[u].pitch >= 0) { n++; hit += fabsf(units[u].pitch - want[j]) < 0.6f; }
+        note("syllable %d: %d of %d pitched units at %.0f", j, hit, n, (double)want[j]);
+        good += n > 4 && hit * 2 > n;
+    }
+    check(good == 4, "it sings the tune: the first four syllables at D4 B3 G3 D3 (%d of 4)", good);
+    int ncut = 0; for (int u = 0; u < corp_units; u++) ncut += eng_cut[u];
+    check(ncut == DAISY_NSYL, "its 20 syllables are where the cuts are (%d cuts)", ncut);
+    run(1.0f);
+    float r = m_rms(sim_t - 1.0f, sim_t), pk = m_peak(sim_t - 1.0f, sim_t);
+    metric("daisy_rms", r); metric("daisy_peak", pk);
+    check(r > 0.01f && r < 0.25f && pk < 0.9f, "it plays at a sane level (rms %.3f, peak %.2f)", (double)r, (double)pk);
+    sim_shot("daisy");
 }
 
+static void whole(void)
+{
+    section("decompose: whole at 0");
+    quiet_decomp();
+    run(1.0f);
+    sift_log_n = 0;
+    float t0 = sim_t;
+    run(3.0f);
+    // each grain starts half a grain after the one before, where the head is
+    int ok = 0, tot = 0;
+    for (int i = 0; i + 1 < sift_log_n; i++) {
+        if (sift_log[i].kind != GK_ORDER || sift_log[i + 1].kind != GK_ORDER) continue;
+        int32_t d = ring_d(sift_log[i + 1].pos, sift_log[i].pos);
+        tot++;
+        if (abs(d - 1920) <= 1 && sift_log[i].len == 3840) ok++;
+    }
+    check(tot > 40 && ok >= tot * 95 / 100, "CHAOS 0: every grain 120 ms, every one 60 ms on from the last, as the head moves (%d of %d)", ok, tot);
+    // so what comes out is the recording: the output against the corpus where the head read it
+    double bestc = 0; bool found = false;
+    for (int i = 0; i < sift_log_n && !found; i++) {
+        const spawn_t *s = &sift_log[i];
+        if (s->kind != GK_ORDER || (int)s->pos + 40000 > daisy_length() || s->frame < (uint32_t)(t0 * AUDIO_SR) + 2000) continue;
+        int f = (int)s->frame + 4000, p = (int)s->pos + 4000, n = 24000;
+        double xy = 0, xx = 0, yy = 0;
+        for (int k = 0; k < n; k++) { double x = sim_out[f + k], y = corp[p + k]; xy += x * y; xx += x * x; yy += y * y; }
+        bestc = xx > 0 && yy > 0 ? xy / sqrt(xx * yy) : 0;
+        found = true;
+    }
+    check(found && bestc > 0.97, "what comes out is the recording itself (correlation %.3f over 0.75 s)", bestc);
+    sim_wav("-whole", sim_t - 3.0f, sim_t);
+}
+
+typedef struct { float len_ms, dist_s, order, rate, rep; } stat_t;
+static stat_t measure(float D, float secs)
+{
+    set("chao", roundf(D * 100.0f));
+    run(0.6f);
+    sift_log_n = 0;
+    run(secs);
+    stat_t st = { 0, 0, 0, 0, 0 };
+    double len = 0, dist = 0; int n = 0, ord = 0, rep = 0;
+    for (int i = 0; i < sift_log_n; i++) {
+        const spawn_t *s = &sift_log[i];
+        if (s->kind == GK_BURST) continue;
+        n++; len += s->len; dist += fabsf(s->dist); ord += s->kind == GK_ORDER; rep += s->kind == GK_REPEAT;
+    }
+    if (n) { st.len_ms = (float)(len / n) / 32.0f; st.dist_s = (float)(dist / n) / AUDIO_SR; st.order = (float)ord / (float)n; st.rep = (float)rep / (float)n; }
+    st.rate = (float)n / secs;
+    return st;
+}
+
+static void apart(void)
+{
+    section("decompose: coming apart");
+    quiet_decomp();
+    static const float Ds[5] = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
+    stat_t st[5];
+    for (int k = 0; k < 5; k++) {
+        st[k] = measure(Ds[k], 3.0f);
+        note("D %.2f: grains %.0f ms, %.2f s from the head, %.0f %% in order, %.0f %% repeats, %.0f a second", (double)Ds[k],
+             (double)st[k].len_ms, (double)st[k].dist_s, (double)(st[k].order * 100.0f), (double)(st[k].rep * 100.0f), (double)st[k].rate);
+        char b[32]; snprintf(b, sizeof b, "-d%03d", (int)(Ds[k] * 100.0f)); sim_wav(b, sim_t - 3.0f, sim_t);
+    }
+    check(st[0].len_ms > st[2].len_ms && st[2].len_ms > st[3].len_ms && st[3].len_ms > st[4].len_ms && st[4].len_ms < 12.0f,
+          "the grains get shorter: %.0f, %.0f, %.0f, %.0f, %.0f ms", (double)st[0].len_ms, (double)st[1].len_ms, (double)st[2].len_ms, (double)st[3].len_ms, (double)st[4].len_ms);
+    check(st[0].dist_s < 0.01f && st[3].dist_s > st[1].dist_s && st[4].dist_s > st[2].dist_s && st[4].dist_s > 2.0f,
+          "they come from further away: %.2f, %.2f, %.2f, %.2f, %.2f s from the head", (double)st[0].dist_s, (double)st[1].dist_s, (double)st[2].dist_s, (double)st[3].dist_s, (double)st[4].dist_s);
+    check(st[0].order > 0.99f && st[2].order < st[1].order && st[4].order < 0.2f,
+          "and fall out of order: %.0f, %.0f, %.0f, %.0f, %.0f %% in step with the head", (double)(st[0].order * 100.0f), (double)(st[1].order * 100.0f), (double)(st[2].order * 100.0f), (double)(st[3].order * 100.0f), (double)(st[4].order * 100.0f));
+    // the syllables come loose: damaged where they start, stammered over and over
+    set("stut", 100);
+    set("chao", 34); run(0.6f);
+    sift_log_n = 0; run(16.0f);                                         // one pass through Daisy
+    int at_cut = 0, all = 0, rep = 0;
+    for (int i = 0; i < sift_log_n; i++) {
+        const spawn_t *s = &sift_log[i];
+        if (s->kind == GK_BURST) continue;
+        all++;
+        rep += s->kind == GK_REPEAT;
+        int u = (int)(s->pos / UNIT);
+        if (eng_cut[u] && abs((int)(s->pos % UNIT) - eng_cut_at[u]) <= 2) at_cut++;
+    }
+    check(all > 100 && at_cut >= 8, "at 34: syllables damaged where they start, the stream whole between them (%d of %d grains at a syllable's start)", at_cut, all);
+    check(rep >= 6, "STUTTER 100: syllables stammered, said again and again (%d of %d grains)", rep, all);
+    sim_wav("-syllables", sim_t - 16.0f, sim_t);
+    set("stut", 50);
+    // a slow sweep from whole to dust and back: the piece
+    sim_gif_begin("decompose");
+    for (int i = 0; i <= 200; i++) { float t = (float)i / 200.0f; set("chao", roundf(100.0f * (t < 0.5f ? 2.0f * t : 2.0f - 2.0f * t))); run(0.04f); }
+    sim_gif_end();
+    sim_wav("-sweep", sim_t - 8.0f, sim_t);
+    set("chao", 0);
+}
+
+static void ear(void)
+{
+    const char *e = getenv("SIFT_WHISPER");                  // "1": the four stages; or a list of CHAOS values, "0,10,20"
+    if (!e) return;
+    section("decompose: what whisper.cpp hears");
+    quiet_decomp();
+    int Ds[12] = { 0, 30, 55, 90 }, nd = 4;
+    if (strchr(e, ',')) { nd = 0; for (const char *q = e; *q && nd < 12; ) { Ds[nd++] = atoi(q); while (*q && *q != ',') q++; if (*q) q++; } }
+    char files[12][64];
+    for (int k = 0; k < nd; k++) {
+        set("chao", (float)Ds[k]); run(0.6f);
+        float t0 = sim_t;
+        run(18.0f);
+        snprintf(files[k], sizeof files[k], "-ear%02d", Ds[k]);
+        sim_wav(files[k], t0, sim_t);
+    }
+    int heard[12] = { 0 };
+    for (int k = 0; k < nd; k++) {
+        char cmd[256]; snprintf(cmd, sizeof cmd, "python3 ../ear.py out/%s%s.wav", sim_name, files[k]);
+        FILE *p = popen(cmd, "r");
+        char line[1024] = { 0 };
+        if (p) { if (!fgets(line, sizeof line, p)) line[0] = 0; pclose(p); }
+        heard[k] = atoi(line);
+        note("CHAOS %d: %s", Ds[k], line);
+        char key[32]; snprintf(key, sizeof key, "words_heard_%d", Ds[k]); metric(key, heard[k]);
+    }
+    bool down = true;
+    for (int k = 1; k < nd; k++) if (heard[k] > heard[k - 1] + 2) down = false;
+    check(heard[0] >= 12 && heard[nd - 1] <= 2 && down, "the words go as it comes apart (of 16, at each CHAOS asked: %d .. %d)", heard[0], heard[nd - 1]);
+    set("chao", 0);
+}
+
+static void tilted(void)
+{
+    section("decompose: the tilt");
+    quiet_decomp();
+    run(0.5f);
+    sim_tilt(30, 0); run(0.3f);
+    float a = S.chaos;
+    still(); run(0.3f);
+    float b = S.chaos;
+    check(a > 0.9f && b < 0.05f, "the knob at 0: tilted right it is in pieces in 0.3 s, level it is whole again in 0.3 s (%.2f, %.2f)", (double)a, (double)b);
+    set("chao", 60);
+    sim_tilt(-30, 0); run(0.3f);
+    check(S.chaos < 0.05f, "the knob at 60: tilted left it comes back together (%.2f)", (double)S.chaos);
+    still(); run(0.3f);
+    set("chao", 0);
+    // tipped towards you: slower, frozen half way, backwards at the end; away: faster
+    sim_tilt(0, 17); run(0.5f);
+    float h0 = eng_head; run(1.0f);
+    int32_t frozen = ring_d((uint32_t)eng_head, (uint32_t)h0);
+    sim_tilt(0, 30); run(0.5f);
+    h0 = eng_head; run(1.0f);
+    int32_t back = ring_d((uint32_t)eng_head, (uint32_t)h0);
+    sim_tilt(0, -30); run(0.5f);
+    h0 = eng_head; run(1.0f);
+    int32_t fast = ring_d((uint32_t)eng_head, (uint32_t)h0);
+    check(abs(frozen) < UNIT && back < -20000 && fast > 50000, "tipped towards you half way the head stops, all the way it runs back, away it runs at twice (%d, %d, %d frames in 1 s)", frozen, back, fast);
+    sim_shot("frozen");
+    still(); run(0.5f);
+}
+
+static void dirt(void)
+{
+    section("decompose: dirt, feedback, rot");
+    quiet_decomp();
+    set("chao", 40); set("fdbk", 100); set("fbtm", 0.05f); set("drve", 0);
+    int bad0 = m_bad();
+    run(6.0f);
+    float pk = m_peak(sim_t - 4.0f, sim_t), r = m_rms(sim_t - 4.0f, sim_t);
+    check(m_bad() == bad0 && pk <= 1.0f && r > 0.01f, "FEEDBACK 100 with no drive stays bounded (rms %.3f, peak %.2f)", (double)r, (double)pk);
+    set("drve", 100); set("crsh", 60);
+    run(4.0f);
+    pk = m_peak(sim_t - 3.0f, sim_t); r = m_rms(sim_t - 3.0f, sim_t);
+    check(m_bad() == bad0 && pk <= 1.0f && r > 0.02f, "with the drive and the crush up it screams, and stays bounded (rms %.3f, peak %.2f)", (double)r, (double)pk);
+    sim_wav("-feedback", sim_t - 3.0f, sim_t);
+    set("fdbk", 0); set("drve", 0); set("crsh", 0);
+    run(1.0f);
+    // nothing but ROT writes into the recording; ROT does
+    static int16_t copy[CORP_SECS * AUDIO_SR];
+    memcpy(copy, corp, (size_t)corp_frames * 2);
+    set("chao", 70); run(5.0f);
+    check(memcmp(copy, corp, (size_t)daisy_length() * 2) == 0, "five seconds torn apart without ROT: the recording is untouched");
+    set("rotw", 60);
+    run(25.0f);
+    double dif = 0, ref = 0;
+    for (int i = 0; i < daisy_length(); i++) { dif += fabs((double)corp[i] - copy[i]); ref += fabs((double)copy[i]); }
+    set("rotw", 0); set("chao", 0);
+    run(0.5f);
+    check(dif > 0.3 * ref && map_count() > 300, "25 s with ROT 60 at 70: the recording itself has changed (%.0f %% of it) and is still sifted (%d units)", 100.0 * dif / ref, map_count());
+    sim_shot("rotted");
+    // a Daisy sound brings Daisy back whole
+    load("DAISY");
+    double dif2 = 0;
+    for (int i = 0; i < daisy_length(); i++) dif2 += fabs((double)corp[i] - copy[i]);
+    check(S.material == MAT_DAISY && dif2 < 0.02 * ref, "choosing DAISY again sings it again, whole (%.1f %% off)", 100.0 * dif2 / ref);
+}
+
+static void amen(void)
+{
+    section("decompose: the Amen");
+    load("AMEN");
+    check(S.material == MAT_AMEN && map_count() > 300, "AMEN prints four takes of the break into the corpus (%d units)", map_count());
+    int ncut = 0; for (int u = 0; u < corp_units; u++) ncut += eng_cut[u];
+    check(ncut > 60, "its hits are the cuts (%d)", ncut);
+    still(); run(1.0f);
+    float r = m_rms(sim_t - 1.0f, sim_t);
+    check(r > 0.02f, "it plays (rms %.3f)", (double)r);
+    sim_wav("-amen", sim_t - 1.0f, sim_t);
+    load("AMEN SHRED");
+    sim_gif_begin("amen");
+    run(3.0f);
+    sim_gif_end();
+    sim_wav("-amen-shred", sim_t - 3.0f, sim_t);
+    // a sound with Daisy over your own recording: yours stays
+    set("tkmd", TK_NEW); tone(300.0f, 0.3f); sim_rec(1.0f); tone(0, 0); settle();
+    load("DAISY");
+    check(S.material == MAT_KEEP && count_pitch(62.2f, 0.4f, -1) > 20, "DAISY chosen after you recorded: your take stays (material %d)", S.material);
+    set("tkmd", TK_ADD);
+    bank_load(BK_DAISY);
+    check(S.material == MAT_DAISY, "TAKE > BANK DAISY, LOAD: Daisy again");
+}
+
+// ---------------------------------------------------------------- MAP
 static void order(void)
 {
-    section("the order side");
+    section("map: the order side");
+    starter();
     quiet_order(); still();
     run(1.5f);
     sift_log_n = 0;
@@ -152,7 +391,6 @@ static void order(void)
     float worst = 0;
     for (int i = 0; i < sift_log_n; i++) worst = fmaxf(worst, off_grid(sift_log[i].frame, 4));
     check(worst <= 1.0f, "every one on the grid's line (the worst %.2f frames off)", (double)worst);
-    // the pattern: the published one, ascending, and what played is it again and again
     int k = S.nseq;
     bool asc = true;
     for (int i = 0; i + 1 < k; i++) {
@@ -169,7 +407,6 @@ static void order(void)
     check(share > 0.99f, "TUNE TO SCALE: every pitched grain lands on a note of C major (%.0f %%)", (double)(share * 100.0f));
     sim_wav("-order", sim_t - 4.0f, sim_t);
     sim_shot("order");
-
     set("patt", PAT_BOUNCE); run(0.5f);
     check(S.nseq == 10, "BOUNCE: up and back down without the ends twice (%d steps for 6 notes)", S.nseq);
     set("patt", PAT_PLAYED); run(0.5f);
@@ -177,7 +414,6 @@ static void order(void)
     for (int i = 0; i + 1 < S.nseq; i++) if (units[S.seq_unit[i]].d[D_TIME] > units[S.seq_unit[i + 1]].d[D_TIME]) tord = false;
     check(tord, "AS PLAYED: in the order they were recorded");
     set("patt", PAT_UP);
-
     set("stak", 3); run(0.5f);
     sift_log_n = 0; run(2.0f);
     int same = 0;
@@ -199,7 +435,8 @@ static void order(void)
 
 static void chaos(void)
 {
-    section("the chaos side");
+    section("map: the chaos side");
+    set("mode", MODE_MAP);
     set("chao", 100); set("dens", 40); set("revs", 40); set("scat", 7); set("shak", 0);
     run(1.0f);
     sift_log_n = 0;
@@ -227,7 +464,7 @@ static void chaos(void)
 
 static void tilt(void)
 {
-    section("the tilt is the cursor");
+    section("map: the tilt is the cursor");
     quiet_order();
     sim_tilt(30, 0); run(1.0f);
     float sx = 0; for (int i = 0; i < S.nseq; i++) sx += map_ux(S.seq_unit[i]);
@@ -248,7 +485,8 @@ static void tilt(void)
 static void rec(void)
 {
     section("REC");
-    act(P_STARTER); run(1.0f);
+    starter();
+    set("mode", MODE_MAP);
     set("tkmd", TK_ADD); set("srce", SRC_MIC);
     int n0 = map_count();
     tone(440.0f, 0.3f);
@@ -268,7 +506,6 @@ static void rec(void)
     int a3 = count_pitch(57.0f, 0.3f, -1);
     check(map_count() >= 26 && map_count() <= 33 && a3 >= map_count() - 2, "TAKES NEW: the old grains go, only the new take is there (%d units, %d at A3)", map_count(), a3);
     set("tkmd", TK_ADD);
-    // tapped: it keeps listening until tapped again
     tone(330.0f, 0.2f);
     SI.rec = true; run(0.15f); SI.rec = false; run(2.0f);
     bool live = S.rec == REC_LIVE && eng_rec_state == RS_ON;
@@ -277,7 +514,6 @@ static void rec(void)
     tone(0, 0);
     check(live && S.rec == REC_IDLE && eng_rec_state == RS_OFF && count_pitch(64.0f, 0.3f, -1) > 55,
           "REC tapped: LIVE, still recording 2 s later; tapped again it stops (%d units at E4)", count_pitch(64.0f, 0.3f, -1));
-    // LIVE for longer than the corpus: the ring goes round, the oldest go first
     tone(550.0f, 0.2f);
     SI.rec = true; run(0.1f); SI.rec = false;
     run(24.0f);
@@ -285,7 +521,6 @@ static void rec(void)
     SI.rec = true; run(0.05f); SI.rec = false; run(0.5f);
     tone(0, 0);
     check(cs5 > corp_units - 20 && m_bad() == 0, "LIVE for 24 s: the ring wraps, the corpus is the last 20 s (%d of %d units at C#5)", cs5, corp_units);
-    // a NEW take longer than the corpus stops when it is full
     set("tkmd", TK_NEW);
     tone(262.0f, 0.2f);
     SI.rec = true; run(21.0f);
@@ -293,13 +528,21 @@ static void rec(void)
     SI.rec = false; run(0.5f);
     tone(0, 0);
     check(stopped && S.rec == REC_IDLE && map_count() > corp_units - 10, "TAKES NEW held 21 s: it stops when the 20 s are full (%d units)", map_count());
+    // DECOMPOSE plays what you recorded too: a take of a gliding tone, whole at 0
+    tone(200.0f, 0.3f); tone_glide = 1.0f;
+    sim_rec(3.0f); tone(0, 0); settle();
+    quiet_decomp(); run(1.0f);
+    sift_log_n = 0; run(2.0f);
+    int ok = 0;
+    for (int i = 0; i + 1 < sift_log_n; i++) ok += sift_log[i].kind == GK_ORDER && abs(ring_d(sift_log[i + 1].pos, sift_log[i].pos) - 1920) <= 1;
+    check(S.material == MAT_KEEP && ok > 25, "your own take in DECOMPOSE: played whole at 0 (%d grains in step)", ok);
     set("tkmd", TK_ADD);
-    act(P_STARTER); run(1.0f);
+    starter();
 }
 
 static void voice(void)
 {
-    section("the cursor on VOICE");
+    section("map: the cursor on VOICE");
     quiet_order();
     set("curs", CUR_VOICE); set("mtch", 1);
     tone(330.0f, 0.2f);
@@ -322,7 +565,6 @@ static void voice(void)
     set("spce", 35);
     set("curs", CUR_TILT);
     run(0.5f);
-    // a MIDI note held: the order side sounds at it
     front_midi(0x90, 67, 100);
     run(0.5f);
     sift_log_n = 0; run(2.0f);
@@ -383,16 +625,15 @@ static void linked(void)
 static void storage(void)
 {
     section("save and load");
-    act(P_STARTER); run(1.0f);
+    starter();
     set("spce", 0);
-    int n0 = map_count();
-    set("bank", 0);
+    set("bank", NBUILTIN + 0);
     act(P_SAVE);
     run(0.05f);
     bool saving = S.job == JOB_SAVE;
     sim_shot("save");
     run(2.0f);
-    n0 = map_count();                                                   // SAVE first listened to whatever was still waiting
+    int n0 = map_count();
     check(saving && S.job == JOB_NONE && store_frames(0) > n0 * UNIT * 9 / 10, "SAVE into SIFT 1: every unit written, in the order they were heard (%d frames for %d units)", store_frames(0), n0);
     act(P_CLEAR); run(0.5f);
     float r = m_rms(sim_t - 0.2f, sim_t);
@@ -400,10 +641,9 @@ static void storage(void)
     sim_shot("empty");
     act(P_LOAD); run(0.05f);
     bool loading = S.job == JOB_LOAD;
-    run(2.0f);
+    settle(); run(1.0f);
     r = m_rms(sim_t - 1.0f, sim_t);
     check(loading && abs(map_count() - n0) <= n0 / 20 && r > 0.005f, "LOAD brings them back (%d units, %d before; rms %.3f)", map_count(), n0, (double)r);
-    // a Samplooler slot: a glide from A2 to A5
     static int16_t take[5 * AUDIO_SR];
     double ph = 0;
     for (int i = 0; i < 5 * AUDIO_SR; i++) {
@@ -412,17 +652,15 @@ static void storage(void)
         take[i] = (int16_t)(12000.0f * sinf(6.2831853f * (float)ph));
     }
     store_sim_put(NBANK_OWN + 2, take, 5 * AUDIO_SR);
-    set("bank", NBANK_OWN + 2);
-    act(P_LOAD); run(2.0f);
+    bank_load(NBUILTIN + NBANK_OWN + 2);
     float plo = 200, phi = 0;
     for (int u = 0; u < corp_units; u++) if (units[u].state == U_OK && units[u].pitch >= 0) { plo = fminf(plo, units[u].pitch); phi = fmaxf(phi, units[u].pitch); }
     check(map_count() > 140 && plo < 47.0f && phi > 79.0f, "SLOT 3, a Samplooler take: loaded and sifted (%d units, pitches %.0f..%.0f)", map_count(), (double)plo, (double)phi);
     act(P_SAVE); run(0.2f);
     check(S.job == JOB_NONE && store_frames(NBANK_OWN + 2) == 5 * AUDIO_SR, "a Samplooler slot is never written over (SAVE there does nothing)");
-    set("bank", 0);
-    act(P_STARTER); run(1.0f);
+    starter();
     set("spce", 35);
-    check(map_count() > 250, "STARTER: the sounds it came with (%d units)", map_count());
+    check(map_count() > 250 && S.material == MAT_STARTER, "TAKE > BANK STARTER: the sounds of the first version (%d units)", map_count());
 }
 
 static void sources(void)
@@ -434,7 +672,8 @@ static void sources(void)
     sift_sim_usb_in = NULL;
     int b4 = count_pitch(71.2f, 0.35f, -1);
     check(b4 >= map_count() - 2 && map_count() > 25, "RECORD USB: the computer's sound (%d of %d units at 500 Hz)", b4, map_count());
-    act(P_STARTER); run(1.0f);
+    starter();
+    set("mode", MODE_MAP);
     set("srce", SRC_SELF); set("tkmd", TK_ADD);
     set("chao", 40);
     sim_rec(1.0f); run(0.5f);
@@ -442,17 +681,18 @@ static void sources(void)
     for (int u = 0; u < corp_units; u++) ok += units[u].take == t && units[u].state == U_OK;
     check(ok > 15, "RECORD ITSELF: its own sound becomes grains (%d new units)", ok);
     set("srce", SRC_MIC);
-    act(P_STARTER); run(1.0f);
+    starter();
 }
 
 static void sounds(void)
 {
     section("sounds");
+    bank_load(BK_DAISY);
     int bad = 0;
     for (int i = 0; i < INST.npresets; i++) {
         still();
         load(INST.presets[i].name);
-        bool needs_voice = (int)pv[P_CURSOR] == CUR_VOICE;
+        bool needs_voice = (int)pv[P_CURSOR] == CUR_VOICE && (int)pv[P_MODE] == MODE_MAP;
         if (needs_voice) { tone(262.0f, 0.15f); tone_glide = 0.5f; }
         int bad0 = m_bad();
         run(2.5f);
@@ -464,13 +704,16 @@ static void sounds(void)
         sim_wav(sfx, sim_t - 2.0f, sim_t);
     }
     check(bad == 0, "every sound (%d) plays at a sane level, nothing broken", INST.npresets);
-    load("SIFT");
+    load("DAISY");
 }
 
 static void cpu(void)
 {
     section("CPU");
+    starter();
+    set("mode", MODE_MAP);
     set("chao", 100); set("dens", 200); set("size", 0.8f); set("spce", 100); set("stak", 4); set("grid", 5);
+    set("drve", 60); set("crsh", 40); set("fdbk", 50);
     run(1.5f);
     double avg = 1e9;                                                   // the best of three seconds: the host's own load is noise
     for (int k = 0; k < 3; k++) {
@@ -481,31 +724,42 @@ static void cpu(void)
     }
     metric("cpu_us_per_block_worst", avg);
     metric("cpu_us_per_block_max", sift_audio_max_ns / 1000.0);
-    check(eng_voices_on() >= NV - 4, "the worst case: every voice busy (%d of %d)", eng_voices_on(), NV);
+    check(eng_voices_on() >= NV - 4, "the worst case: every voice busy, the dirt and the loop on (%d of %d voices)", eng_voices_on(), NV);
     check(avg < 15.0, "the sound costs %.1f us a block on the host at its busiest (budget about 15)", avg);
-    load("SIFT");
-    set("chao", 30);
+    set("drve", 0); set("crsh", 0); set("fdbk", 0);
+    load("DAISY ROT");
     run(0.5f);
-    sift_audio_ns = 0; sift_audio_blocks = 0;
-    run(2.0f);
-    metric("cpu_us_per_block_default", sift_audio_ns / (double)(sift_audio_blocks ? sift_audio_blocks : 1) / 1000.0);
+    double d = 1e9;
+    for (int k = 0; k < 3; k++) {
+        sift_audio_ns = 0; sift_audio_blocks = 0;
+        run(1.0f);
+        double a = sift_audio_ns / (double)(sift_audio_blocks ? sift_audio_blocks : 1) / 1000.0;
+        if (a < d) d = a;
+    }
+    metric("cpu_us_per_block_daisy_rot", d);
+    check(d < 15.0, "DAISY ROT (the decomposition, the loop, the rot): %.1f us a block", d);
+    load("DAISY");
 }
 
 static void pictures(void)
 {
     section("screens");
-    load("SIFT"); still();
-    act(P_STARTER); run(2.0f);
-    // the knob from order to chaos while the box tilts slowly round
+    load("DAISY"); still(); run(1.0f);
+    sim_shot("whole");
     sim_gif_begin("sweep");
     for (int i = 0; i <= 150; i++) {
         float t = (float)i / 150.0f;
         set("chao", roundf(t * 100.0f));
-        sim_tilt(22.0f * sinf(t * 6.28f), 14.0f * cosf(t * 6.28f * 1.5f));
         run(0.04f);
     }
     sim_gif_end();
-    set("chao", 0);
+    sim_shot("dust");
+    set("chao", 0); run(0.5f);
+    sim_gif_begin("tilt");
+    for (int i = 0; i < 100; i++) { sim_tilt(30.0f * sinf((float)i * 0.08f), 0); run(0.04f); }
+    sim_gif_end();
+    still();
+    starter();
     load("LATTICE");
     sim_gif_begin("play");
     for (int i = 0; i < 100; i++) { sim_tilt(18.0f * sinf((float)i * 0.04f), 10.0f * sinf((float)i * 0.03f)); run(0.04f); }
@@ -516,8 +770,9 @@ static void pictures(void)
     for (int i = 0; i < 75; i++) { sim_tilt(10.0f * sinf((float)i * 0.05f), 0); run(0.04f); }
     sim_gif_end();
     sim_shot("swarm");
-    load("SIFT");
-    still(); run(0.5f);
+    still();
+    load("DAISY");
+    run(0.5f);
 }
 
 static void soak(void)
@@ -526,9 +781,9 @@ static void soak(void)
     const char *e = getenv("SIFT_SOAK");
     float secs = e ? (float)atof(e) : 90.0f;
     const char *tags[] = { "chao", "size", "shap", "ptch", "drft", "levl", "grid", "nseq", "patt", "stak", "tune", "dens", "sprd", "scat", "revs",
-                           "mapx", "mapy", "tone", "spce", "tail", "tkmd" };
+                           "mapx", "mapy", "tone", "spce", "tail", "tkmd", "mode", "sped", "stut", "jump", "gaps", "bite", "drve", "crsh", "fdbk", "fbtm", "rotw" };
     srand(7);
-    int bad0 = m_bad(), takes = 0, shakes = 0;
+    int bad0 = m_bad(), takes = 0, shakes = 0, loads = 0;
     float peak = 0;
     for (float t = 0; t < secs; t += 0.5f) {
         int r = rand() % 100;
@@ -536,21 +791,28 @@ static void soak(void)
         else if (r < 62) sim_tilt((float)(rand() % 70 - 35), (float)(rand() % 70 - 35));
         else if (r < 66) { shake_it(0.2f); shakes++; }
         else if (r < 72) { tone(80.0f + (float)(rand() % 900), 0.05f + 0.3f * (float)(rand() % 100) / 100.0f); SI.rec = true; run(0.2f + (float)(rand() % 150) / 100.0f); SI.rec = false; tone(0, 0); takes++; }
-        else if (r < 73) { act(P_STARTER); }
-        else if (r < 74) { set("curs", (float)(rand() % 3)); }
-        else if (r < 75) { front_midi(0xC0, (uint8_t)(rand() % INST.npresets), 0); }
+        else if (r < 74) { set("bank", (float)(rand() % NBUILTIN)); act(P_LOAD); loads++; }
+        else if (r < 75) { set("curs", (float)(rand() % 3)); }
+        else if (r < 77) { front_midi(0xC0, (uint8_t)(rand() % INST.npresets), 0); }
         run(0.5f);
         peak = fmaxf(peak, m_peak(sim_t - 0.5f, sim_t));
     }
-    load("SIFT"); set("curs", CUR_TILT); still();
-    act(P_STARTER); run(2.0f);
+    settle();
+    load("DAISY"); set("curs", CUR_TILT); still();
+    bank_load(BK_DAISY); run(1.0f);
     float r = m_rms(sim_t - 1.0f, sim_t);
-    check(m_bad() == bad0 && peak <= 1.0f && r > 0.005f, "%.0f s of everything at random (%d takes, %d shakes): no NaN, peak %.2f, still playing (rms %.3f)", (double)secs, takes, shakes, (double)peak, (double)r);
+    check(m_bad() == bad0 && peak <= 1.0f && r > 0.005f, "%.0f s of everything at random (%d takes, %d shakes, %d loads): no NaN, peak %.2f, still playing (rms %.3f)", (double)secs, takes, shakes, loads, (double)peak, (double)r);
 }
 
 void inst_tests(void)
 {
     boot();
+    whole();
+    apart();
+    ear();
+    tilted();
+    dirt();
+    amen();
     order();
     chaos();
     tilt();

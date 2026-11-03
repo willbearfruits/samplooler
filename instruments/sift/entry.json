@@ -1,9 +1,9 @@
 {
   "name": "SIFT",
-  "summary": "A granular synth and recorder. Everything it hears is cut into grains and sorted by sound. Tilt to pick grains, turn from a tuned pattern on the beat to a wild cloud, shake to scatter.",
+  "summary": "A granular recorder that takes language apart. Daisy Bell plays whole; tilt it and syllables stammer, swap and drop out until only dust is left. Also a map of grains by sound.",
   "author": "willbearfruits",
   "licence": "GPL-3.0",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "chip": "esp32s3",
   "uses": [
     "mic",
@@ -11,13 +11,14 @@
     "joystick",
     "wifi"
   ],
-  "hardware_note": "Takes up to 20 s of sound in PSRAM. It can load the Samplooler's saved slots as material.",
+  "hardware_note": "Holds 20 s of sound in PSRAM. Loads the Samplooler's saved slots as material.",
   "status": "board",
-  "status_note": "Flashed on 2026-10-22: it starts and keeps up (CPU 16 %, internal RAM 150 KB free, the 20 s corpus in PSRAM). Not played much yet.",
-  "image": "images/sift-sweep.gif",
+  "status_note": "0.2 flashed on 2026-10-22: it starts and keeps up (CPU 17 %, 19 % torn to dust with feedback; 107 KB internal RAM free). Not played much yet.",
+  "image": "images/sift-decompose.gif",
   "more": [
+    "images/sift-tilt.gif",
+    "images/sift-amen.gif",
     "images/sift-play.gif",
-    "images/sift-shake.gif",
     "images/sift-splash.gif"
   ],
   "added": "2026-10-22"

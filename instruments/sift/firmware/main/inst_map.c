@@ -8,8 +8,14 @@
 //   TONE    the pitch when there is one, else the brightness: "the note it sounds like"
 //   TIME    the order the units were heard in
 // A take's level is evened out when it ends (its peak to half scale) and what lies 42 dB under that peak is silence:
-// silence is not on the map and never plays. The map's axes are any two measures, each spread over what the corpus
-// covers (see map_update), so the dots always fill the screen; the screen eases them to their new places.
+// silence is not on the map and never plays from the map (DECOMPOSE's head plays it: it is part of the recording).
+// The map's axes are any two measures, each spread over what the corpus covers (see map_update), so the dots always
+// fill the screen; the screen eases them to their new places.
+//
+// The cuts (where a syllable, or a hit, starts) for DECOMPOSE: the material's own when it knows them (Daisy's
+// syllables, the Amen's hits: map_set_cuts), else where the level jumps 5 dB, where a silence ends, or where the
+// pitch moves more than a semitone and a half between two pitched units. map_update hands the audio task what it
+// reads (eng_unit_ok, eng_unit_gain, eng_cut, eng_cut_at).
 #include "inst_sift.h"
 #include "dsp.h"
 #include <math.h>
@@ -19,6 +25,8 @@
 UI_RAM unit_t units[NU_MAX];                    // only the UI task reads them (the audio task gets the catch)
 float map_lo[ND], map_hi[ND];
 static int ax_x = D_TONE, ax_y = D_NOISE;
+static int16_t mcut[NU_MAX];                     // a material's cut in the unit (frames in), -1 none
+static int mcut_take = -1;                       // the take those cuts belong to
 static int take_no, nok;
 static float stamp;
 static bool dirty;
@@ -38,8 +46,21 @@ void map_init(void)
 
 void map_reset(void)
 {
-    for (int u = 0; u < NU_MAX; u++) { units[u].state = U_EMPTY; units[u].born = 0; }
+    for (int u = 0; u < NU_MAX; u++) { units[u].state = U_EMPTY; units[u].born = 0; mcut[u] = -1; }
+    mcut_take = -1;
     nok = 0; dirty = true;
+}
+
+void map_set_cuts(int take, const int32_t *frames, int n)
+{
+    mcut_take = take;
+    for (int i = 0; i < n; i++) {
+        int32_t f = frames[i];
+        if (f < 0 || f >= corp_frames) continue;
+        int u = (int)(f / UNIT);
+        mcut[u] = (int16_t)(f % UNIT);
+    }
+    dirty = true;
 }
 
 int map_take_begin(void) { return ++take_no; }
@@ -48,6 +69,7 @@ void map_forget(int u)
 {
     if (u < 0 || u >= NU_MAX) return;
     if (units[u].state != U_EMPTY) { units[u].state = U_EMPTY; dirty = true; }
+    mcut[u] = -1;
 }
 
 // ---------------------------------------------------------------- measuring a piece of sound
@@ -158,6 +180,16 @@ void map_listen(int u, int take)
     dirty = true;
 }
 
+// listened to again where it is (ROT changed it): its place in time, its dot's history and its take kept
+void map_relisten(int u)
+{
+    if (u < 0 || u >= corp_units || units[u].state == U_EMPTY) return;
+    uint8_t born = units[u].born;
+    float when = units[u].d[D_TIME];
+    map_listen(u, units[u].take);
+    units[u].born = born; units[u].d[D_TIME] = when;
+}
+
 void map_take_end(int take)
 {
     float tpk = 0;
@@ -185,6 +217,38 @@ static int c_ax = -1, c_ay = -1;
 
 static int by_v(const void *a, const void *b) { float x = ((const rank_t *)a)->v, y = ((const rank_t *)b)->v; return x < y ? -1 : x > y; }
 
+// what the audio task reads: which units are the recording, their gain, where syllables start
+static void publish_units(void)
+{
+    for (int u = 0; u < corp_units; u++) {
+        const unit_t *un = &units[u];
+        bool ok = un->state != U_EMPTY;
+        eng_unit_gain[u] = ok ? un->gain : 0.0f;
+        int cut = -1;
+        if (ok && un->take == mcut_take && mcut_take >= 0) cut = mcut[u];
+        else if (un->state == U_OK) {
+            int p = u > 0 ? u - 1 : corp_units - 1;
+            const unit_t *pr = &units[p];
+            if (pr->state != U_OK || un->d[D_LOUD] - pr->d[D_LOUD] > 5.0f ||
+                (un->pitch >= 0.0f && pr->pitch >= 0.0f && fabsf(un->pitch - pr->pitch) > 1.5f)) cut = un->onset;
+        }
+        eng_cut_at[u] = (uint16_t)(cut < 0 ? 0 : cut);
+        eng_cut[u] = cut >= 0;
+        eng_unit_ok[u] = ok;
+    }
+}
+
+// the recording's units in the order they were heard: the ring from the oldest (the write head), the empty ones out
+int sift_timeline(int16_t *out, int max)
+{
+    int n = 0, start = corp_units ? (int)((eng_wr / UNIT) % (uint32_t)corp_units) : 0;
+    for (int k = 0; k < corp_units && n < max; k++) {
+        int u = (start + k) % corp_units;
+        if (units[u].state != U_EMPTY) out[n++] = (int16_t)u;
+    }
+    return n;
+}
+
 static float mm(int axis, float v)
 {
     float span = map_hi[axis] - map_lo[axis];
@@ -211,6 +275,7 @@ void map_update(void)
             map_lo[k] = lo[k] - 0.03f * span; map_hi[k] = hi[k] + 0.03f * span;
         }
         nrk = nok;
+        publish_units();
         qsort(rk[0], (size_t)nok, sizeof(rank_t), by_v);
         qsort(rk[1], (size_t)nok, sizeof(rank_t), by_v);
         float inv = nok > 1 ? 1.0f / (float)(nok - 1) : 0.0f;

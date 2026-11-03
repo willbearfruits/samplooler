@@ -34,7 +34,7 @@ static wl_handle_t wl = WL_INVALID_HANDLE;
 static bool ready;
 static FILE *jf;
 static char jpath[32];
-static int  len_cache[NBANK];
+static int  len_cache[NSTORE];
 static UI_RAM int16_t conv[1024];
 
 static void path(int bank, char *b, size_t n)
@@ -45,7 +45,7 @@ static void path(int bank, char *b, size_t n)
 
 bool store_init(void)
 {
-    for (int k = 0; k < NBANK; k++) len_cache[k] = -1;
+    for (int k = 0; k < NSTORE; k++) len_cache[k] = -1;
     diag_crumb("sift mount");
     esp_vfs_fat_mount_config_t cfg = { .max_files = 2, .format_if_mount_failed = true, .allocation_unit_size = 4096 };
     esp_err_t e = esp_vfs_fat_spiflash_mount_rw_wl("/storage", "storage", &cfg, &wl);
@@ -65,7 +65,7 @@ static int read_header(FILE *f)
 
 int store_frames(int bank)
 {
-    if (!ready || bank < 0 || bank >= NBANK) return 0;
+    if (!ready || bank < 0 || bank >= NSTORE) return 0;
     if (len_cache[bank] >= 0) return len_cache[bank];
     char p[32]; path(bank, p, sizeof p);
     FILE *f = fopen(p, "rb");
@@ -78,7 +78,7 @@ bool store_has(int bank) { return store_frames(bank) > 0; }
 
 bool store_load_begin(int bank, int16_t *dst, int max)
 {
-    if (!ready || jbusy || !dst || bank < 0 || bank >= NBANK) return false;
+    if (!ready || jbusy || !dst || bank < 0 || bank >= NSTORE) return false;
     path(bank, jpath, sizeof jpath);
     jf = fopen(jpath, "rb");
     if (!jf) return false;
@@ -150,22 +150,22 @@ void store_mute(bool on) { audio_set_mute(on); }
 bool store_silent(void) { return audio_silent(); }
 
 #else   // the host: the banks live in memory for the run
-static int16_t *hb[NBANK];
-static int hn[NBANK];
+static int16_t *hb[NSTORE];
+static int hn[NSTORE];
 static int16_t *hsave;
 static int hcap;
 
 void store_sim_put(int bank, const int16_t *x, int n)       // the tests plant a Samplooler slot
 {
-    if (bank < 0 || bank >= NBANK) return;
+    if (bank < 0 || bank >= NSTORE) return;
     free(hb[bank]); hb[bank] = malloc((size_t)n * 2); memcpy(hb[bank], x, (size_t)n * 2); hn[bank] = n;
 }
 bool store_init(void) { return true; }
-int  store_frames(int bank) { return bank >= 0 && bank < NBANK ? hn[bank] : 0; }
+int  store_frames(int bank) { return bank >= 0 && bank < NSTORE ? hn[bank] : 0; }
 bool store_has(int bank) { return store_frames(bank) > 0; }
 bool store_load_begin(int bank, int16_t *dst, int max)
 {
-    if (jbusy || !dst || bank < 0 || bank >= NBANK || !hn[bank]) return false;
+    if (jbusy || !dst || bank < 0 || bank >= NSTORE || !hn[bank]) return false;
     jbank = bank; jdst = dst; jn = hn[bank] < max ? hn[bank] : max; jdone = 0; jbusy = true; jfailed = false;
     return true;
 }
