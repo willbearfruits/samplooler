@@ -1,68 +1,66 @@
 #!/usr/bin/env python3
-"""Write the settings tables of docs/MANUAL.md from the param tables in the C files (the modules' and the host's),
-between the <!-- tables --> and <!-- /tables --> markers, so the manual follows the code. Each setting's MIDI CC
-comes from its slot: the modules have 24 slots each (KIT 0, BEAT 24, AMP 48, FX 72), the host follows at 96; slot p
-is on CC 20 + p up to 43, then 70 + (p - 44) up to 93; the rest have no CC."""
+"""Write the settings tables of docs/MANUAL.md from the param table in firmware/main/instrument.c, between the
+<!-- tables --> and <!-- /tables --> markers, so the manual follows the code. A setting's MIDI CC comes from its
+place in the table: CC 20 + p up to 43, then 70 + (p - 44)."""
 import os, re, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 M = os.path.join(ROOT, 'firmware', 'main')
+CONSOLES = ['BEEPER', 'ATARI', 'AY', 'NES', 'GAME BOY', 'C64', 'AMIGA', 'MEGA']
 
-def labels(src):
-    out = {}
-    for m in re.finditer(r'static const char \*const (\w+)\[[^\]]*\]\s*=\s*\{([^}]*)\}', src):
-        out[m.group(1)] = re.findall(r'"([^"]*)"', m.group(2))
+def split(row):
+    """the fields of a C initializer row, commas inside quotes kept"""
+    out, cur, q = [], '', False
+    for ch in row:
+        if ch == '"': q = not q
+        if ch == ',' and not q: out.append(cur.strip()); cur = ''
+        else: cur += ch
+    if cur.strip(): out.append(cur.strip())
     return out
 
-def params(src):
-    """[(name, tag, group, kind, flags, min, max, unit, labels name, help)] in table order (designated or not)"""
+def main():
+    src = open(os.path.join(M, 'instrument.c')).read()
+    song = open(os.path.join(M, 'inst_song.c')).read()
+    labels = {m.group(1): re.findall(r'"([^"]*)"', m.group(2))
+              for m in re.finditer(r'static const char \*const (\w+)\[[^\]]*\]\s*=\s*\{([^}]*)\}', src)}
+    labels['con_l'] = CONSOLES
+    labels['scale_l'] = re.findall(r'\[PX_SC_\w+\]\s*=\s*\{\s*"([^"]+)"', song)
+    for k in ('lsnd_l', 'bsnd_l', 'csnd_l', 'dkit_l'): labels[k] = ['1', '2', '3', '4']
+    groups = labels['groups']
+    genum = re.search(r'enum \{ (G_TUNE[^}]*)\}', src).group(1)
+    gidx = {g.strip(): i for i, g in enumerate(genum.split(',')) if g.strip() and g.strip() != 'G_N'}
+    penum = re.search(r'enum \{\s*(P_CONSOLE.*?)P_N\s*\}', src, re.S).group(1)
+    pidx = {p.strip(): i for i, p in enumerate(x for x in penum.replace('\n', ' ').split(',') if x.strip())}
     rows = []
-    defs = dict(re.findall(r'#define (\w+)\s+(\([^\n]*?\))', src))   # flags given by a macro (#define HID (PF_HIDE ...))
-    body = src[src.index('params[') :] if 'params[' in src else src
-    for k, v in defs.items(): body = re.sub(r'\b%s\b' % k, v.replace(',', ' '), body)
-    for m in re.finditer(r'\{\s*"([^"]*)",\s*"([^"]{4})",\s*([^,]+),\s*(PK_\w+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*"([^"]*)",\s*([^,]+),\s*(?:"([^"]*)"|NULL)\s*\}', body):
-        rows.append(dict(name=m.group(1), tag=m.group(2), group=m.group(3).strip(), kind=m.group(4), flags=m.group(5),
-                         min=m.group(6).strip(), max=m.group(7).strip(), unit=m.group(10), labels=m.group(11).strip(), help=m.group(12) or ''))
-    return rows
-
-def cc(slot): return 20 + slot if slot < 44 else 70 + slot - 44 if slot < 94 else ''
-
-def clean(v): return re.sub(r'f$', '', v.strip())
-
-def table(rows, lab, base, page_of):
-    lines = []
-    for page in page_of:
-        sel = [(i, r) for i, r in enumerate(rows) if page_of[page](r)]
+    for m in re.finditer(r'^\s*\[(P_\w+)\]\s*=\s*\{(.*)\},\s*$', src, re.M):
+        f = split(m.group(2).replace('ACT,', 'PK_ACT, PF_NOCC,'))
+        name, tag, grp, kind, flags, lo, hi, step, dflt, unit, lab, hlp = f[:12]
+        rows.append(dict(p=pidx[m.group(1)], name=name.strip('"'), tag=tag.strip('"'), group=gidx[grp], kind=kind, flags=flags,
+                         lo=lo, hi=hi, dflt=dflt, unit=unit.strip('"'), labels=lab, help=hlp.strip('"') if hlp != 'NULL' else ''))
+    rows.sort(key=lambda r: r['p'])
+    out = []
+    for gi, g in enumerate(groups):
+        sel = [r for r in rows if r['group'] == gi and 'PF_HIDE' not in r['flags']]
         if not sel: continue
-        lines += ['', '**' + page + '**', '', '| Setting | CC | |', '| - | - | - |']
-        for i, r in sel:
-            if 'PF_HIDE' in r['flags']: continue
-            c = '' if 'PF_NOCC' in r['flags'] or r['kind'] == 'PK_ACT' else str(cc(base + i))
-            what = r['help'].capitalize() if r['help'] else ''
-            if r['kind'] == 'PK_ENUM' and r['labels'] in lab: what += ': ' + ', '.join(lab[r['labels']])
-            elif r['kind'] == 'PK_NUM': what += ' (%s..%s%s)' % (clean(r['min']), clean(r['max']), (' ' + r['unit']) if r['unit'] else '')
-            lines.append('| %s | %s | %s |' % (r['name'], c, what))
-    return lines
+        out += ['', '**' + g + '**', '', '| Setting | Values | CC | |', '| - | - | - | - |']
+        for r in sel:
+            cc = '' if 'PF_NOCC' in r['flags'] or r['kind'] == 'PK_ACT' else str(20 + r['p'] if r['p'] < 44 else 70 + r['p'] - 44)
+            if r['kind'] == 'PK_ACT': vals = 'press to do it'
+            elif r['kind'] == 'PK_ENUM': vals = ', '.join(labels.get(r['labels'], ['?']))
+            else: vals = f"{r['lo']} to {r['hi']}{(' ' + r['unit']) if r['unit'] else ''}"
+            what = r['help'].capitalize().replace(' pal', ' PAL').replace(' i ', ' I ')
+            if r['labels'] in ('lsnd_l', 'bsnd_l', 'csnd_l', 'dkit_l'): vals = "the console's own four (below)"
+            out.append(f"| {r['name']} | {vals} | {cc} | {what} |")
+    text = '\n'.join(out) + '\n'
+    path = os.path.join(ROOT, 'docs', 'MANUAL.md')
+    doc = open(path).read()
+    a, b = doc.index('<!-- tables -->') + len('<!-- tables -->'), doc.index('<!-- /tables -->')
+    new = doc[:a] + '\n' + text + '\n' + doc[b:]
+    if '--check' in sys.argv:
+        if new != doc: print('docs/MANUAL.md is out of date: run tools/manual_tables.py'); return 1
+        print('docs/MANUAL.md is up to date'); return 0
+    open(path, 'w').write(new)
+    print(f'{len(rows)} settings in {len(groups)} pages')
+    return 0
 
-out = []
-mods = [('BEAT', 'inst_beat.c', 24), ('AMP', 'inst_amp.c', 48), ('FX', 'inst_fx.c', 72), ('KIT', 'inst_kit.c', 0)]
-src = open(os.path.join(M, 'instrument.c')).read()
-lab = labels(src)
-host = src[src.index('host_params[H_N]'):]
-rows = params(host[:host.index('};') + 2])
-out += ['', '### WRECK'] + table(rows, lab, 96, {'WRECK': lambda r: r['group'] == 'G_WRECK'})
-for name, fn, base in mods:
-    msrc = open(os.path.join(M, fn)).read()
-    mlab = labels(msrc)
-    mrows = params(msrc)
-    pages = re.search(r'pages\[\]?\d*\]?\s*=\s*\{\s*"([^"]*)",\s*"([^"]*)"', msrc)
-    p0, p1 = (pages.group(1), pages.group(2)) if pages else (name, name + ' 2')
-    out += ['', '### ' + name] + table(mrows, mlab, base, {p0: lambda r: r['group'] in ('0',), p1: lambda r: r['group'] not in ('0',)})
-groups = {'SAMPLE': 'G_SAMPLE', 'MIX': 'G_MIX', 'SONG': 'G_SONG', 'LINK': 'G_LINK'}
-out += ['', '### SAMPLE, MIX, SONG, LINK'] + table(rows, lab, 96, {k: (lambda g: lambda r: r['group'] == g)(v) for k, v in groups.items()})
-
-man = os.path.join(ROOT, 'docs', 'MANUAL.md')
-text = open(man).read()
-a, b = text.index('<!-- tables -->'), text.index('<!-- /tables -->')
-text = text[:a] + '<!-- tables -->\n' + '\n'.join(out).strip('\n') + '\n' + text[b:]
-open(man, 'w').write(text)
-print('wrote', sum(1 for l in out if l.startswith('| ') and not l.startswith('| Setting') and not l.startswith('| -')), 'settings into', man)
+if __name__ == '__main__':
+    sys.exit(main())
