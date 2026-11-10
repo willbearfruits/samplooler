@@ -289,7 +289,7 @@ bool edit_hold(void);                            // the knob held: open the edit
 void edit_tick(const ctl_t *c);
 void edit_draw(const view_t *v);
 void edit_action(int what);                      // EA_*: the BAR page's actions
-enum { EA_COPY, EA_PASTE, EA_CLEAR };
+enum { EA_COPY, EA_PASTE, EA_CLEAR, EA_DICE };
 int  edit_pattern(void);                         // the pattern under the cursor (or the one playing)
 void scene_draw(const view_t *v);
 bool scene_splash(int f);

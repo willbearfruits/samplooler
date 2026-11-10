@@ -13,6 +13,7 @@ void front_midi(uint8_t st, uint8_t d1, uint8_t d2);
 void px_prof(float *render_us, float *tick_us);
 void edit_test_state(int *row, int *slot, int *step);
 void edit_test_home(void);
+void edit_test_row(int r, int sl);
 
 static int tag(const char *t) { int p = param_by_tag(t); if (p < 0) note("no param '%s'", t); return p; }
 static void set(const char *t, float v) { int p = tag(t); if (p >= 0) param_set(p, v); }
@@ -253,12 +254,59 @@ static void soak(void)
     set("cons", (float)CON_NES); program(0); sim_run(0.3f);
 }
 
+// BAR > DICE: an idea for a row. Many throws: every one must be a bar that can be played and edited
+static void dice(void)
+{
+    section("pixel: the dice");
+    quiet(); sim_menu_close(); px_stop(); program(PX_NSONGS - 1); sim_run(0.3f);
+    set("tmpo", 140); set("key ", 9); set("scal", PX_SC_MINOR); set("cons", (float)CON_NES);
+    // four bars, a chord each: I VI III VII
+    static const uint8_t prog[4] = { 1, 6, 3, 7 };
+    px_song.order_n = 4;
+    for (int b = 0; b < 4; b++) { px_song.order[b] = (uint8_t)b; memset(&px_song.pat[b], 0, sizeof px_song.pat[b]); px_song.pat[b].chords[0] = prog[b]; }
+    int bad = 0, throws = 0;
+    for (int n = 0; n < 60; n++) for (int b = 0; b < 4; b++) {
+        px_pattern_t *p = &px_song.pat[b];
+        for (int r = 1; r <= 4; r++) {
+            if (r == 2) continue;                                   // (the chords stay as set)
+            edit_test_row(r, b); edit_action(EA_DICE); throws++;
+        }
+        int kicks = 0, lead = 0, bass = 0;
+        for (int i = 0; i < PX_STEPS; i++) {
+            kicks += (p->drums[i] & DR_KICK) != 0;
+            for (int w = 0; w < 2; w++) {
+                const uint8_t *c = w ? p->bass : p->lead;
+                int row = c[i] & NC_ROW;
+                if (!row) continue;
+                if (w) bass++; else lead++;
+                if ((c[i] & NC_TIE) && !(i && (c[i - 1] & NC_ROW))) bad++;       // a tie with nothing before it
+                int m = px_row_note(w ? PART_BASS : PART_LEAD, row - 1, 9, PX_SC_MINOR);
+                if (w ? (m < 28 || m > 64) : (m < 55 || m > 100)) bad++;         // out of the part's range
+            }
+            if (p->drums[i] & 0x60) bad++;
+        }
+        if (!kicks || lead < 4 || bass < 2) bad++;
+    }
+    check(bad == 0, "%d throws for drums, bass and lead: every bar has a beat, a bass line and a tune, in range (%d bad)", throws, bad);
+    edit_test_row(2, 0);
+    uint8_t before = px_song.pat[0].chords[0];
+    edit_action(EA_DICE);
+    check((px_song.pat[0].chords[0] & CH_DEGREE) && px_song.pat[0].chords[0] != before, "a throw on CHORDS: another chord for the bar");
+    px_song.pat[0].chords[0] = 1; px_song.pat[0].chords[8] = 0;
+    float t0 = sim_t;
+    px_play_song(0); sim_run(4.0f * 4.0f * 60.0f / 140.0f + 0.1f); px_stop(); sim_run(0.8f);
+    check(m_rms(t0, sim_t - 0.8f) > 0.03f && lib_notes_edited(), "the thrown bars play, and count as an edit");
+    sim_wav("-dice", t0, sim_t);
+    program(0); sim_run(0.2f);
+}
+
 void test_host(void)
 {
     clock_checks();
     hands_checks();
     link_checks();
     no_stick();
+    dice();
     console_change();
     cost();
     soak();

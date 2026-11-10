@@ -34,7 +34,7 @@ enum {
     P_BSND, P_BLVL, P_BOCT, P_BLEN,
     P_DKIT, P_DLVL,
     P_GLITCH,
-    P_ECOPY, P_EPASTE, P_ECLEAR,
+    P_EDICE, P_ECOPY, P_EPASTE, P_ECLEAR,
     P_TILT, P_BEND, P_STICK,
     P_LINK, P_GROUP, P_RANGE, P_PEERS,
     P_NREV,
@@ -86,6 +86,7 @@ static const param_t params[P_N] = {
     [P_DKIT]    = { "KIT", "dkit", G_DRUMS, PK_ENUM, 0, 0, 3, 1, 0, "", dkit_l, "THE CONSOLE'S DRUM KITS" },
     [P_DLVL]    = { "LEVEL", "dlvl", G_DRUMS, PK_NUM, PF_INT, 0, 100, 5, 100, "%", NULL, "HOW LOUD THE DRUMS ARE" },
     [P_GLITCH]  = { "GLITCH", "glit", G_CONSOLE, PK_NUM, PF_INT, 0, 100, 5, 0, "%", NULL, "A BADLY SEATED CARTRIDGE" },
+    [P_EDICE]   = { "DICE", "edic", G_BAR, ACT, 0, 0, 0, 0, "", NULL, "AN IDEA FOR THIS ROW" },
     [P_ECOPY]   = { "COPY", "ecpy", G_BAR, ACT, 0, 0, 0, 0, "", NULL, "REMEMBER THIS BAR" },
     [P_EPASTE]  = { "PASTE", "epst", G_BAR, ACT, 0, 0, 0, 0, "", NULL, "PUT THE COPIED BAR HERE" },
     [P_ECLEAR]  = { "CLEAR", "eclr", G_BAR, ACT, 0, 0, 0, 0, "", NULL, "EMPTY THIS BAR" },
@@ -570,7 +571,8 @@ static void changed(int p)
 
 static void action(int p)
 {
-    if (p == P_ECOPY) edit_action(EA_COPY);
+    if (p == P_EDICE) edit_action(EA_DICE);
+    else if (p == P_ECOPY) edit_action(EA_COPY);
     else if (p == P_EPASTE) edit_action(EA_PASTE);
     else if (p == P_ECLEAR) edit_action(EA_CLEAR);
     else if (p == P_PEERS) {

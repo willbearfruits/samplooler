@@ -46,6 +46,7 @@ bool edit_active(void) { return open_; }
 #ifndef ESP_PLATFORM
 void edit_test_state(int *r, int *sl, int *st) { *r = row; *sl = slot; *st = step; }   // tools/sim
 void edit_test_home(void) { row = ROW_LEAD; slot = 0; step = 0; }
+void edit_test_row(int r, int sl) { row = r; slot = sl; homed = true; }
 #endif
 static int  cur_pat(void) { if (slot >= px_song.order_n) slot = px_song.order_n - 1; if (slot < 0) slot = 0; return px_song.order[slot] & (PX_PATTERNS - 1); }
 int  edit_pattern(void) { return open_ || homed ? cur_pat() : px_pos.pattern; }
@@ -264,6 +265,7 @@ bool edit_hold(void)
         if (px_pos.running && px_pos.mode == PM_SONG) slot = px_pos.slot;
         if (slot >= px_song.order_n) slot = 0;
         idle_ms = 0; play_asked = -1; rec_was = false; rec_ready = false;   // (a REC already down is not a tap)
+        px_mute = 0;                                             // every part sounds while you write
         toast("WRITE", 600);
     } else {
         px_audition(PART_LEAD, -1, 0); px_audition(PART_BASS, -1, 0);
@@ -338,10 +340,95 @@ void edit_tick(const ctl_t *c)
     idle_ms += 10;
 }
 
+// ---------------------------------------------------------------- the dice: an idea for one row of this bar
+static uint32_t dice_seed = 0x9E3779B9u;
+static int roll(int n) { return (int)(rng_next(&dice_seed) % (uint32_t)(n < 1 ? 1 : n)); }
+// the chord that holds at a step of this bar (the last chord cell at or before it; I if the bar has none)
+static uint8_t chord_at(const px_pattern_t *p, int s)
+{
+    for (; s >= 0; s--) { if (p->chords[s] & CH_OFF) break; if (p->chords[s] & CH_DEGREE) return p->chords[s]; }
+    return 1;
+}
+// the row of a part nearest to one of a chord's notes (k: which note, octaves: rows of the scale above the home octave)
+static int chord_row(int part, uint8_t chord, int k, int oct)
+{
+    int notes[4], n = px_chord_notes(chord, px_key(), px_scale(), notes);
+    if (n < 1) { notes[0] = 48 + px_key(); n = 1; }
+    int home = px_row_note(part, px_home_octave(part, px_key()) * scale_n(), px_key(), px_scale());
+    int m = notes[k % n] % 12 + 12 * (home / 12) + 12 * oct;
+    if (m < home - 5) m += 12;
+    return px_note_row(part, m, px_key(), px_scale());
+}
+
+static void dice_drums(px_pattern_t *p)
+{
+    static const char *const K[] = { "x...x...x...x...", "x.....x.x.....x.", "x..x..x.x..x..x.", "x.......x.x.....", "x...x..xx...x...", "x.x...x.x.x...x." };
+    static const char *const S[] = { "....x.......x...", "....x.......x..x", "....x..x....x...", "........x.......", "....x.......x.xx" };
+    static const char *const H[] = { "x.x.x.x.x.x.x.x.", "xxxxxxxxxxxxxxxx", "..x...x...x...x.", "x.xxx.xxx.xxx.xx", "x...x...x...x..." };
+    const char *k = K[roll(6)], *s = S[roll(5)], *h = H[roll(5)];
+    for (int i = 0; i < PX_STEPS; i++) p->drums[i] = (uint8_t)((k[i] == 'x' ? DR_KICK : 0) | (s[i] == 'x' ? DR_SNARE : 0) | (h[i] == 'x' ? DR_HAT : 0));
+    if (roll(3) == 0) { p->drums[14] &= (uint8_t)~DR_HAT; p->drums[14] |= DR_OPEN; }
+    if (roll(4) == 0) { p->drums[12] |= DR_TOM | DR_ACCENT; p->drums[14] |= DR_TOM; }
+    p->drums[0] |= DR_ACCENT;
+}
+static void dice_bass(px_pattern_t *p)
+{
+    // a beat's worth each: r the root, R the root an octave up, f the fifth, t the third, - held, . nothing
+    static const char *const T[] = { "r.R.", "r..r", "rrrr", "r---", "r.f.", "r.rR", "r-.r" };
+    const char *t = T[roll(7)];
+    for (int i = 0; i < PX_STEPS; i++) {
+        char c = i >= 12 && roll(3) == 0 ? "r.tf"[i & 3] : t[i & 3];
+        uint8_t ch = chord_at(p, i & ~3);
+        int r = c == 'r' ? chord_row(PART_BASS, ch, 0, 0) : c == 'R' ? chord_row(PART_BASS, ch, 0, 1) : c == 'f' ? chord_row(PART_BASS, ch, 2, 0)
+              : c == 't' ? chord_row(PART_BASS, ch, 1, 0) : -1;
+        p->bass[i] = c == '-' && i && (p->bass[i - 1] & NC_ROW) ? (uint8_t)((p->bass[i - 1] & NC_ROW) | NC_TIE) : r >= 0 ? (uint8_t)(r + 1) : 0;
+    }
+}
+static void dice_lead(px_pattern_t *p)
+{
+    // rhythms: x a note, - held, . nothing. Notes on the beats are the chord's; between them the tune walks the scale
+    static const char *const R[] = { "x.x.x-x.x.x.x---", "x-..x.x.x-..x.x.", "x.xxx.x.x.xxx-..", "x---x-x-x---x-x-", "xx.xx.x.xx.xx-..",
+                                     "x-x-x.x.x-x-x---", "..x.x.x-..x.x.x-", "x..x..x.x..x..x-" };
+    const char *t = R[roll(8)];
+    int n = scale_n(), home = px_home_octave(PART_LEAD, px_key()) * n, lo = home - 2, hi = home + n + 4;
+    int cur = chord_row(PART_LEAD, chord_at(p, 0), roll(3), 0);
+    for (int i = 0; i < PX_STEPS; i++) {
+        if (t[i] == '.') { p->lead[i] = 0; continue; }
+        if (t[i] == '-') { p->lead[i] = i && (p->lead[i - 1] & NC_ROW) ? (uint8_t)((p->lead[i - 1] & NC_ROW) | NC_TIE) : 0; continue; }
+        if ((i & 3) == 0 || i == 14) {                           // a strong step: the chord's note nearest to where the tune is
+            uint8_t ch = chord_at(p, i);
+            int best = cur, bd = 99;
+            for (int k = 0; k < 3; k++) for (int o = 0; o < 2; o++) { int r = chord_row(PART_LEAD, ch, k, o), d = r > cur ? r - cur : cur - r; if (d < bd && (d || roll(2))) { bd = d; best = r; } }
+            cur = best;
+        } else cur += "\x01\x01\x02\x03\x00"[roll(4)] * (roll(2) ? 1 : -1);
+        cur = clampi(cur, lo, hi);
+        p->lead[i] = (uint8_t)((cur + 1) | ((i & 7) == 0 && roll(3) == 0 ? NC_ACCENT : 0));
+    }
+}
+static void dice_chords(px_pattern_t *p)
+{
+    static const uint8_t pick[] = { 1, 1, 4, 5, 6, 6, 4, 5, 2, 3 };
+    uint8_t before = chord_at(p, 0) & CH_DEGREE, d;
+    do d = pick[roll(10)]; while (d == before);
+    memset(p->chords, 0, PX_STEPS);
+    p->chords[0] = d;
+    if (roll(3) == 0) { uint8_t e; do e = pick[roll(10)]; while (e == d); p->chords[8] = e; }
+}
+
 void edit_action(int what)
 {
     int p = edit_pattern();
     char b[32];
+    if (what == EA_DICE) {
+        int r = row == ROW_SONG ? ROW_DRUMS : row;
+        dice_seed ^= audio_frames() * 2654435761u; if (!dice_seed) dice_seed = 1;
+        px_pattern_t *pt = &px_song.pat[p];
+        if (r == ROW_DRUMS) dice_drums(pt); else if (r == ROW_BASS) dice_bass(pt); else if (r == ROW_LEAD) dice_lead(pt); else dice_chords(pt);
+        px_notes_edited();
+        snprintf(b, sizeof b, "NEW %s IN BAR %c", row_name[r], 'A' + p);
+        toast(b, 1200);
+        return;
+    }
     if (what == EA_COPY) { clip = px_song.pat[p]; clip_ok = true; snprintf(b, sizeof b, "BAR %c COPIED", 'A' + p); }
     else if (what == EA_PASTE) {
         if (!clip_ok) { toast("NOTHING COPIED YET", 1200); return; }

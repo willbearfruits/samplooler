@@ -158,6 +158,7 @@ the song.
 
 | Setting | Values | CC | |
 | - | - | - | - |
+| DICE | press to do it |  | An idea for this row |
 | COPY | press to do it |  | Remember this bar |
 | PASTE | press to do it |  | Put the copied bar here |
 | CLEAR | press to do it |  | Empty this bar |
@@ -166,9 +167,9 @@ the song.
 
 | Setting | Values | CC | |
 | - | - | - | - |
-| TILT | OFF, ON | 49 | Tip: glitch. roll: bend |
-| BEND | 1 to 12 st | 50 | How far a roll bends |
-| STICK | OFF, MUTES | 51 | A push mutes a part |
+| TILT | OFF, ON | 50 | Tip: glitch. roll: bend |
+| BEND | 1 to 12 st | 51 | How far a roll bends |
+| STICK | OFF, MUTES | 52 | A push mutes a part |
 
 **LINK**
 
