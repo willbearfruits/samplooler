@@ -43,6 +43,10 @@ static int     learned;                              // bit 0 moved, 1 turned, 2
 typedef struct { int dx, dy, turn, drag; bool tap, play; } ed_in_t;
 
 bool edit_active(void) { return open_; }
+#ifndef ESP_PLATFORM
+void edit_test_state(int *r, int *sl, int *st) { *r = row; *sl = slot; *st = step; }   // tools/sim
+void edit_test_home(void) { row = ROW_LEAD; slot = 0; step = 0; }
+#endif
 static int  cur_pat(void) { if (slot >= px_song.order_n) slot = px_song.order_n - 1; if (slot < 0) slot = 0; return px_song.order[slot] & (PX_PATTERNS - 1); }
 int  edit_pattern(void) { return open_ || homed ? cur_pat() : px_pos.pattern; }
 static px_pattern_t *pat(void) { return &px_song.pat[cur_pat()]; }
