@@ -30,7 +30,7 @@ typedef struct { uint32_t rev; bool used; uint32_t age; px_song_t s; } stash_t;
 static UI_RAM stash_t stash[NSTASH];
 static uint32_t stash_clock;
 static uint32_t ram_rev;                   // the stamp of the notes in px_song
-static bool     booted, loaded, was_edited, notes_dirty, work_dirty;
+static bool     booted, loaded, was_edited, notes_dirty, work_dirty, core_was_dirty;
 static int      work_ms, last_sound = -999;
 static uint32_t rng = 0x1234ABCDu;
 
@@ -184,18 +184,27 @@ void lib_tick(const ctl_t *c)
     // a save: the sound is a user's and either it has just become that one, or it stopped being edited, with no load
     if (!loaded && s >= SOUND_ID_USER && (s != last_sound || (was_edited && !edited))) {
         ram_rev = (uint32_t)pv[px_param_nrev()];
-        if (!file_write(user_file(s - SOUND_ID_USER), &px_song, ram_rev, s)) toast("NO ROOM FOR THE NOTES", 2000);
         notes_dirty = false; work_dirty = false;
+        if (!file_write(user_file(s - SOUND_ID_USER), &px_song, ram_rev, s)) {
+            toast("NO ROOM FOR THE NOTES", 2000);
+            px_notes_edited();                                    // not saved: the song stays marked, so the next
+            edited = true;                                        // SAVE AS is seen and tries again
+        }
     }
     loaded = false; last_sound = s; was_edited = edited;
-    // the working notes: 3 s after the last change once it is quiet, 30 s at most (as the core saves its settings)
+    // The working notes go to the store with the core's settings, never before them (the stamp in the settings says
+    // which notes are current): when the core has just saved, or 3 s after the last change once the settings are
+    // saved and it is quiet; 30 s at most.
+    bool core_dirty = front_dirty();
     if (work_dirty) {
         work_ms += 10;
-        if ((work_ms >= 3000 && (front_quiet() || !px_pos.running)) || work_ms >= 30000) {
+        bool calm = front_quiet() || !px_pos.running;
+        if ((core_was_dirty && !core_dirty) || (!core_dirty && work_ms >= 3000 && calm) || work_ms >= 30000) {
             file_write("nw", &px_song, ram_rev, s);
             work_dirty = false; work_ms = 0;
         }
     }
+    core_was_dirty = core_dirty;
 }
 #ifndef ESP_PLATFORM
 void lib_test_flush(void) { if (work_dirty) { file_write("nw", &px_song, ram_rev, meta.sound); work_dirty = false; } }   // tools/sim

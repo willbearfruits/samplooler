@@ -5,6 +5,7 @@
 #include <math.h>
 #include <string.h>
 void front_midi(uint8_t st, uint8_t d1, uint8_t d2);
+void test_library(void);
 
 // the console, the tempo, the swing, the frame rate, the key and the scale move the whole machine: a new chip or a
 // new tempo is a new sound, not a control gliding
@@ -146,5 +147,6 @@ void inst_tests(void)
     plays();
     consoles();
     editor();
+    test_library();
     check(m_bad() == 0, "no NaN or inf anywhere");
 }

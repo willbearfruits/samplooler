@@ -121,6 +121,7 @@ typedef struct {
     const param_t *params;     int nparams;
     const char *const *groups; int ngroups;    // menu pages of your params, in order
     const preset_t *presets;   int npresets;   // factory sounds, the first is the default
+    const char *sound_word;    // what this instrument's sounds are called in the menu ("SONG"); NULL: "SOUND"
     const hint_t *hints;       int nhints;
     bool  burst;               // wants the 1 kHz accelerometer stream (ctl.burst)
     bool  burst_gyro;          // with burst: the gyro at 1 kHz too (ctl.gburst)

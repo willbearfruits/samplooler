@@ -63,7 +63,8 @@ neither changes the sound nor opens the menu, hints stop, and every tick `ctl.kn
 `INST.presets` are the factory sounds: a name and `"tag=value ..."`; everything not named is the param's
 default. Turning the knob in play walks the list: an edited sound that is left is kept as MY EDIT at the
 start of the list; SAVE AS stores up to eight user sounds (USER 1..8, named after the sound they came from)
-after the factory ones. Program change n picks sound n (factory first, then user).
+after the factory ones. Program change n picks sound n (factory first, then user). An instrument whose
+sounds are something else can name them: `INST.sound_word = "SONG"` (PIXEL) changes the menu's words, nothing more.
 
 ## Params
 

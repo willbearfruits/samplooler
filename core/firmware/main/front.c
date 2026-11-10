@@ -236,9 +236,10 @@ static int mlev, sel1, sel2, top1;             // level: 0 closed, 1 pages, 2 it
 static int pick_k;                              // SAVE AS: the user slot being chosen
 static int edit_ms;
 
+static const char *sound_word(void) { return INST.sound_word ? INST.sound_word : "SOUND"; }
 static const char *group_name(int g)
 {
-    if (g == G_SOUND) return "SOUND";
+    if (g == G_SOUND) return sound_word();
     if (g == GROUP_LOOP) return "LOOP";
     if (g == GROUP_SYSTEM) return "SYSTEM";
     return INST.groups[g];
@@ -271,7 +272,7 @@ static const char *item_name(int it)
 {
     switch (it) {
     case ITEM_BACK: return S_LEFT " BACK";
-    case SND_SOUND: return "SOUND";
+    case SND_SOUND: return sound_word();
     case SND_SAVE: return "SAVE AS";
     case SND_REVERT: return "REVERT";
     default: return param(it)->name;
@@ -345,7 +346,7 @@ static void menu_tap(void)
     if (mlev == 2) {
         int it = items[sel2];
         if (it == ITEM_BACK) { mlev = 1; return; }
-        if (it == SND_REVERT) { if (load_sound(meta.sound, true)) toast("BACK TO THE SAVED SOUND", 1300); return; }
+        if (it == SND_REVERT) { if (load_sound(meta.sound, true)) { char t[40]; snprintf(t, sizeof t, "BACK TO THE SAVED %s", sound_word()); toast(t, 1300); } return; }
         if (it == SND_SAVE) { pick_k = meta.sound >= SOUND_ID_USER ? meta.sound - SOUND_ID_USER : 0; mlev = 3; edit_ms = 0; return; }
         if (it == SND_SOUND) { mlev = 3; edit_ms = 0; return; }
         if (param(it)->kind == PK_ACT) { run_action(it); return; }
@@ -926,7 +927,7 @@ static void draw_sound_card(int y)
     strip_bg(y);
     int16_t ids[SOUND_LIST_MAX];
     int n = sound_list(ids), i = sound_pos(ids, n, meta.sound);
-    char b[24]; snprintf(b, sizeof b, "SOUND %d/%d", i + 1, n);
+    char b[24]; snprintf(b, sizeof b, "%s %d/%d", sound_word(), i + 1, n);
     oled_ftext_ex(F_TINY, 3, y + 3, b, 1);
     if (meta.sound == -1) oled_ftext_r(F_TINY, OLED_W - 3, y + 3, "YOUR EDIT", 1);
     else if (meta.sound >= SOUND_ID_USER) oled_ftext_r(F_TINY, OLED_W - 3, y + 3, "USER", 1);

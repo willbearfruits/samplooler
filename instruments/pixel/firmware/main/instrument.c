@@ -600,6 +600,7 @@ const instrument_t INST = {
     .name = "PIXEL", .tagline = "A CHIPTUNE MACHINE",
     .params = params, .nparams = P_N, .groups = groups, .ngroups = G_N,
     .presets = PX_PRESETS, .npresets = PX_NSONGS,
+    .sound_word = "SONG",
     .hints = hints, .nhints = (int)(sizeof hints / sizeof hints[0]),
     .burst = false, .looper = false, .knob = "cons", .midi_notes = true,
     .init = init, .audio = audio, .tick = tick, .draw = draw, .splash = splash,
