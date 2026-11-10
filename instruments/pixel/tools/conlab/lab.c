@@ -201,6 +201,8 @@ static void bench(const px_console_t *c)
     cur_console = c->name;
     printf("\n%s (%s, %s)\n", c->name, c->chip, c->year);
     bool atari = !strcmp(c->name, "ATARI"), beeper = !strcmp(c->name, "BEEPER");
+    check(c->render != px_ref_render && c->tick != px_ref_tick, "it is its own chip, not the reference standing in");
+    check(c->names != NULL, "it names its sounds and kits");
 
     // the tune, twice: the same both times, its levels and its cost
     start(c); run_bars(c, 0, 8, false);

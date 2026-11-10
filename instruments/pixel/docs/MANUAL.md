@@ -128,7 +128,14 @@ output filter. Channel 1 is the drums (a hit cuts the one before), 2 the bass, 3
 plays a whole chord recorded as one sound on its root, the module trick. Every sample is made when it starts: none
 is a recording.
 
-**MEGA** (Mega Drive: YM2612 FM and the PSG, 1988). Not built yet: a plain stand-in plays under its name.
+**MEGA** (Mega Drive: YM2612 FM and the PSG, 1988). Six FM channels of four operators each. FM 1 is the bass, FM 2
+the lead, FM 3 to 5 play the chord whole (the one console with real chords: ARP SLOW breaks it across the three, the
+other settings play it together; a four-note chord drops its fifth). Channel 6 is the chip's 8-bit DAC with a kick
+and a snare made when it starts. The PSG's noise is the hats, its squares the echo and the tom. It goes through the
+first Mega Drive's output filter, which makes it darker than the others.
+
+Where a console has one voice for the drums and two fall on a step, the snare wins, then the kick, the tom, the open
+hat, the hat.
 
 <!-- sounds -->
 
@@ -141,7 +148,7 @@ is a recording.
 | GAME BOY | PULSE, SOFT, WOBBLE, ZAP | WAVE, ROUND, SQUARE, FRAMES | ARP, SOFT, PLUCK, SWEEP | WAVE, PULS MTL, WAVE MTL, PULSE |
 | C64 | PULSE, SYNC SAW, FILTER, BELL | PLUCK, SAW, TRIANGLE, RUBBER | PULSE, SAW, SOFT, THIN | HARD, SOFT |
 | AMIGA | SAMPLED, SQUARE, SAW, MALLET | FILTER, SQUARE, FM, TRIANGLE | SAMPLED, ARP, PAD, SAW ARP | MACHINE, LO-FI |
-| MEGA | (not built yet) | | | |
+| MEGA | BRASS, SQUARE, FLUTE, BELL | SYNTH, ROUND, SLAP, ORGAN | E.PIANO, STRINGS, ORGAN, CLAV | DEEP, HARD |
 
 <!-- /sounds -->
 

@@ -46,7 +46,7 @@ static void consoles(void)
     for (int c = 0; c < CON_N; c++) {
         set("cons", (float)c); sim_run(3.2f);
         float r = m_rms(sim_t - 2.0f, sim_t);
-        check(px_pos.console == c && r > 0.02f, "%s plays the song (rms %.3f)", PX_CONSOLES[c]->name, (double)r);
+        check(px_pos.console == c && r > 0.02f && PX_CONSOLES[c]->render != px_ref_render, "%s plays the song on its own chip (rms %.3f)", PX_CONSOLES[c]->name, (double)r);
     }
     sim_wav("-consoles", t0, sim_t);
     px_stop(); sim_run(1.0f); set("cons", (float)CON_NES);

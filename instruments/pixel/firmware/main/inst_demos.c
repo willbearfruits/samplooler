@@ -8,7 +8,7 @@ const preset_t PX_PRESETS[PX_NSONGS] = {
     { "FIRST LEVEL",   "tmpo=150 key =9 scal=1 cons=3 lech=2 carp=3 crhy=0" },
     { "HIGH SCORE",    "tmpo=132 key =0 scal=0 cons=4 crhy=2 carp=3 lech=1 llen=70 clvl=70" },
     { "DEEP CAVE",     "tmpo=92 key =2 scal=1 cons=5 carp=2 cshp=2 lech=3 lvib=60 llen=100 blen=100 clvl=65" },
-    { "LAST BOSS",     "tmpo=172 key =4 scal=5 cons=7 crhy=3 carp=3 lech=0 llen=75 blen=60" },
+    { "LAST BOSS",     "tmpo=172 key =4 scal=5 cons=7 crhy=3 carp=3 lech=0 llen=75 blen=60 bsnd=2 csnd=3" },
     { "SEA BREEZE",    "tmpo=108 key =5 scal=0 cons=6 crhy=1 carp=1 swng=24 lech=2 llen=95 clvl=70" },
     { "MOUNTAIN KING", "tmpo=120 key =0 scal=9 cons=0 lech=0 llen=60 carp=3 clvl=60" },
     { "TURKISH MARCH", "tmpo=126 key =0 scal=9 cons=2 lech=0 llen=75 carp=3 clvl=55 blen=60" },

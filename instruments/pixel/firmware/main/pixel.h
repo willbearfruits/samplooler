@@ -136,7 +136,8 @@ typedef struct {
     uint8_t  step;             // 0..15, the step in the bar
     uint8_t  running;          // the song plays. 0: stopped (notes played by hand may still come)
     uint8_t  restart;          // 1 on the first frame after reset(): every part that sounds has trig set
-    uint8_t  drums;            // the drums hit on this tick: DR_KICK | DR_SNARE ... (0 on most ticks)
+    uint8_t  drums;            // the drums hit on this tick: DR_KICK | DR_SNARE ... (0 on most ticks). Where one voice
+                               // must choose between drums hit together: snare, then kick, tom, open hat, hat
     uint8_t  drum_accent;      // that hit is accented
     uint8_t  kit;              // DRUMS > KIT, 0..3: the console's own kits
     float    drum_level;       // 0..1: the part's LEVEL
