@@ -91,7 +91,61 @@ place a few seconds. SYSTEM > RESET ALL removes your songs.
 ## The consoles
 
 <!-- consoles -->
-The eight chips and their sounds are described here once they are in.
+Each console is a model of the chip (its own counters, registers, noise generators and volume steps, with every
+edge band-limited so nothing folds back at 32 kHz) and a sound driver that uses it the way that machine's music did.
+Pitch goes through the chip's own period register, so high notes are a few cents off where the real chip's were.
+
+**BEEPER** (ZX Spectrum 48K, 1982). One bit on a speaker: two pulse counters, their pulses OR'ed. No volume: a
+part's level and a note's shape are the pulse's width. The bass has one channel; the lead and the chords share the
+other, tick by tick. A drum stops everything for its few milliseconds, which is the beeper's own stutter. No echo.
+
+**ATARI** (Atari 2600, TIA, 1977). Two voices, each a waveform from the chip's shift registers, a 5-bit divider and
+a 4-bit volume. Only 32 pitches per waveform, so every note takes the nearest one: it is out of tune by design, about
+a quarter of a semitone on average. The bass shares its voice with the drums, the lead with the chords. Slides and
+vibrato come out as steps. No echo.
+
+**AY** (AY-3-8910 as in the Spectrum 128; the Atari ST's chip is its twin). Three squares, one noise generator, the
+envelope generator. Channel A is the lead, B the chords' arpeggio (the echo when no chord sounds) and most drums, C
+the bass and the kick. BUZZER is the envelope's sawtooth used as the bass's waveform; it has no volume on the chip,
+so BASS > LEVEL scales it here (a cheat).
+
+**NES** (2A03, 1983). Pulse 1 is the lead, pulse 2 the chords (else the echo), the triangle the bass and the kick,
+the noise channel the snare and hats. The DPCM kits play a kick, a snare and a tom as 1-bit samples made when it
+starts. The triangle has no volume on the chip: BASS > LEVEL scales it here (a cheat), and its four sounds differ
+only in pitch tricks.
+
+**GAME BOY** (DMG, 1989), in the manner of LSDj. Pulse 1 is the lead, pulse 2 the chords (else the echo), the wave
+channel the bass, noise the snare and hats. The kick is a fast fall on the wave channel or on pulse 2, by the kit.
+FRAMES steps through eight waveforms by the tick.
+
+**C64** (SID 6581, 1982), in the manner of Rob Hubbard and Martin Galway. Voice 1 is the lead: a pulse with a moving
+width, a synced sawtooth, a pulse through the filter, a ring modulated bell. Voice 2 is the bass through the low-pass
+filter, and the drums on the same voice as waveform tables (noise, pulse and triangle in turn), after which the bass
+comes back. Voice 3 is the chords' fast arpeggio, or the echo.
+
+**AMIGA** (Paula, 1985), as a tracker module. Four channels of 8-bit samples held between steps, through the A500's
+output filter. Channel 1 is the drums (a hit cuts the one before), 2 the bass, 3 the chords, 4 the lead. SAMPLED
+plays a whole chord recorded as one sound on its root, the module trick. Every sample is made when it starts: none
+is a recording.
+
+**MEGA** (Mega Drive: YM2612 FM and the PSG, 1988). Not built yet: a plain stand-in plays under its name.
+
+<!-- sounds -->
+
+| | LEAD > SOUND | BASS > SOUND | CHORDS > SOUND | DRUMS > KIT |
+| - | - | - | - | - |
+| BEEPER | THIN, PULSE, PLUCK, SWEEP | BUZZ, FAT, PLUCK, OCTAVES | THIN, PULSE, PLUCK, SWEEP | CLICK, DARK |
+| ATARI | PURE, BUZZ, PLUCK, TREMOLO | BUZZ, LOW, GROWL, PLUCK | PURE, BUZZ, PLUCK, BUZZ PLK | NOISE, BUZZ |
+| AY | SQUARE, BELL, SOFT, OCTAVES | BUZZER, SQUARE, PHASE, PLUCK | ARP, SOFT, PLUCK, OCTAVES | NOISE, TONE |
+| NES | SQUARE, HOLLOW, PLUCK, SWEEP | TRIANGLE, PLUCK, WOBBLE, OCTAVES | ARP, SOFT, PLUCK, SWEEP | 2A03, DPCM, METAL, DPCM MTL |
+| GAME BOY | PULSE, SOFT, WOBBLE, ZAP | WAVE, ROUND, SQUARE, FRAMES | ARP, SOFT, PLUCK, SWEEP | WAVE, PULS MTL, WAVE MTL, PULSE |
+| C64 | PULSE, SYNC SAW, FILTER, BELL | PLUCK, SAW, TRIANGLE, RUBBER | PULSE, SAW, SOFT, THIN | HARD, SOFT |
+| AMIGA | SAMPLED, SQUARE, SAW, MALLET | FILTER, SQUARE, FM, TRIANGLE | SAMPLED, ARP, PAD, SAW ARP | MACHINE, LO-FI |
+| MEGA | (not built yet) | | | |
+
+<!-- /sounds -->
+
+A name that appears once in a cell with fewer than four names means the other numbers repeat it.
 <!-- /consoles -->
 
 ## Settings

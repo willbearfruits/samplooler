@@ -55,6 +55,18 @@ def main():
     doc = open(path).read()
     a, b = doc.index('<!-- tables -->') + len('<!-- tables -->'), doc.index('<!-- /tables -->')
     new = doc[:a] + '\n' + text + '\n' + doc[b:]
+    # each console's own names for its sounds and kits (the NAMES array in its file)
+    snd = ['', '| | LEAD > SOUND | BASS > SOUND | CHORDS > SOUND | DRUMS > KIT |', '| - | - | - | - | - |']
+    files = ['beeper', 'atari', 'ay', 'nes', 'gameboy', 'c64', 'amiga', 'mega']
+    for con, f in zip(CONSOLES, files):
+        csrc = open(os.path.join(M, f'inst_con_{f}.c')).read()
+        m = re.search(r'NAMES\[16\]\s*=\s*\{(.*?)\};', csrc, re.S)
+        n = re.findall(r'"([^"]*)"', m.group(1)) if m else []
+        if len(n) != 16: snd.append(f'| {con} | (not built yet) | | | |'); continue
+        cell = lambda k: ', '.join(dict.fromkeys(n[k:k + 4]))        # a name twice is one sound twice: say it once
+        snd.append(f'| {con} | {cell(0)} | {cell(4)} | {cell(8)} | {cell(12)} |')
+    a, b = new.index('<!-- sounds -->') + len('<!-- sounds -->'), new.index('<!-- /sounds -->')
+    new = new[:a] + '\n' + '\n'.join(snd) + '\n\n' + new[b:]
     if '--check' in sys.argv:
         if new != doc: print('docs/MANUAL.md is out of date: run tools/manual_tables.py'); return 1
         print('docs/MANUAL.md is up to date'); return 0
