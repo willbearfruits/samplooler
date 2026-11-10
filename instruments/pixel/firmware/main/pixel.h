@@ -180,6 +180,9 @@ typedef struct {
 enum { CON_BEEPER, CON_ATARI, CON_AY, CON_NES, CON_GAMEBOY, CON_C64, CON_AMIGA, CON_MEGA, CON_N };
 extern const px_console_t con_beeper, con_atari, con_ay, con_nes, con_gameboy, con_c64, con_amiga, con_mega;
 extern const px_console_t *const PX_CONSOLES[CON_N];   // in the knob's order, thin to fat
+// the reference console's functions (inst_con_ref.c), for a console's file to stand in with until it is built
+void px_ref_init(void); void px_ref_reset(void); void px_ref_tick(const px_frame_t *f);
+void px_ref_render(float *out, int n); int px_ref_view(px_vview_t *v, int max);
 
 // Levels: with the four parts at LEVEL 100 a busy bar of render() peaks around 0.5 and never passes 0.9; its RMS over
 // the bench tune (tools/conlab) is 0.10 to 0.16, so the knob does not jump in loudness between consoles. No DC: each

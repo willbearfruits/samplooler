@@ -1,5 +1,5 @@
 // The reference console: no real chip, the plainest thing that plays a frame. It shows how a console reads the
-// contract (pixel.h), and it stands in for any console that is not built yet (PX_REF_CONSOLE below).
+// contract (pixel.h), and a console that is not built yet can stand in with it (px_ref_* below).
 //
 //   voice 0  LEAD    a square (SOUND picks the width: 50, 25, 12.5 %, 50 with a duty step)
 //   voice 1  CHORDS  a square playing the arpeggio's note; the lead's ECHO when no chord sounds
@@ -119,15 +119,14 @@ static int view(px_vview_t *v, int max)
 
 const px_console_t con_ref = { "REF", "NONE", "2026", 4, init, reset, tick, render, view, NULL };
 
-// The consoles in the knob's order. A console that is not built yet is the reference under its own name: these are
-// weak, so a console's own file (inst_con_nes.c defining con_nes) takes over just by being there.
-#define PX_REF_CONSOLE(sym, nm, chp, yr) __attribute__((weak)) const px_console_t sym = { nm, chp, yr, 4, init, reset, tick, render, view, NULL }
-PX_REF_CONSOLE(con_beeper, "BEEPER", "1 BIT", "1982");
-PX_REF_CONSOLE(con_atari, "ATARI", "TIA", "1977");
-PX_REF_CONSOLE(con_ay, "AY", "AY-3-8910", "1978");
-PX_REF_CONSOLE(con_nes, "NES", "2A03", "1983");
-PX_REF_CONSOLE(con_gameboy, "GAME BOY", "DMG", "1989");
-PX_REF_CONSOLE(con_c64, "C64", "SID 6581", "1982");
-PX_REF_CONSOLE(con_amiga, "AMIGA", "PAULA", "1985");
-PX_REF_CONSOLE(con_mega, "MEGA", "YM2612", "1988");
+// For a console that is not built yet: its file can stand in with these (see pixel.h).
+void px_ref_init(void) { init(); }
+void px_ref_reset(void) { reset(); }
+void px_ref_tick(const px_frame_t *f) { tick(f); }
+IRAM_ATTR void px_ref_render(float *out, int n) { render(out, n); }
+int  px_ref_view(px_vview_t *v, int max) { return view(v, max); }
+
+// The consoles in the knob's order, thin to fat. Each is defined in its own file, inst_con_<name>.c. (They must be
+// plain definitions, not weak ones overridden: the board's firmware is linked from a library, and the linker takes a
+// weak symbol it already has rather than fetch the real one.)
 const px_console_t *const PX_CONSOLES[CON_N] = { &con_beeper, &con_atari, &con_ay, &con_nes, &con_gameboy, &con_c64, &con_amiga, &con_mega };
