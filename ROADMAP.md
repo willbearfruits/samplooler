@@ -25,7 +25,8 @@ Where the Samplooler is in November 2026, and what comes next. Nothing here has 
 3. **SING.** A voice processor, in [instruments/](instruments/) but not on the list. The Samplooler already has its
    voices, so it is decided last whether it stays its own instrument.
 4. **PIXEL.** A chiptune machine: four parts written on a grid, songs, eight old sound chips on the knob. In
-   [instruments/](instruments/pixel) but not on the list: it has only run in its simulator. Next for it: a board.
+   [instruments/](instruments/pixel) but not on the list yet. It ran on a board for the first time on 10 November.
+   Next for it: playing it, and the link with a second board.
 5. **Pictures.** Photos and a filmed video where the manual and the build guide have placeholders.
 6. **The next board.** One is drawn, not made. It becomes the board in the build guide after one is built and tested.
 7. **The app for everyone.** Ready-made downloads (AppImage and deb first, then macOS and Windows). Its board view,
