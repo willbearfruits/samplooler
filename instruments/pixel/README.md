@@ -36,6 +36,8 @@ The SONG row is the bars in order. Each bar plays a pattern, A to P. Press to pl
 right to give a bar a pattern of its own (a copy you can change without changing the others). Press and turn left to
 take the bar out.
 
+Stuck? BAR > DICE in the menu throws an idea into the row you were on: a beat, a bass line, a tune or a chord.
+
 Notes are rows of the song's scale, so they are always in key. TUNE > SCALE has ten scales; ALL NOTES gives every
 semitone.
 

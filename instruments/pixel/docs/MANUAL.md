@@ -60,7 +60,10 @@ belongs to the step: it makes everything hit there louder.
 pattern can be used many times: change it and every bar that plays it changes. To change one bar only, press and
 turn right on it: it gets a copy under the next free letter. The song goes round when it reaches the end.
 
-BAR in the menu has COPY, PASTE and CLEAR for the bar the cursor was last on.
+BAR in the menu works on the bar the cursor was last on. DICE throws an idea into the row you were on: a beat on
+DRUMS, a bass line on BASS, a tune on LEAD, another chord on CHORDS. The bass and the tune follow the bar's chords, so
+put the chords first. Throw again until you like it, then change it by hand. COPY, PASTE and CLEAR move or empty a
+whole bar.
 
 Without a stick the knob walks the cursor step by step and on into the next row, and press and turn changes what a
 turn would have.
