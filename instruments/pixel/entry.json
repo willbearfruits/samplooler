@@ -10,8 +10,8 @@
     "joystick",
     "wifi"
   ],
-  "status": "simulator",
-  "status_note": "Checked in its simulator only. It has not run on a board yet.",
+  "status": "board",
+  "status_note": "Flashed on a rev C Stack on 2026-11-10: it starts, plays and keeps up (13 % CPU on the AMIGA console). Not played much yet; the other consoles' load and the link have not been measured on a board.",
   "listed": false,
   "image": "images/pixel-play.gif",
   "more": [

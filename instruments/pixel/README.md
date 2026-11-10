@@ -88,8 +88,10 @@ cd firmware && idf.py build
 
 ## Status
 
-It runs in its simulator only. It has not been on a board yet, so nothing here has been heard through the Stack's
-own output or played with real hands. [docs/MANUAL.md](docs/MANUAL.md) has every setting.
+It runs on a board: flashed on a rev C Stack on 2026-11-10, it starts, plays and keeps up (13 % of the CPU on the
+AMIGA console, no dropped audio after the start). It has not been played much yet. The load of the other seven
+consoles, long sessions and the link with a second board have only been checked in the simulator.
+[docs/MANUAL.md](docs/MANUAL.md) has every setting.
 
 The two classical songs are Grieg's "In the Hall of the Mountain King" and Mozart's "Rondo alla Turca", set by hand.
 The other five were written for PIXEL.

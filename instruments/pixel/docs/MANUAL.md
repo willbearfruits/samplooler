@@ -3,7 +3,8 @@
 PIXEL is a chiptune machine. A song is four parts written on a grid of sixteenth steps: DRUMS, BASS, CHORDS and
 LEAD. Bars are chained into a song. One of eight old sound chips plays it, and the knob changes which.
 
-It has not run on a board yet: everything here was checked in the simulator.
+It has run on a board (a rev C Stack, 2026-11-10) but has not been played much: most of what is here was checked in
+the simulator.
 
 ## Playing
 
