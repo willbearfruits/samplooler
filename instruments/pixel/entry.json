@@ -14,6 +14,9 @@
   "status_note": "Checked in its simulator only. It has not run on a board yet.",
   "listed": false,
   "image": "images/pixel-play.gif",
-  "more": [],
-  "added": "2026-11-10"
+  "more": [
+    "images/pixel-write.gif"
+  ],
+  "added": "2026-11-10",
+  "hardware_note": "Writing is easiest with the joystick; without one the knob moves the cursor."
 }
