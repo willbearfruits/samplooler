@@ -65,15 +65,16 @@ int px_chord_notes(uint8_t cell, int key, int scale, int notes[4])
 
 const char *px_chord_name(uint8_t cell, int scale, char *b, int n)
 {
+    // the screen's fonts are capitals: a minor chord is "IIm", a diminished one "VIIo"
     static const char *const up[7] = { "I", "II", "III", "IV", "V", "VI", "VII" };
-    static const char *const lo[7] = { "i", "ii", "iii", "iv", "v", "vi", "vii" };
     if (cell & CH_OFF) { snprintf(b, (size_t)n, "OFF"); return b; }
     int d = (cell & CH_DEGREE) - 1;
     if (d < 0) { snprintf(b, (size_t)n, "-"); return b; }
     const px_scale_t *s = &PX_SCALES[PX_SCALES[scale < 0 || scale >= PX_SC_N ? 0 : scale].parent];
-    int third = (s->st[(d + 2) % 7] - s->st[d] + 12) % 12, kind = cell & CH_KIND;
-    bool minor = third == 3 && kind != CHK_SUS && kind != CHK_POWER;
-    snprintf(b, (size_t)n, "%s%s", minor ? lo[d] : up[d], kind == CHK_SEVENTH ? "7" : kind == CHK_SUS ? "sus" : kind == CHK_POWER ? "5" : "");
+    int third = (s->st[(d + 2) % 7] - s->st[d] + 12) % 12, fifth = (s->st[(d + 4) % 7] - s->st[d] + 12) % 12, kind = cell & CH_KIND;
+    bool plain = kind == CHK_SUS || kind == CHK_POWER;
+    snprintf(b, (size_t)n, "%s%s%s", up[d], plain ? "" : third == 3 ? (fifth == 6 ? "o" : "m") : "",
+             kind == CHK_SEVENTH ? "7" : kind == CHK_SUS ? "SUS" : kind == CHK_POWER ? "5" : "");
     return b;
 }
 
