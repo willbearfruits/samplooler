@@ -34,14 +34,14 @@ void test_library(void)
     sim_menu_close(); px_stop(); px_store_fail = false;
     program(0);
     uint8_t first = note_at(0);
-    check(meta.sound == 0 && first != 0 && px_song.order_n == 8 && pv[nrev] == 0.0f, "the first factory song: its notes, eight bars, unedited");
+    check(meta.sound == 0 && first != 0 && px_song.order_n == 16 && pv[nrev] == 0.0f, "the first factory song: its notes, sixteen bars, unedited");
     check(!front_status()->edited, "a factory song starts without the edit mark");
 
     // an edit marks the sound; another song chosen, it waits as MY EDIT with its notes
     edit(1, 23);
     check(front_status()->edited && pv[nrev] != 0.0f && lib_notes_edited(), "a changed note marks the song as edited");
-    browse_first(); browse(2);                                      // (MY EDIT, the first song, EMPTY)
-    check(meta.sound == 1 && px_song.order_n == 1 && note_at(0) == 0 && note_at(1) == 0, "another song chosen (EMPTY): its own notes");
+    browse_first(); browse(2);                                      // (MY EDIT, the first song, the second)
+    check(meta.sound == 1 && note_at(1) != 23 && note_at(0) != first, "another song chosen: its own notes");
     browse_first();
     check(meta.sound == -1 && note_at(0) == first && note_at(1) == 23, "MY EDIT brings the edited notes back");
     sim_menu_close();
@@ -77,7 +77,7 @@ void test_library(void)
     program(0); edit(5, 35);
     power_cycle();
     check(meta.sound == 0 && note_at(5) == 35 && note_at(0) == first, "off and on with an edited factory song: the edit is there");
-    browse_first(); browse(2); browse_first();                      // to EMPTY and back: it is MY EDIT now
+    browse_first(); browse(2); browse_first();                      // to another song and back: it is MY EDIT now
     sim_menu_close();
     power_cycle();
     check(meta.sound == -1 && note_at(5) == 35, "off and on while on MY EDIT: its notes");

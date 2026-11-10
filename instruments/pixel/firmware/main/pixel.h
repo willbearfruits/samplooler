@@ -92,6 +92,7 @@ static inline int px_row_note(int part, int row, int key, int scale)
     int n = PX_PART_BASE[part] + key + 12 * (row / s->n) + s->st[row % s->n];
     return n < 12 ? 12 : n > 119 ? 119 : n;
 }
+int px_home_octave(int part, int key);       // the octave (above the part's lowest row) where the part mostly plays
 // The row whose note is nearest to a MIDI note (for MIDI in, and for a change of scale in the editor).
 int px_note_row(int part, int midi, int key, int scale);
 // A chord cell's notes: MIDI, low to high, root first (root in C3..B3 before the part's octave is added). Returns 3
@@ -266,7 +267,7 @@ float px_bend_now(void);                         // semitones
 // ---------------------------------------------------------------- which notes go with the sound (inst_lib.c)
 // The core's sounds are PIXEL's songs: a factory sound's notes are in the firmware (inst_demos.c), a user sound's in
 // the notes' store beside the core's own blob. The library keeps px_song in step with the sound the core has loaded.
-#define PX_NSONGS 2                               // the factory songs (inst_demos.c): the last one is EMPTY
+#define PX_NSONGS 8                               // the factory songs (inst_demos.c): the last one is EMPTY
 extern const preset_t PX_PRESETS[PX_NSONGS];     // each one's name and settings ("tag=value ...")
 extern const char *const PX_SONG_TEXT[PX_NSONGS];   // and its notes, as text (inst_song.c)
 int  px_param_nrev(void);                        // the hidden param that stamps the notes (instrument.c)

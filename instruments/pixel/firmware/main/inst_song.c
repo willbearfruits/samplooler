@@ -8,9 +8,9 @@
 //   AK: x...x...x...x...                          the drums, a line each: K kick, S snare, H hat, O open hat, T tom
 //   ORDER: A A B A                                the song: the patterns in order
 //
-// A note is a degree of the scale, 1..7 (a b c for 10 11 12 in longer scales), in the part's home octave (the LEAD's
-// starts two octaves above its lowest row, the BASS's one): ' after it is an octave up, , an octave down, ! an
-// accent. "-" holds the note before; "~" in front slides to this note without a new attack; "." is nothing.
+// A note is a degree of the scale, 1..7 (a b c for 10 11 12 in longer scales), in the part's home octave
+// (px_home_octave: the BASS's root in C2..B2, the LEAD's in F4..E5): ' after it is an octave up, , an octave down,
+// ! an accent. "-" holds the note before; "~" in front slides to this note without a new attack; "." is nothing.
 // A chord is I..VII (its kind comes from the scale), with 7 (a seventh), s (sus4) or 5 (root and fifth) after it;
 // "x" stops the chords. A drum line is sixteen characters: x a hit, X an accented one, anything else none.
 #include "pixel.h"
@@ -32,6 +32,10 @@ const px_scale_t PX_SCALES[PX_SC_N] = {
     [PX_SC_CHROMATIC] = { "ALL NOTES",  12, { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }, PX_SC_MAJOR },
 };
 const uint8_t PX_PART_BASE[PART_N] = { 0, 24, 48, 48 };
+
+// The octave (in rows: octaves above the part's lowest) where a part mostly plays: the bass's root in C2..B2, the
+// lead's in F4..E5, whatever the key.
+int px_home_octave(int part, int key) { return part == PART_LEAD ? (key <= 4 ? 2 : 1) : part == PART_BASS ? 1 : 0; }
 
 int px_note_row(int part, int midi, int key, int scale)
 {
@@ -57,7 +61,7 @@ int px_chord_notes(uint8_t cell, int key, int scale, int notes[4])
     case CHK_TRIAD:   notes[1] = root + third; notes[2] = root + fifth; break;
     case CHK_SEVENTH: notes[1] = root + third; notes[2] = root + fifth; notes[3] = root + ABOVE(6); n = 4; break;
     case CHK_SUS:     notes[1] = root + ABOVE(3); notes[2] = root + fifth; break;
-    case CHK_POWER:   notes[1] = root + fifth; notes[2] = root + 12; break;
+    case CHK_POWER:   notes[1] = root + 7; notes[2] = root + 12; break;       // a fifth is a fifth in any scale
     }
 #undef ABOVE
     return n;
@@ -87,7 +91,7 @@ void px_song_clear(px_song_t *s)
 // ---------------------------------------------------------------- the text
 static const char *skip_sp(const char *p) { while (*p == ' ' || *p == '\t' || *p == '|') p++; return p; }
 
-static int note_token(const char **pp, int part, int scale_n, uint8_t prev_row, uint8_t *cell)
+static int note_token(const char **pp, int part, int scale_n, int key, uint8_t prev_row, uint8_t *cell)
 {
     const char *p = *pp;
     bool slide = false;
@@ -101,7 +105,7 @@ static int note_token(const char **pp, int part, int scale_n, uint8_t prev_row, 
     else return -1;
     if (deg >= scale_n) return -1;
     p++;
-    int oct = part == PART_LEAD ? 2 : 1;
+    int oct = part == PART_LEAD ? px_home_octave(PART_LEAD, key) : 1;
     bool acc = false;
     for (;; p++) {
         if (*p == '\'') oct++;
@@ -141,7 +145,6 @@ static int chord_token(const char **pp, uint8_t *cell)
 
 bool px_song_parse(px_song_t *s, const char *text, int key, int scale, char *err, int errn)
 {
-    (void)key;
     px_song_clear(s);
     const px_scale_t *sc = &PX_SCALES[scale < 0 || scale >= PX_SC_N ? 0 : scale];
     int line = 0;
@@ -176,7 +179,7 @@ bool px_song_parse(px_song_t *s, const char *text, int key, int scale, char *err
             uint8_t *row = part == 'L' ? pt->lead : pt->bass, prev = 0;
             for (int i = 0; i < PX_STEPS && *q; i++) {
                 uint8_t c;
-                if (note_token(&q, part == 'L' ? PART_LEAD : PART_BASS, sc->n, prev, &c)) { if (err) snprintf(err, (size_t)errn, "line %d step %d: note '%.6s'", line, i + 1, q); return false; }
+                if (note_token(&q, part == 'L' ? PART_LEAD : PART_BASS, sc->n, key, prev, &c)) { if (err) snprintf(err, (size_t)errn, "line %d step %d: note '%.6s'", line, i + 1, q); return false; }
                 row[i] = c;
                 prev = c & NC_ROW;
                 q = skip_sp(q);

@@ -4,6 +4,7 @@
 #include "link.h"
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 void front_midi(uint8_t st, uint8_t d1, uint8_t d2);
 void test_library(void);
 
@@ -58,7 +59,7 @@ static void load_song(int id) { int16_t want = (int16_t)id; (void)want; front_mi
 static void editor(void)
 {
     section("pixel: the editor");
-    quiet(); px_stop(); load_song(1); sim_run(0.5f);                // EMPTY
+    quiet(); px_stop(); load_song(PX_NSONGS - 1); sim_run(0.5f);    // EMPTY
     check(px_song.order_n == 1 && !px_song.pat[0].lead[0], "the EMPTY song is one empty bar");
     sim_hold_knob(); sim_run(0.3f);
     check(edit_active(), "the knob held opens the editor");
@@ -142,10 +143,40 @@ static void editor(void)
     check(lib_notes_edited(), "the notes count as edited");
 }
 
+// every factory song reads without a complaint and plays; a few bars of each to listen to
+static void songs(void)
+{
+    section("pixel: the factory songs");
+    quiet(); px_stop(); sim_run(0.5f);
+    for (int i = 0; i < PX_NSONGS; i++) {
+        px_song_t t; char err[64] = "";
+        int key = 0, scale = 0;
+        sscanf(strstr(PX_PRESETS[i].set, "key =") ? strstr(PX_PRESETS[i].set, "key =") + 5 : "0", "%d", &key);
+        sscanf(strstr(PX_PRESETS[i].set, "scal=") ? strstr(PX_PRESETS[i].set, "scal=") + 5 : "0", "%d", &scale);
+        bool ok = px_song_parse(&t, PX_SONG_TEXT[i], key, scale, err, sizeof err);
+        int notes = 0, used = 0;
+        for (int p = 0; p < PX_PATTERNS; p++) { int n = 0; for (int k = 0; k < PX_STEPS; k++) n += (t.pat[p].lead[k] != 0) + (t.pat[p].bass[k] != 0) + (t.pat[p].chords[k] != 0) + (t.pat[p].drums[k] != 0); notes += n; used += n > 0; }
+        check(ok, "%s reads (%d bars in the song, %d patterns, %d cells)%s%s", PX_PRESETS[i].name, t.order_n, used, notes, err[0] ? ": " : "", err);
+        load_song(i);
+        if (i == PX_NSONGS - 1) continue;                           // EMPTY has nothing to play
+        float t0 = sim_t;
+        px_play_song(0);
+        float bar = 4.0f * 60.0f / pv[tag("tmpo")];
+        sim_run(bar * 8.0f + 0.1f);
+        px_stop(); sim_run(0.8f);
+        float r = m_rms(t0 + 0.1f, t0 + bar * 8.0f), pk = m_peak(t0, sim_t);
+        check(r > 0.03f && pk < 0.95f, "%s plays (rms %.3f, peak %.3f)", PX_PRESETS[i].name, (double)r, (double)pk);
+        char sfx[24]; snprintf(sfx, sizeof sfx, "-song-%d", i + 1);
+        sim_wav(sfx, t0, sim_t);
+    }
+    load_song(0);
+}
+
 void inst_tests(void)
 {
     plays();
     consoles();
+    songs();
     editor();
     test_library();
     check(m_bad() == 0, "no NaN or inf anywhere");

@@ -252,7 +252,11 @@ bool edit_hold(void)
     open_ = !open_;
     knob_grab(open_);
     if (open_) {
-        if (!homed) { homed = true; int n = scale_n(); cur_row[PART_LEAD] = 2 * n; cur_row[PART_BASS] = n; win_lo[PART_LEAD] = 2 * n - 2; win_lo[PART_BASS] = n - 2; }
+        if (!homed) {
+            homed = true;
+            int n = scale_n(), l = px_home_octave(PART_LEAD, px_key()) * n, b = px_home_octave(PART_BASS, px_key()) * n;
+            cur_row[PART_LEAD] = l; cur_row[PART_BASS] = b; win_lo[PART_LEAD] = l - 2; win_lo[PART_BASS] = b - 2;
+        }
         if (px_pos.running && px_pos.mode == PM_SONG) slot = px_pos.slot;
         if (slot >= px_song.order_n) slot = 0;
         idle_ms = 0; play_asked = -1; rec_was = false; rec_ready = false;   // (a REC already down is not a tap)
