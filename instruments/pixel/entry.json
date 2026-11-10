@@ -1,0 +1,19 @@
+{
+  "name": "PIXEL",
+  "summary": "A chiptune machine. Write drums, bass, chords and a lead on a grid, chain the bars into a song, and turn the knob to hear it on eight old sound chips.",
+  "author": "willbearfruits",
+  "licence": "GPL-3.0",
+  "version": "0.1.0",
+  "chip": "esp32s3",
+  "uses": [
+    "tilt",
+    "joystick",
+    "wifi"
+  ],
+  "status": "simulator",
+  "status_note": "Checked in its simulator only. It has not run on a board yet.",
+  "listed": false,
+  "image": "images/pixel-play.gif",
+  "more": [],
+  "added": "2026-11-10"
+}
