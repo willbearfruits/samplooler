@@ -3,7 +3,7 @@ USB serials (two letters, then the last four bytes of the chip's MAC). A TWOFOLD
 its name is not on the list and nothing here writes to a port it did not find by name."""
 import glob, os, re
 
-FAMILY = ('KNOCK', 'HUFF', 'HOWL', 'SNIFF', 'CHIRP', 'ETHER', 'JAM', 'BAND', 'SING', 'WRECK', 'WRECK2', 'MANTRA', 'AIR', 'SIFT', 'NYLON', 'DWELL', 'AIRDWELLER', 'DEMO', 'Samplooler Family', 'Samplooler')
+FAMILY = ('KNOCK', 'HUFF', 'HOWL', 'SNIFF', 'CHIRP', 'ETHER', 'JAM', 'BAND', 'SING', 'WRECK', 'WRECK2', 'MANTRA', 'PIXEL', 'AIR', 'SIFT', 'NYLON', 'DWELL', 'AIRDWELLER', 'DEMO', 'Samplooler Family', 'Samplooler')
 NEVER = ('TWOFOLD',)
 
 def boards():
