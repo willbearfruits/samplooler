@@ -528,7 +528,8 @@ static void draw_chords(const uint8_t *c)
         oled_rect(x, y + 7, 1, 5, true);
         last_x = oled_ftext_ex(F_SMALL, x + 2, yy, b, 1) + 2;
     }
-    if (blink < 9) oled_frame(GX + step * CW - 1, y - 2, CW + 1, 22);
+    // the cursor: a box on the line under the names (not over them), and a mark above
+    if (blink < 9) { int x = GX + step * CW; oled_frame(x - 1, y + 6, CW + 1, 7); oled_rect(x + 1, y - 4, 3, 1, true); oled_pixel(x + 2, y - 3, true); }
 }
 
 static void draw_drums(const uint8_t *c)
