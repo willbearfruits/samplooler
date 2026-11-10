@@ -30,7 +30,7 @@ static void plays(void)
     check(px_pos.running && r > 0.02f && p < 0.99f, "REC tapped: the song plays (rms %.3f, peak %.3f)", (double)r, (double)p);
     sim_shot("play");
     sim_run(2.6f);
-    sim_tilt(0, 40); sim_run(1.2f); sim_shot("glitch"); sim_tilt(0, 0); sim_run(1.0f);
+    sim_tilt(0, -40); sim_run(1.2f); sim_shot("glitch"); sim_tilt(0, 0); sim_run(1.0f);
     SI.jx = -1; sim_run(0.05f); SI.jx = 0; sim_run(1.5f); sim_shot("drums-muted");
     SI.jx = -1; sim_run(0.05f); SI.jx = 0; sim_run(0.5f);
     sim_gif_end();

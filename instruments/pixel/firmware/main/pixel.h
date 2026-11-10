@@ -173,6 +173,8 @@ typedef struct {
     void (*tick)(const px_frame_t *f);    // audio task, every driver tick, before that tick's audio
     void (*render)(float *out, int n);    // audio task: write n samples (mono, n <= AUDIO_BLOCK). IRAM_ATTR
     int  (*view)(px_vview_t *v, int max); // UI task: what each voice does now (plain reads of the state); returns voices
+    const char *const *names;  // optional: sixteen short names (capitals, at most 8 characters) for the menu: the four
+                               // LEAD sounds, the four BASS sounds, the four CHORDS sounds, the four drum KITs. NULL: 1..4
 } px_console_t;
 
 enum { CON_BEEPER, CON_ATARI, CON_AY, CON_NES, CON_GAMEBOY, CON_C64, CON_AMIGA, CON_MEGA, CON_N };

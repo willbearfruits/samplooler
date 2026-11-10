@@ -5,7 +5,8 @@
 //                 menu; hold: the editor (inst_edit.c), hold again to leave it
 //   REC           tap: play the song from the start, tap again to stop (in the editor: the bar under the cursor)
 //   the stick     a push mutes or brings back a part: up LEAD, right CHORDS, down BASS, left DRUMS
-//   the tilt      forward: the cartridge tilts and the tune glitches; rolled left or right: everything bends
+//   the tilt      the far edge tipped down: the cartridge tilts and the tune glitches; rolled left or right:
+//                 everything bends
 //
 // The clock runs in the audio task from the flock's beat (link.h): a bar is 16 steps, a step a whole number of driver
 // ticks (pixel.h). Blocks are split at tick boundaries, so the player and the console run sample exact.
@@ -45,7 +46,9 @@ static const char *const groups[G_N] = { "TUNE", "CONSOLE", "LEAD", "CHORDS", "B
 static const char *con_l[CON_N], *scale_l[PX_SC_N];
 static const char *const frame_l[] = { "60 HZ", "50 HZ" };
 static const char *const key_l[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-static const char *const snd_l[] = { "1", "2", "3", "4" };
+static const char *const num_l[] = { "1", "2", "3", "4" };
+static const char *lsnd_l[4] = { "1", "2", "3", "4" }, *bsnd_l[4] = { "1", "2", "3", "4" },   // the console's own names
+                  *csnd_l[4] = { "1", "2", "3", "4" }, *dkit_l[4] = { "1", "2", "3", "4" };   // for its sounds (sound_labels)
 static const char *const arp_l[] = { "OFF", "SLOW", "MID", "FAST" };
 static const char *const shape_l[] = { "UP", "DOWN", "UP DOWN", "OCTAVES", "RANDOM" };
 static const char *const rhy_l[] = { "HELD", "EIGHTHS", "OFFBEAT", "GALLOP", "FOURS" };
@@ -63,30 +66,30 @@ static const param_t params[P_N] = {
     [P_SWING]   = { "SWING", "swng", G_TUNE, PK_NUM, PF_INT, 0, 50, 2, 0, "%", NULL, "EVERY OTHER STEP IS LATE" },
     [P_KEY]     = { "KEY", "key ", G_TUNE, PK_ENUM, 0, 0, 11, 1, 9, "", key_l, "MOVES THE WHOLE SONG UP" },
     [P_SCALE]   = { "SCALE", "scal", G_TUNE, PK_ENUM, 0, 0, PX_SC_N - 1, 1, PX_SC_MINOR, "", scale_l, "THE NOTES OF THE ROWS" },
-    [P_LSND]    = { "SOUND", "lsnd", G_LEAD, PK_ENUM, 0, 0, 3, 1, 0, "", snd_l, "THE CONSOLE'S LEADS, 1 TO 4" },
+    [P_LSND]    = { "SOUND", "lsnd", G_LEAD, PK_ENUM, 0, 0, 3, 1, 0, "", lsnd_l, "THE CONSOLE'S LEADS, 1 TO 4" },
     [P_LLVL]    = { "LEVEL", "llvl", G_LEAD, PK_NUM, PF_INT, 0, 100, 5, 100, "%", NULL, "HOW LOUD THE LEAD IS" },
     [P_LOCT]    = { "OCTAVE", "loct", G_LEAD, PK_NUM, PF_INT | PF_SIGNED, -2, 2, 1, 0, "", NULL, "AN OCTAVE UP OR DOWN" },
     [P_LLEN]    = { "LENGTH", "llen", G_LEAD, PK_NUM, PF_INT, 10, 100, 5, 85, "%", NULL, "SHORT NOTES OR JOINED ONES" },
     [P_LVIB]    = { "VIBRATO", "lvib", G_LEAD, PK_NUM, PF_INT, 0, 100, 5, 40, "%", NULL, "LONG NOTES WOBBLE" },
     [P_LECH]    = { "ECHO", "lech", G_LEAD, PK_ENUM, 0, 0, 3, 1, 2, "", echo_l, "THE LEAD AGAIN, LATER" },
     [P_LSLD]    = { "SLIDE", "lsld", G_LEAD, PK_NUM, PF_INT, 0, 100, 5, 60, "%", NULL, "HOW LONG A GLIDE TAKES" },
-    [P_CSND]    = { "SOUND", "csnd", G_CHORDS, PK_ENUM, 0, 0, 3, 1, 0, "", snd_l, "THE CONSOLE'S CHORD SOUNDS" },
+    [P_CSND]    = { "SOUND", "csnd", G_CHORDS, PK_ENUM, 0, 0, 3, 1, 0, "", csnd_l, "THE CONSOLE'S CHORD SOUNDS" },
     [P_CLVL]    = { "LEVEL", "clvl", G_CHORDS, PK_NUM, PF_INT, 0, 100, 5, 80, "%", NULL, "HOW LOUD THE CHORDS ARE" },
     [P_COCT]    = { "OCTAVE", "coct", G_CHORDS, PK_NUM, PF_INT | PF_SIGNED, -2, 2, 1, 0, "", NULL, "AN OCTAVE UP OR DOWN" },
     [P_CARP]    = { "ARP", "carp", G_CHORDS, PK_ENUM, 0, 0, 3, 1, ARP_FAST, "", arp_l, "HOW FAST A CHORD IS BROKEN" },
     [P_CSHP]    = { "SHAPE", "cshp", G_CHORDS, PK_ENUM, 0, 0, SHAPE_N - 1, 1, SHAPE_UP, "", shape_l, "THE ORDER OF ITS NOTES" },
     [P_CRHY]    = { "RHYTHM", "crhy", G_CHORDS, PK_ENUM, 0, 0, RHY_N - 1, 1, RHY_HELD, "", rhy_l, "HELD, OR STABS IN A PATTERN" },
-    [P_BSND]    = { "SOUND", "bsnd", G_BASS, PK_ENUM, 0, 0, 3, 1, 0, "", snd_l, "THE CONSOLE'S BASSES, 1 TO 4" },
+    [P_BSND]    = { "SOUND", "bsnd", G_BASS, PK_ENUM, 0, 0, 3, 1, 0, "", bsnd_l, "THE CONSOLE'S BASSES, 1 TO 4" },
     [P_BLVL]    = { "LEVEL", "blvl", G_BASS, PK_NUM, PF_INT, 0, 100, 5, 100, "%", NULL, "HOW LOUD THE BASS IS" },
     [P_BOCT]    = { "OCTAVE", "boct", G_BASS, PK_NUM, PF_INT | PF_SIGNED, -2, 2, 1, 0, "", NULL, "AN OCTAVE UP OR DOWN" },
     [P_BLEN]    = { "LENGTH", "blen", G_BASS, PK_NUM, PF_INT, 10, 100, 5, 80, "%", NULL, "SHORT NOTES OR JOINED ONES" },
-    [P_DKIT]    = { "KIT", "dkit", G_DRUMS, PK_ENUM, 0, 0, 3, 1, 0, "", snd_l, "THE CONSOLE'S DRUM KITS" },
+    [P_DKIT]    = { "KIT", "dkit", G_DRUMS, PK_ENUM, 0, 0, 3, 1, 0, "", dkit_l, "THE CONSOLE'S DRUM KITS" },
     [P_DLVL]    = { "LEVEL", "dlvl", G_DRUMS, PK_NUM, PF_INT, 0, 100, 5, 100, "%", NULL, "HOW LOUD THE DRUMS ARE" },
     [P_GLITCH]  = { "GLITCH", "glit", G_CONSOLE, PK_NUM, PF_INT, 0, 100, 5, 0, "%", NULL, "A BADLY SEATED CARTRIDGE" },
     [P_ECOPY]   = { "COPY", "ecpy", G_BAR, ACT, 0, 0, 0, 0, "", NULL, "REMEMBER THIS BAR" },
     [P_EPASTE]  = { "PASTE", "epst", G_BAR, ACT, 0, 0, 0, 0, "", NULL, "PUT THE COPIED BAR HERE" },
     [P_ECLEAR]  = { "CLEAR", "eclr", G_BAR, ACT, 0, 0, 0, 0, "", NULL, "EMPTY THIS BAR" },
-    [P_TILT]    = { "TILT", "htlt", G_HANDS, PK_ENUM, SYS, 0, 1, 1, 1, "", off_on, "FORWARD GLITCH, ROLL BEND" },
+    [P_TILT]    = { "TILT", "htlt", G_HANDS, PK_ENUM, SYS, 0, 1, 1, 1, "", off_on, "TIP: GLITCH. ROLL: BEND" },
     [P_BEND]    = { "BEND", "hbnd", G_HANDS, PK_NUM, PF_INT | SYS, 1, 12, 1, 2, "st", NULL, "HOW FAR A ROLL BENDS" },
     [P_STICK]   = { "STICK", "hstk", G_HANDS, PK_ENUM, SYS, 0, 1, 1, 1, "", stick_l, "A PUSH MUTES A PART" },
     [P_LINK]    = { "LINK", "nlnk", G_LINK, PK_ENUM, SYS | PF_NOCC, 0, 1, 1, 1, "", off_on, "SYNC WITH BOARDS NEARBY" },
@@ -443,8 +446,9 @@ static float lean_amount(float deg, float dead, float full)
 static void hands(const ctl_t *c)
 {
     bool tilt = pv[P_TILT] >= 1.0f && c->has_imu && !edit_active();
-    float gl = tilt && c->lean_y > 0.0f ? lean_amount(c->lean_y, 14.0f, 50.0f) : 0.0f;
-    float bd = tilt ? (c->lean_x < 0.0f ? -1.0f : 1.0f) * lean_amount(c->lean_x, 12.0f, 50.0f) * pv[P_BEND] : 0.0f;
+    // the far edge tipped down glitches: the way nobody holds a screen to read it, so it never happens by accident
+    float gl = tilt && c->lean_y < 0.0f ? lean_amount(c->lean_y, 14.0f, 50.0f) : 0.0f;
+    float bd = tilt ? (c->lean_x < 0.0f ? -1.0f : 1.0f) * lean_amount(c->lean_x, 15.0f, 50.0f) * pv[P_BEND] : 0.0f;
     hand_glitch += 0.25f * (gl - hand_glitch); if (hand_glitch < 0.003f && gl == 0.0f) hand_glitch = 0.0f;
     hand_bend += 0.35f * (bd - hand_bend); if (fabsf(hand_bend) < 0.003f && bd == 0.0f) hand_bend = 0.0f;
     if (gl > 0.3f || fabsf(bd) > 0.5f) coach_done(LEARN_TILT);
@@ -487,6 +491,7 @@ static void rec_logic(const ctl_t *c)
     rec_was = c->rec;
 }
 
+static void sound_labels(int con);
 static const uint8_t con_rgb[CON_N][3] = { { 255, 255, 255 }, { 255, 120, 0 }, { 0, 200, 255 }, { 255, 30, 30 },
                                            { 120, 255, 40 }, { 150, 110, 255 }, { 255, 60, 200 }, { 40, 90, 255 } };
 static void tick(const ctl_t *c)
@@ -500,6 +505,8 @@ static void tick(const ctl_t *c)
     link_tick(c->dt);
     link_follow();
     px_pos.bpm = song.bpm;
+    static int label_con = -1;
+    if (px_pos.console != label_con && px_pos.console < CON_N) { label_con = px_pos.console; sound_labels(label_con); }
     hands(c);
     rec_logic(c);
     aud_tick();
@@ -516,6 +523,15 @@ static void tick(const ctl_t *c)
     const uint8_t *k = con_rgb[px_pos.console < CON_N ? px_pos.console : 0];
     float lv = px_pos.running ? clampf(out_env_v * 2.0f, 0.0f, 1.0f) * 0.5f + (beat_flash ? 0.5f : 0.1f) : 0.04f;
     led_rgb((uint8_t)((float)k[0] * lv), (uint8_t)((float)k[1] * lv), (uint8_t)((float)k[2] * lv));
+}
+// the menu shows the console's own names for its sounds and kits
+static void sound_labels(int con)
+{
+    const char *const *n = PX_CONSOLES[con]->names;
+    for (int i = 0; i < 4; i++) {
+        lsnd_l[i] = n && n[i] ? n[i] : num_l[i]; bsnd_l[i] = n && n[4 + i] ? n[4 + i] : num_l[i];
+        csnd_l[i] = n && n[8 + i] ? n[8 + i] : num_l[i]; dkit_l[i] = n && n[12 + i] ? n[12 + i] : num_l[i];
+    }
 }
 int  px_beat_flash(void) { return beat_flash; }
 float px_out_env(void) { return out_env_v; }
@@ -588,7 +604,7 @@ static const hint_t hints[] = {
     { "TURN THE KNOB: EIGHT CHIPS PLAY IT", LEARN_TURN },
     { "HOLD THE KNOB TO WRITE NOTES", LEARN_INST + 1 },
     { "PUSH THE STICK TO MUTE A PART", LEARN_JOY },
-    { "TIP IT FORWARD: THE CARTRIDGE GLITCHES", LEARN_TILT },
+    { "TIP IT AWAY FROM YOU: IT GLITCHES", LEARN_TILT },
     { "PRESS THE KNOB: THE MENU, THE SONGS", LEARN_MENU },
 };
 

@@ -117,11 +117,11 @@ static int view(px_vview_t *v, int max)
     return 4;
 }
 
-const px_console_t con_ref = { "REF", "NONE", "2026", 4, init, reset, tick, render, view };
+const px_console_t con_ref = { "REF", "NONE", "2026", 4, init, reset, tick, render, view, NULL };
 
 // The consoles in the knob's order. A console that is not built yet is the reference under its own name: these are
 // weak, so a console's own file (inst_con_nes.c defining con_nes) takes over just by being there.
-#define PX_REF_CONSOLE(sym, nm, chp, yr) __attribute__((weak)) const px_console_t sym = { nm, chp, yr, 4, init, reset, tick, render, view }
+#define PX_REF_CONSOLE(sym, nm, chp, yr) __attribute__((weak)) const px_console_t sym = { nm, chp, yr, 4, init, reset, tick, render, view, NULL }
 PX_REF_CONSOLE(con_beeper, "BEEPER", "1 BIT", "1982");
 PX_REF_CONSOLE(con_atari, "ATARI", "TIA", "1977");
 PX_REF_CONSOLE(con_ay, "AY", "AY-3-8910", "1978");

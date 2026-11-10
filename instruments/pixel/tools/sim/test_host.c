@@ -89,8 +89,8 @@ static void hands_checks(void)
     program(0);
 
     // the tilt: forward glitches, a roll bends; not while the editor is open; not with TILT OFF
-    sim_tilt(0, 50); sim_run(0.6f);
-    check(px_glitch_now() > 0.9f, "tipped forward 50 degrees: the glitch is full (%.2f)", (double)px_glitch_now());
+    sim_tilt(0, -50); sim_run(0.6f);
+    check(px_glitch_now() > 0.9f, "the far edge tipped down 50 degrees: the glitch is full (%.2f)", (double)px_glitch_now());
     sim_tilt(0, 0); sim_run(0.6f);
     check(px_glitch_now() == 0.0f, "flat again: none");
     set("glit", 40); check(fabsf(px_glitch_now() - 0.4f) < 0.01f, "CONSOLE > GLITCH 40 does the same without a tilt"); set("glit", 0);
@@ -225,7 +225,7 @@ static void soak(void)
             if (k == 0) { program((int)((r >> 16) % (PX_NSONGS - 1))); set("cons", (float)c); }   // (a song brings its own console)
             else if (k == 1) { px_stop(); sim_run(0.3f); px_play_song((int)((r >> 16) % 8)); }
             else if (k == 2) push((float)((int)((r >> 16) % 3) - 1), (float)((int)((r >> 18) % 3) - 1));
-            else if (k == 3) sim_tilt((float)((int)((r >> 16) % 100) - 50), (float)((int)((r >> 23) % 60)));
+            else if (k == 3) sim_tilt((float)((int)((r >> 16) % 100) - 50), -(float)((int)((r >> 23) % 60)));
             else if (k == 4) sim_tilt(0, 0);
             else if (k == 5) { static const char *const T[] = { "lsnd", "bsnd", "csnd", "dkit", "carp", "cshp", "crhy", "lech" }; int p = tag(T[(r >> 16) % 8]); set(T[(r >> 16) % 8], (float)((r >> 20) % (uint32_t)(param(p)->max + 1))); }
             else if (k == 6) set("tmpo", (float)(60 + (r >> 16) % 181));
