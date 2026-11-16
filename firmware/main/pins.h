@@ -1,4 +1,5 @@
-// Pin map, identical to the ESP32-S3 SuperMini kit (~/Projects/hardware/kit/docs/pinmap.md).
+// Pin map: the ESP32-S3 SuperMini on the stack boards, rev C and rev E (the Vessel). One firmware runs on both.
+// I2C also carries rev E's VL53L1X at 0x29 (tof.c) and the GY-87's other chips, which nothing reads.
 #pragma once
 
 #define PIN_BOOT      0    // BOOT button, active low
@@ -15,9 +16,11 @@
 #define HAS_CONTROLS  1    // encoder: tap = menu / dive / back, hold = leave the menu, turn = choose or adjust
 #define HAS_JOY       0    // 1 on a kit with the KY-023 joystick: Y sets the speed when tilt is off, X the pitch
 #define PIN_REC       3    // record button to GND (the Mini board's REC; the joystick's old click pin)
-#define PIN_JOY_X     2    // ADC1 (ADC2 dies with WiFi)   (HAS_JOY only)
+#define PIN_JOY_X     2    // ADC1 (ADC2 dies with WiFi)   (rev C: the joystick; joy.on in the tuning table)
 #define PIN_JOY_Y     1
 #define PIN_JOY_SW    3    // active low
+#define PIN_KNOB_A    1    // rev E: the left knob, where rev C has the joystick (its push is REC, GPIO 3)
+#define PIN_KNOB_B    2    // input.c tells the two boards apart at power-on (knob.on in the tuning table)
 #define PIN_ENC_A     4
 #define PIN_ENC_B     5
 #define PIN_ENC_SW    6    // active low: menu

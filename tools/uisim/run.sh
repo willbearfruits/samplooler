@@ -6,6 +6,7 @@ set -e
 cd "$(dirname "$0")"
 P=../../firmware/main
 mkdir -p out
+rm -f out/*.pbm
 gcc -std=gnu17 -O1 -I. -I$P -o sim sim.c stubs.c $P/ui.c $P/oled.c $P/font_data.c -lm
 ./sim
 python3 render.py out/sheet.png out

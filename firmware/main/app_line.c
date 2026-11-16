@@ -32,7 +32,10 @@ static const struct { const char *name, *group, *help; } INFO[] = {
     { "Pitch", "PLAY", "Semitones, in GRAIN only." },
     { "Grain", "PLAY", "The grain's length, in GRAIN only. Short is smooth, long is choppy." },
     { "Snap", "PLAY", "Speeds rounded to octaves and fifths." },
-    { "Rec button", "PLAY", "Off: the stick's button is ignored. BOOT and MIDI note 60 still record." },
+    { "Knob", "PLAY", "What the left knob turns: JOG moves the tape by hand." },
+    { "Hand", "PLAY", "What a hand over the sensor does. FILTER: lower is darker." },
+    { "Loop start", "PLAY", "SOUND: a take starts at the first sound. PRESS: at the press." },
+    { "Rec button", "PLAY", "Off: REC's switch is ignored. BOOT and MIDI note 60 still record." },
     { "Tilt", "TILT", "Off: it plays forward at 1x, whatever the angle." },
     { "Speed max", "TILT", "The speed at 45 degrees." },
     { "Speed min", "TILT", "The crawl when flat. 0 stops the tape." },
@@ -51,6 +54,7 @@ static const struct { const char *name, *group, *help; } INFO[] = {
     { "Group", "LINK", "Boards in the same group play together." },
     { "Range", "LINK", "The radio's power. Lower is kinder to the supply." },
     { "Who is there", "LINK", "Names the boards heard right now, on the board's screen." },
+    { "Board check", "SETTINGS", "Shows every part and control on the board's screen. Press to leave." },
 };
 
 static int info_of(int p)

@@ -1,16 +1,21 @@
-// Samplooler: hold BOOT to record the mic, let go and it loops.
+// Samplooler, the Vessel's first program: hold REC to record the mic, let go and it loops.
 // Tilt nose down to play forward faster, nose up to play backwards.
 // Roll left for a delay whose tail rings out, roll right to stutter the loop.
-// Builds for the ESP32-S3 SuperMini (float, PSRAM, 0.96" OLED, record button, encoder).
+// One image for the ESP32-S3 SuperMini on the rev C stack (a joystick whose click is REC) and on rev E (two knobs,
+// the left one's push is REC, and a hand sensor): input.c tells them apart at power-on.
 //
 // Controls:
-//   record button   hold to record
-//   encoder tap     play: open the menu (after 0.3 s, so a second tap can still come); menu: dive into the
-//                   setting (edit), or run Save/Load; editing: back to the list
-//   encoder 2 taps  play: the knob sets the Volume, until it rests 3 s or is tapped (as in every instrument)
-//   encoder turn    play: adjust the last setting (a toast shows it); menu: choose; editing: adjust
-//   encoder hold    leave the menu (0.5 s)
-// With HAS_JOY (a kit with the joystick): Y sets the speed when tilt is off, X the pitch in GRAIN.
+//   REC             hold to record (rev E: the left knob's push; rev C: the joystick's click; BOOT always)
+//   left knob turn  rev E, by the Knob setting: JOG moves the tape by hand, SPEED and PITCH step in semitones,
+//                   FILTER sweeps it
+//   a hand          rev E, over the sensor, by the Hand setting: FILTER, PITCH, BRAKE, VOLUME or ECHO
+//   knob tap        play: open the menu (after 0.3 s, so a second tap can still come); menu: dive into the
+//                   setting (edit), or run an action; editing: back to the list
+//   knob 2 taps     play: the knob sets the Volume, until it rests 3 s or is tapped (as in every instrument)
+//   knob turn       play: adjust the last setting (a toast shows it); menu: choose; editing: adjust
+//   knob hold       leave the menu (0.5 s); while playing: freeze the tilt
+// (knob: the menu knob, the right one on rev E.) With joy.on (rev C): Y sets the speed when tilt is off, X the
+// pitch in GRAIN.
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -39,6 +44,9 @@
 #include "motion.h"
 #include "gesture.h"
 #include "rig.h"
+#include "tof.h"
+#include "esp_app_desc.h"
+#include "freertos/queue.h"
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #if HAS_CONTROLS
@@ -55,22 +63,48 @@ static void apply_settings(void);
 #define SETTINGS_DEFAULTS { .mic_db = 12, .mode = REC_MODE_TAPE, .pitch_st = 0, .tilt = true, \
                             .spd_max = 2.0f, .spd_min = 0.05f, .snap = false, .grain_ms = 50, .vol_pct = 100, \
                             .input = AUDIO_IN_MIC, .slot = 0, .speaker = true, .voice = 0, .key = 0, .scale = 0, .monitor = false, \
-                            .rec_button = true, .link = true, .group = 1, .range = 1 }
+                            .rec_button = true, .link = true, .group = 1, .range = 1, \
+                            .knob = UI_KNOB_JOG, .hand = UI_HAND_FILTER, .start_sound = true }
 static settings_t S = SETTINGS_DEFAULTS;
 static const settings_t S_DEFAULTS = SETTINGS_DEFAULTS;
 
 // The settings before P_SAVE are on MIDI (CC 20 + index); the rest are the device's own. A new one also gets a
 // line in app_line.c's INFO: its group in the desktop app and a line of help (without one it lands under SETTINGS).
 enum { P_MIC, P_MODE, P_PITCH, P_TILT, P_SPDMAX, P_SPDMIN, P_SNAP, P_GRAIN, P_VOL, P_INPUT, P_VOICE, P_KEY, P_SCALE, P_MONITOR,
-       P_SLOT, P_SAVE, P_LOAD, P_SPEAKER, P_RECBTN, P_LINK, P_GROUP, P_RANGE, P_PEERS, P_N };
+       P_SLOT, P_SAVE, P_LOAD, P_SPEAKER, P_RECBTN, P_LINK, P_GROUP, P_RANGE, P_PEERS, P_KNOB, P_HAND, P_START, P_CHECK, P_N };
 static const char *param_name[P_N] = { "Mic gain", "Mode", "Pitch", "Tilt", "Speed max", "Speed min", "Snap", "Grain", "Volume", "Input",
                                        "Voice", "Key", "Scale", "Monitor", "Slot", "Save", "Load", "Speaker", "Rec button",
-                                       "Link", "Group", "Range", "Who is there" };
-static bool is_action(int p) { return p == P_SAVE || p == P_LOAD || p == P_PEERS; }
+                                       "Link", "Group", "Range", "Who is there", "Knob", "Hand", "Loop start", "Board check" };
+static bool is_action(int p) { return p == P_SAVE || p == P_LOAD || p == P_PEERS || p == P_CHECK; }
 static const char *const range_names[3] = { "NEAR", "ROOM", "FAR" };
+static const char *const knob_names[UI_KNOB_N] = { "JOG", "SPEED", "PITCH", "FILTER" };
+static const char *const hand_names[UI_HAND_N] = { "OFF", "FILTER", "PITCH", "BRAKE", "VOLUME", "ECHO" };
+
+// The menu on the screen: the settings in the order a player looks for them, by group (the header names the group).
+// The P_ numbers stay as they are: CC 20 + P_ is the MIDI map, and the app's line names settings by them.
+static const struct { uint8_t p; const char *group; } MENU[] = {
+    { P_MODE, "PLAY" }, { P_PITCH, "PLAY" }, { P_GRAIN, "PLAY" }, { P_SNAP, "PLAY" }, { P_KNOB, "PLAY" }, { P_HAND, "PLAY" }, { P_START, "PLAY" },
+    { P_TILT, "TILT" }, { P_SPDMAX, "TILT" }, { P_SPDMIN, "TILT" },
+    { P_VOL, "SOUND" }, { P_MIC, "SOUND" }, { P_INPUT, "SOUND" }, { P_MONITOR, "SOUND" }, { P_SPEAKER, "SOUND" },
+    { P_VOICE, "VOICE" }, { P_KEY, "VOICE" }, { P_SCALE, "VOICE" },
+    { P_SLOT, "SLOTS" }, { P_SAVE, "SLOTS" }, { P_LOAD, "SLOTS" },
+    { P_LINK, "LINK" }, { P_GROUP, "LINK" }, { P_RANGE, "LINK" }, { P_PEERS, "LINK" },
+    { P_RECBTN, "SYSTEM" }, { P_CHECK, "SYSTEM" },
+};
+#define MENU_N ((int)(sizeof MENU / sizeof MENU[0]))
+_Static_assert(sizeof MENU / sizeof MENU[0] == P_N, "every setting has a row in the menu");
+static int menu_row_of(int p) { for (int i = 0; i < MENU_N; i++) if (MENU[i].p == p) return i; return 0; }
+
+// The left knob's own values (not saved: they are where the hand left them) and the board check.
+static int   knob_st;                 // Knob SPEED: semitones on the tape, -24..24
+static int   knob_flt;                // Knob FILTER: -24 a closed low-pass .. 0 open .. 24 a high-pass
+static bool  check_on;                // the board check is on the screen
+static bool  has_tof;
+static void  apply_take(void);
 static void slot_save(void);
 static void slot_load(void);
 static void who_is_there(void);
+static void check_open(void);
 static void midi_send_setting(int p);
 static void setting_changed(void) { settings_changed(); }
 static void link_apply(void) { flock_enable(S.link, S.group, S.range); }
@@ -102,6 +136,10 @@ static void param_adjust(int p, int d)
     case P_GROUP:  S.group += d; if (S.group < 1) S.group = 1; if (S.group > 8) S.group = 8; link_apply(); break;
     case P_RANGE:  S.range += d; if (S.range < 0) S.range = 0; if (S.range > 2) S.range = 2; link_apply(); break;
     case P_PEERS:  if (d > 0) who_is_there(); return;
+    case P_KNOB:   S.knob = ((S.knob + d) % UI_KNOB_N + UI_KNOB_N) % UI_KNOB_N; knob_st = 0; knob_flt = 0; break;
+    case P_HAND:   S.hand = ((S.hand + d) % UI_HAND_N + UI_HAND_N) % UI_HAND_N; break;
+    case P_START:  S.start_sound = d < 0; apply_take(); break;
+    case P_CHECK:  if (d > 0) check_open(); return;
     }
     setting_changed();
     midi_send_setting(p);
@@ -133,7 +171,11 @@ static void param_text(int p, char *b, size_t n)
     case P_LINK:   snprintf(b, n, "%s", S.link ? "ON" : "OFF"); break;
     case P_GROUP:  snprintf(b, n, "%d", S.group); break;
     case P_RANGE:  snprintf(b, n, "%s", range_names[S.range < 0 ? 0 : S.range > 2 ? 2 : S.range]); break;
-    case P_PEERS:  { int np = flock_peers(); if (!S.link) snprintf(b, n, "link off"); else if (np) snprintf(b, n, "%d board%s", np, np == 1 ? "" : "s"); else snprintf(b, n, "alone"); } break;
+    case P_PEERS:  { int np = flock_peers(); if (!S.link) snprintf(b, n, "link off"); else if (np) snprintf(b, n, "%d here", np); else snprintf(b, n, "alone"); } break;
+    case P_KNOB:   snprintf(b, n, "%s", input_has_knob() ? knob_names[S.knob] : "not fitted"); break;
+    case P_HAND:   snprintf(b, n, "%s", has_tof || S.hand == UI_HAND_OFF ? hand_names[S.hand] : "no sensor"); break;
+    case P_START:  snprintf(b, n, "%s", S.start_sound ? "SOUND" : "PRESS"); break;
+    case P_CHECK:  snprintf(b, n, "look"); break;
     }
 }
 
@@ -160,6 +202,8 @@ static void slot_load(void)
     audio_set_mute(true);
 }
 static void who_is_there(void) { flock_who(result_text, sizeof result_text); result_ms = 2500; }
+static int  chk_enc, chk_knob;
+static void check_open(void) { check_on = true; chk_enc = chk_knob = 0; }
 static void job_poll(void)
 {
     if (job == JOB_NONE) return;
@@ -217,6 +261,9 @@ static int setting_to_127(int p)
     case P_LINK:   return S.link ? 127 : 0;
     case P_GROUP:  return (S.group - 1) * 127 / 7;
     case P_RANGE:  return S.range * 127 / 2;
+    case P_KNOB:   return S.knob * 127 / (UI_KNOB_N - 1);
+    case P_HAND:   return S.hand * 127 / (UI_HAND_N - 1);
+    case P_START:  return S.start_sound ? 0 : 127;
     default:       return 0;
     }
 }
@@ -279,6 +326,14 @@ static void clamp_settings(void)
     S.scale    = clampi(S.scale, 0, VOICE_SCALES - 1);
     S.group    = clampi(S.group, 1, 8);
     S.range    = clampi(S.range, 0, 2);
+    S.knob     = clampi(S.knob, 0, UI_KNOB_N - 1);
+    S.hand     = clampi(S.hand, 0, UI_HAND_N - 1);
+}
+// How a take starts and ends: the Loop start setting and the tuning table's rec.* (frames at 32 kHz).
+static void apply_take(void)
+{
+    const int ms = REC_SAMPLE_RATE / 1000;
+    recorder_set_take(S.start_sound, exp2f(TV(TU_RE_START_DB) / 6.0206f), TI(TU_RE_PREROLL) * ms, TI(TU_RE_GUARD) * ms, TI(TU_RE_TAIL) * ms);
 }
 static void apply_settings(void)
 {
@@ -290,6 +345,7 @@ static void apply_settings(void)
     audio_speaker(S.speaker);
     audio_set_monitor(S.monitor);
     vox_select(S.voice, S.key, S.scale);
+    apply_take();
 }
 
 // The tuning table moved: hand its numbers to what keeps a copy (the IMU's registers, the mic's filter, the tape's
@@ -305,6 +361,8 @@ static void apply_tune(void)
     if (imu_ok && memcmp(want, imu_have, sizeof want)) { imu_config(want[0], want[1], want[2], want[3]); memcpy(imu_have, want, sizeof want); }
     audio_set_mic_tune(TV(TU_MI_HPF), TI(TU_MI_SLOT), TV(TU_MI_TRIM), TI(TU_US_OUT));
     recorder_set_slew_ms(TV(TU_TI_SLEW));
+    recorder_set_jog_ms(TV(TU_KN_GLIDE));
+    apply_take();
 #if HAS_CONTROLS
     input_tune();
 #endif
@@ -376,6 +434,34 @@ static int   clip_hold;
 static float param_frac(int p) { return is_action(p) ? -1.0f : setting_to_127(p) / 127.0f; }
 #endif
 
+// The screen has a task of its own. The loop below hands it the latest state every tick (a queue one deep,
+// overwritten); the task draws it and sends what changed to the panel, a page at a time, so the controls never
+// wait for the screen: the bus is shared, and one page is 3 ms where a whole frame was 26.
+#if OLED_ENABLE
+typedef struct { ui_t u; char val[24], note[40], busy[32]; bool has_note, has_busy; } ui_frame_t;
+static QueueHandle_t ui_q;
+static void ui_task(void *arg)
+{
+    (void)arg;
+    static ui_frame_t f;
+    bool have = false;
+    TickType_t last = xTaskGetTickCount();
+    while (1) {
+        int fps = clampi(TI(TU_SC_FPS), 10, 40);
+        TickType_t period = pdMS_TO_TICKS(1000 / fps);
+        if (xTaskGetTickCount() - last > 4 * period) last = xTaskGetTickCount();   // far behind (a slow bus): no burst to catch up
+        vTaskDelayUntil(&last, period);
+        if (xQueueReceive(ui_q, &f, 0) == pdTRUE) have = true;
+        if (!have || !(oled_present() || rig_screen_on())) continue;   // no panel: drawn for the rig's mirror alone
+        f.u.param_val = f.val;
+        f.u.note = f.has_note ? f.note : NULL;
+        f.u.busy_text = f.has_busy ? f.busy : NULL;
+        f.u.now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        ui_draw(&f.u);
+    }
+}
+#endif
+
 void app_main(void)
 {
     diag_init();
@@ -387,7 +473,7 @@ void app_main(void)
     gpio_set_level(PIN_AMP_SD, 0);
 #endif
     vTaskDelay(pdMS_TO_TICKS(300));
-    ESP_LOGI(TAG, "samplooler on %s: hold BOOT to record, tilt to play", CONFIG_IDF_TARGET);
+    ESP_LOGI(TAG, "samplooler on %s: hold REC to record, tilt to play", CONFIG_IDF_TARGET);
 
     gpio_config_t btn = { .pin_bit_mask = 1ULL << PIN_BOOT, .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
     gpio_config(&btn);
@@ -400,9 +486,11 @@ void app_main(void)
     i2c_master_bus_handle_t bus = i2c_start();
     bool has_imu = imu_init(bus);
     imu_ok = has_imu;
+    has_tof = tof_init(bus);                // rev E's hand sensor: optional, and it may come later (tof_poll looks again)
     apply_tune();
     fx_init();
 #if OLED_ENABLE
+    oled_fast(TI(TU_SC_FAST) != 0);
     oled_init(bus);
 #endif
 #if HAS_CONTROLS
@@ -479,7 +567,11 @@ void app_main(void)
     }
     link_apply();
 
-    int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = 0, toast = 0, idle_ms = 0;
+    int  held_n = 0, last_state = -1, last_slot = -1, tick = 0, param = P_VOL, toast = 0, idle_ms = 0, still_ms = 0;
+    int  toast_p = P_VOL;                                  // the setting the toast shows; -1: the left knob's own value
+    const char *toast_name = ""; char toast_val[24] = ""; float toast_frac = 0;
+    hand_out_t hand = { 0 };
+    float flt_pos = 0, flt_was = 99, res_was = -1;
     uint32_t loop_seen = 0xFFFFFFFFu;                     // the loop whose start the flock has been told of
     audio_stats_t last_stats = { 0 };
     bool held = false, menu = false, menu_edit = false;
@@ -498,6 +590,13 @@ void app_main(void)
     // The task watchdog (5 s, CONFIG_ESP_TASK_WDT_TIMEOUT_S) now watches this loop too: a hang in the UI,
     // a slot job or a driver call resets the device instead of leaving it playing with dead controls.
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+#if OLED_ENABLE
+    // The screen's task, one step below this loop, which goes up a step: the controls come first, and both stay
+    // under the USB and radio tasks.
+    ui_q = xQueueCreate(1, sizeof(ui_frame_t));
+    if (ui_q) xTaskCreatePinnedToCore(ui_task, "ui", 6144, NULL, 2, NULL, 0);
+    vTaskPrioritySet(NULL, 3);
+#endif
 
     int64_t loop_us = 0;                                  // the last pass's work, for the rig (I2C, the screen, the streams)
     while (1) {
@@ -554,11 +653,22 @@ void app_main(void)
         down = down || (in.rec && S.rec_button && !rec_stuck) || in.rec_pc;
 #endif
         if (job != JOB_NONE) down = false;                    // a slot job owns the take
-        idle_ms += 10;
+        idle_ms += 10; still_ms += 10;
         if (down) idle_ms = 0;
 #if HAS_CONTROLS
-        if (in.enc || in.tap || in.hold || in.pressed || in.rec) idle_ms = 0;
+        if (in.enc || in.tap || in.hold || in.pressed || in.rec || in.knob_counts) idle_ms = 0;
 #endif
+        {   // the hand: the sensor's readings (or the rig's hand) into a value that glides
+            int mm = 0, st = 255;
+            bool fresh = tof_poll(&mm, &st);
+            has_tof = tof_present();
+#if HAS_CONTROLS
+            if (in.hand_mm >= 0) { fresh = tick % 3 == 0; mm = in.hand_mm; st = 0; has_tof = true; }
+#endif
+            gest_hand(fresh, mm, st, 10, &hand);
+            if (hand.seen) idle_ms = 0;
+        }
+        if (idle_ms == 0 || (has_imu && !motion_get()->rest)) still_ms = 0;
         const int deb = TI(TU_RE_DEB);                        // REC must agree this many ticks in a row
         held_n = down ? (held_n < deb ? held_n + 1 : deb) : (held_n > 0 ? held_n - 1 : 0);
         bool now = held_n >= deb ? true : held_n == 0 ? false : held;
@@ -572,13 +682,18 @@ void app_main(void)
 #if HAS_CONTROLS
         // the encoder: tap opens the menu, dives into a setting, runs an action or climbs back out;
         // hold leaves the menu; turn chooses in the list, adjusts while editing or in play mode
+        if (check_on) {                                       // the board check: a tap or a hold of the menu knob leaves it
+            chk_enc += in.enc; chk_knob += in.knob;
+            if (in.tap || in.hold) { check_on = false; menu = false; menu_edit = false; }
+            in.tap = in.hold = false; in.enc = 0;
+        }
         if (in.tap) {
             if (!menu) {                                      // one tap opens the menu after 0.3 s; two put the knob on Volume
-                if (click_ms > 0) { click_ms = 0; vol_ms = TI(TU_EN_VOL_MS); toast = vol_ms; ESP_LOGI(TAG, "the knob: volume"); gest_emit("enc.double", 0, 0, "volume"); }
+                if (click_ms > 0) { click_ms = 0; vol_ms = TI(TU_EN_VOL_MS); toast = vol_ms; toast_p = P_VOL; ESP_LOGI(TAG, "the knob: volume"); gest_emit("enc.double", 0, 0, "volume"); }
                 else { click_ms = TI(TU_EN_DOUBLE) > 10 ? TI(TU_EN_DOUBLE) : 10; click_menu = vol_ms <= 0; if (vol_ms > 0) { vol_ms = 0; toast = 0; } }
             }
             else if (menu_edit) menu_edit = false;
-            else if (is_action(param)) param_adjust(param, +1);
+            else if (is_action(param)) { param_adjust(param, +1); if (param == P_CHECK) menu = false; }
             else menu_edit = true;
         }
         if (in.hold && menu) { menu = false; menu_edit = false; ESP_LOGI(TAG, "play"); gest_emit("menu.close", 0, 0, ""); }
@@ -589,13 +704,33 @@ void app_main(void)
         }
         if (vol_ms > 0) vol_ms -= 10;
         if (in.enc && !menu && vol_ms > 0) {
-            param_adjust(P_VOL, in.enc); apply_settings(); vol_ms = TI(TU_EN_VOL_MS); toast = vol_ms;
+            param_adjust(P_VOL, in.enc); apply_settings(); vol_ms = TI(TU_EN_VOL_MS); toast = vol_ms; toast_p = P_VOL;
             ESP_LOGI(TAG, "volume %d%%", S.vol_pct);
         } else if (in.enc) {
-            if (menu && !menu_edit) param = ((param + in.enc) % P_N + P_N) % P_N;
+            if (menu && !menu_edit) { int r = ((menu_row_of(param) + in.enc) % MENU_N + MENU_N) % MENU_N; param = MENU[r].p; }
             else if (!menu && is_action(param)) { }           // an action runs from the menu only, never from a turn in play
-            else { param_adjust(param, in.enc); apply_settings(); if (!menu) toast = 1500; }
-            char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%d/%d %s %s", param + 1, P_N, param_name[param], v);
+            else { param_adjust(param, in.enc); apply_settings(); if (!menu) { toast = 1500; toast_p = param; } }
+            char v[24]; param_text(param, v, sizeof v); ESP_LOGI(TAG, "%d/%d %s %s", menu_row_of(param) + 1, MENU_N, param_name[param], v);
+        }
+        // the left knob (rev E), whatever the screen shows: it plays
+        if (in.has_knob && in.knob_counts && S.knob == UI_KNOB_JOG)
+            recorder_jog((float)in.knob_counts * TV(TU_KN_TURN) * (float)REC_SAMPLE_RATE / (float)TI(TU_KN_REV));
+        if (in.has_knob && in.knob) {
+            if (S.knob == UI_KNOB_SPEED) {
+                knob_st = clampi(knob_st + in.knob, -24, 24);
+                toast_name = "Speed"; snprintf(toast_val, sizeof toast_val, "%+d st", knob_st); toast_frac = (float)(knob_st + 24) / 48.0f;
+                if (!menu) { toast = 1500; toast_p = -1; }
+            } else if (S.knob == UI_KNOB_PITCH) {
+                param_adjust(P_PITCH, in.knob);
+                if (!menu) { toast = 1500; toast_p = P_PITCH; }
+            } else if (S.knob == UI_KNOB_FILTER) {
+                knob_flt = clampi(knob_flt + in.knob, -24, 24);
+                toast_name = "Filter";
+                if (knob_flt) snprintf(toast_val, sizeof toast_val, "%s %d", knob_flt < 0 ? "LOW" : "HIGH", knob_flt < 0 ? -knob_flt : knob_flt);
+                else snprintf(toast_val, sizeof toast_val, "OPEN");
+                toast_frac = (float)(knob_flt + 24) / 48.0f;
+                if (!menu) { toast = 1500; toast_p = -1; }
+            }
         }
 #endif
         joy_pitch_st = in_has_joy && !menu ? TV(TU_JO_PITCH) * in_jx : 0.0f;
@@ -613,22 +748,35 @@ void app_main(void)
             // the speed: the tilt; or the joystick's Y; or plain 1x (Tilt off, or no sensor). Roll: delay or stutter.
             gest_tilt(pitch, roll, S.tilt, imu, in_has_joy && !menu && TI(TU_JO_SPEED) == 0, in_jy, S.spd_min, S.spd_max, &to);
             speed_cmd = to.speed;
-            fx_set_delay(to.delay);
-            fx_set_stutter(to.stutter);
             if (S.snap) speed_cmd = gest_snap(speed_cmd);
-            recorder_set_speed(speed_cmd);
+            // the hand, by the Hand setting (nothing without the sensor), and the left knob's own values
+            const float h = has_tof ? hand.v : 0.0f;
+            const int hm = S.hand;
+            float tape_st = S.knob == UI_KNOB_SPEED ? (float)knob_st : 0.0f;       // semitones on the tape's speed
             float st = (float)S.pitch_st + joy_pitch_st;
+            if (hm == UI_HAND_PITCH) { if (S.mode == REC_MODE_GRAIN) st += h * TV(TU_HA_PITCH); else tape_st += h * TV(TU_HA_PITCH); }
+            if (tape_st != 0.0f) speed_cmd *= exp2f(tape_st / 12.0f);
+            if (hm == UI_HAND_BRAKE) speed_cmd *= 1.0f - h;                         // a hand on the reel: down to a stop
+            recorder_set_speed(speed_cmd);
+            fx_set_delay(hm == UI_HAND_ECHO && h > to.delay ? h : to.delay);
+            fx_set_stutter(to.stutter);
+            float vol = S.vol_pct / 100.0f;
+            if (hm == UI_HAND_VOLUME) vol *= (1.0f - h) * (1.0f - h);               // damped, like a hand on a string
+            recorder_set_volume(vol);
+            flt_pos = clampf((float)(S.knob == UI_KNOB_FILTER ? knob_flt : 0) / 24.0f - (hm == UI_HAND_FILTER ? h : 0.0f), -1.0f, 1.0f);
+            if (flt_pos != flt_was || TV(TU_FL_RES) != res_was) { flt_was = flt_pos; res_was = TV(TU_FL_RES); fx_set_filter(flt_pos, res_was); }
             pitch_ratio = exp2f(st / 12.0f);
             recorder_set_pitch(pitch_ratio);
 
             if (usb_connected()) {                            // MIDI out: only what changed
-                static int last[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
-                int v[8] = { 0 };
+                static int last[9] = { -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+                int v[9] = { 0 };
                 v[1] = (int)(64 - pitch * 64.0f / 90.0f); v[2] = (int)(64 + roll * 64.0f / 90.0f);   // CC 1 as before: + nose up
                 v[3] = (int)(64 + speed_cmd * 63.0f / REC_SPEED_LIMIT); v[4] = (int)(recorder_position() * 127.0f);
                 v[5] = in_has_joy ? (int)(64 + in_jx * 63.0f) : 64; v[6] = in_has_joy ? (int)(64 + in_jy * 63.0f) : 64;
                 v[7] = (int)(meter_in * 127.0f);
-                for (int c = 1; c < 8; c++) {
+                v[8] = (int)(h * 127.0f);                     // CC 8: the hand
+                for (int c = 1; c < 9; c++) {
                     if (v[c] < 0) v[c] = 0;
                     if (v[c] > 127) v[c] = 127;
                     int d = v[c] - last[c]; if (d < 0) d = -d;
@@ -646,6 +794,12 @@ void app_main(void)
                    | (recorder_state() == REC_RECORDING ? RF_RECORDING : 0) | (recorder_state() == REC_PLAYING ? RF_PLAYING : 0);
 #if HAS_CONTROLS
             if (in.pressed) fl |= RF_ENC_DOWN;
+            if (in.has_knob) fl |= RF_KNOB;
+            { static int knob_total; knob_total += in.knob; v[RS_knob] = (float)(((knob_total + 8192) & 16383) - 8192); }
+#endif
+            v[RS_jog] = recorder_jog_now(); v[RS_hand] = hand.v; v[RS_hand_mm] = (float)hand.mm; v[RS_filter] = flt_pos;
+#if OLED_ENABLE
+            v[RS_ui_fps] = (float)ui_fps();
 #endif
             v[RS_state] = (float)recorder_state(); v[RS_mode] = (float)S.mode; v[RS_flags] = (float)fl;
             v[RS_qw] = mo->q[0]; v[RS_qx] = mo->q[1]; v[RS_qy] = mo->q[2]; v[RS_qz] = mo->q[3];
@@ -694,25 +848,45 @@ void app_main(void)
         if (toast > 0) toast -= 10;
         if (result_ms > 0) result_ms -= 10;
 #if OLED_ENABLE
-        if (tick % 5 == 0 && (oled_present() || rig_screen_on())) {   // no panel: drawn for the rig's mirror alone
-            int shown = vol_ms > 0 && !menu ? P_VOL : param;   // the toast: Volume while the knob is on it
-            char pv[24]; param_text(shown, pv, sizeof pv);
-            ui_t u = {
+        if (ui_q) {                                           // the state, every tick; the screen's task draws the latest
+            static ui_frame_t f;
+            bool tst = toast > 0 && !menu;
+            int shown = tst ? (vol_ms > 0 ? P_VOL : toast_p) : param;   // the toast: Volume while the knob is on it
+            if (shown >= 0) param_text(shown, f.val, sizeof f.val); else snprintf(f.val, sizeof f.val, "%s", toast_val);
+            const char *nt = result_ms > 0 ? result_text : tick < 700 ? diag_note() : NULL;
+            f.has_note = nt != NULL; if (nt) snprintf(f.note, sizeof f.note, "%s", nt);
+            f.has_busy = job != JOB_NONE; if (f.has_busy) snprintf(f.busy, sizeof f.busy, "%s", job_text);
+            f.u = (ui_t){
                 .state = s, .mode = S.mode, .speed_now = recorder_speed_now(), .speed_cmd = speed_cmd, .spd_max = S.spd_max,
                 .pitch_ratio = pitch_ratio, .tilt_pitch = TI(TU_TI_AXIS) ? roll : -pitch, .tilt_roll = TI(TU_TI_AXIS) ? -pitch : roll,
                 .has_imu = has_imu, .tilt_on = S.tilt, .frozen = frozen, .pos = recorder_position(), .rec_fill = recorder_record_fill(),
                 .loop_s = recorder_loop_seconds(), .max_s = recorder_max_seconds(), .meter_in = meter_in, .meter_out = meter_out,
-                .clip = clip_hold > 0, .cpu = audio_cpu_percent(), .menu = menu, .menu_edit = menu_edit, .param = param, .param_n = P_N,
-                .param_name = param_name[shown], .param_val = pv, .param_frac = param_frac(shown), .toast_ms = toast,
-                .busy_text = job != JOB_NONE ? job_text : NULL, .busy_frac = slots_progress(),
-                .note = result_ms > 0 ? result_text : tick < 700 ? diag_note() : NULL,
+                .clip = clip_hold > 0, .cpu = audio_cpu_percent(), .menu = menu, .menu_edit = menu_edit, .param = menu_row_of(param), .param_n = MENU_N,
+                .param_name = shown >= 0 ? param_name[shown] : toast_name, .param_frac = shown >= 0 ? param_frac(shown) : toast_frac, .toast_ms = toast,
+                .busy_frac = slots_progress(),
                 .idle_ms = recorder_state() == REC_IDLE ? idle_ms : 0,
                 .voice = vox_on() ? vox_name(S.voice) : NULL,
                 .peers = S.link ? flock_peers() : 0, .beat_flash = flock_beat_flash(), .closing = recorder_closing(),
+                .waiting = recorder_waiting(), .has_hand = has_tof, .knob_mode = S.knob, .hand_mode = S.hand,
+                .jog = recorder_jog_now(), .knob_st = S.knob == UI_KNOB_SPEED ? knob_st : 0,
+                .hand = has_tof && S.hand != UI_HAND_OFF ? hand.v : 0.0f, .hand_seen = has_tof && hand.seen, .filter = flt_pos,
+                .menu_sel = menu_row_of(param), .menu_n = MENU_N, .menu_group = MENU[menu_row_of(param)].group,
+                .dim = TI(TU_SC_DIM) > 0 && still_ms > TI(TU_SC_DIM) * 1000, .still_ms = still_ms,
+                .check = check_on, .chk_enc = chk_enc, .chk_knob = chk_knob, .hand_mm = hand.mm,
+                .version = esp_app_get_description()->version,
             };
-            u.has_joy = in_has_joy;
-            u.fx_delay = fx_delay_active(); u.fx_stutter = fx_stutter_active();
-            ui_draw(&u);
+            f.u.has_joy = in_has_joy;
+            f.u.fx_delay = fx_delay_active(); f.u.fx_stutter = fx_stutter_active();
+#if HAS_CONTROLS
+            f.u.has_knob = in.has_knob; f.u.chk_sw = in.pressed; f.u.chk_rec = in.rec;
+#endif
+            if (menu) for (int r = 0; r < UI_ROWS; r++) {     // the list: the chosen row and three either side
+                int row = f.u.menu_sel - UI_ROWS / 2 + r;
+                if (row < 0 || row >= MENU_N) { f.u.row_name[r] = NULL; continue; }
+                f.u.row_name[r] = param_name[MENU[row].p]; f.u.row_act[r] = is_action(MENU[row].p);
+                param_text(MENU[row].p, f.u.row_val[r], UI_VAL_N);
+            }
+            xQueueOverwrite(ui_q, &f);
         }
 #endif
         if (tick % 100 == 0) {

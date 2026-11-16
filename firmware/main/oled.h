@@ -1,11 +1,13 @@
 // SSD1306 over I2C (address 0x3C): the 0.96" 128x64 panel.
-// Framebuffer pushed in one transfer from the UI task. Never called from the audio task.
+// One framebuffer, drawn and flushed by the screen's task alone (main.c's ui_task; before it starts, by app_main).
+// Never called from the audio task.
 #pragma once
 #include <stdbool.h>
 #include "driver/i2c_master.h"
 #include "pins.h"
 #include "font.h"
 
+void oled_fast(bool on);                                 // before oled_init: the panel's bus at 800 kHz instead of 400
 bool oled_init(i2c_master_bus_handle_t bus);
 bool oled_present(void);
 void oled_clear(void);
@@ -30,7 +32,13 @@ int  oled_ftext_ex(const gfx_font_t *f, int x, int y, const char *s, int trackin
 int  oled_ftext_w(const gfx_font_t *f, const char *s, int tracking);
 int  oled_ftext_c(const gfx_font_t *f, int cx, int y, const char *s, int tracking);   // centred on cx
 int  oled_ftext_r(const gfx_font_t *f, int rx, int y, const char *s, int tracking);   // right edge at rx
+int  oled_ftext2(const gfx_font_t *f, int x, int y, const char *s, int tracking);     // twice the size; returns the x after
+int  oled_ftext2_w(const gfx_font_t *f, const char *s, int tracking);
+void oled_clip(int x, int y, int w, int h);              // everything drawn stays inside this window, until
+void oled_clip_off(void);                                // the whole panel again
 // A capsule with text: filled (white on black text) or outlined. Returns its width.
 int  oled_pill(const gfx_font_t *f, int x, int y, const char *s, bool filled);
 int  oled_pill_w(const gfx_font_t *f, const char *s);
-void oled_flush(void);
+void oled_flush(void);                                   // sends what changed since the last one, a page at a time
+void oled_dim(bool on);                                  // a quarter of the light, for a panel left lying (from the next flush)
+int  oled_sent_bytes(void);                              // bytes the last flush put on the wire

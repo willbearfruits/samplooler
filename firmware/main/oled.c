@@ -17,7 +17,19 @@ static int64_t t_retry;                     // when to probe again after giving 
 #define FAIL_LIMIT 3
 #define RETRY_US   2000000
 static uint8_t fb[PAGES][OLED_W];
-static uint8_t txbuf[1 + PAGES * OLED_W];
+// What the panel shows (as far as we know), page by page. A flush sends only the columns of a page that differ
+// from it, each page in a transfer of its own: at 400 kHz a whole frame is 26 ms on a bus the IMU and the hand's
+// sensor share, a page 3 ms, and most frames change a few pages. One page a frame is sent whole whatever it
+// holds, so a panel that lost its picture (a brown-out on its side) has it back within eight frames.
+static uint8_t shown[PAGES][OLED_W];
+static bool    shown_ok[PAGES];
+static uint8_t front[PAGES][OLED_W];        // the frame being sent: the rig's mirror reads this one
+static uint8_t txbuf[1 + OLED_W];
+static int     heal;                        // the page sent whole this frame
+static bool    dim_now, dim_want;
+static uint32_t sent_bytes;                 // bytes on the wire in the last flush, for the rig
+static bool    fast;                        // oled_fast: 800 kHz
+void oled_fast(bool on) { fast = on; }
 
 static bool cmd(const uint8_t *c, int n)
 {
@@ -55,6 +67,7 @@ static bool bring_up(void)
         i += n;
     }
     present = true; fails = 0;
+    memset(shown_ok, 0, sizeof shown_ok); dim_now = false;
     oled_clear(); oled_flush();
     ESP_LOGI(TAG, "%dx%d ready", OLED_W, OLED_H);
     return true;
@@ -63,7 +76,8 @@ static bool bring_up(void)
 bool oled_init(i2c_master_bus_handle_t bus)
 {
     if (i2c_master_probe(bus, ADDR, 20) != ESP_OK) { ESP_LOGW(TAG, "no SSD1306 at 0x3C"); return false; }
-    i2c_device_config_t cfg = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = ADDR, .scl_speed_hz = 400000 };
+    // oled_fast (screen.fast in the tuning table): 800 kHz for this device alone (the others stay at 400). Most SSD1306 panels take it; the data sheet says 400.
+    i2c_device_config_t cfg = { .dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = ADDR, .scl_speed_hz = fast ? 800000 : 400000 };
     if (i2c_master_bus_add_device(bus, &cfg, &dev) != ESP_OK) return false;
     return bring_up();
 }
@@ -81,9 +95,18 @@ bool oled_present(void)
 }
 void oled_clear(void)   { memset(fb, 0, sizeof fb); }
 
+// A window everything drawn is kept inside (a list scrolling under a header); oled_clip_off opens it to the panel.
+static int clip_x0, clip_y0, clip_x1 = OLED_W - 1, clip_y1 = OLED_H - 1;
+void oled_clip(int x, int y, int w, int h)
+{
+    clip_x0 = x < 0 ? 0 : x; clip_y0 = y < 0 ? 0 : y;
+    clip_x1 = x + w - 1 >= OLED_W ? OLED_W - 1 : x + w - 1; clip_y1 = y + h - 1 >= OLED_H ? OLED_H - 1 : y + h - 1;
+}
+void oled_clip_off(void) { clip_x0 = clip_y0 = 0; clip_x1 = OLED_W - 1; clip_y1 = OLED_H - 1; }
+
 void oled_pixel(int x, int y, bool on)
 {
-    if ((unsigned)x >= OLED_W || (unsigned)y >= OLED_H) return;
+    if (x < clip_x0 || x > clip_x1 || y < clip_y0 || y > clip_y1) return;
     if (on) fb[y >> 3][x] |= 1 << (y & 7); else fb[y >> 3][x] &= ~(1 << (y & 7));
 }
 
@@ -253,6 +276,30 @@ static int walk(const gfx_font_t *f, int x, int y, const char *s, int tracking, 
     }
     return ink_end - x;
 }
+// The same faces at twice the size (each pixel a 2 x 2 block): a value that has to be read from a step away.
+int oled_ftext2_w(const gfx_font_t *f, const char *s, int tracking) { return 2 * walk(f, 0, 0, s, tracking, false); }
+int oled_ftext2(const gfx_font_t *f, int x, int y, const char *s, int tracking)
+{
+    int pen = x;
+    uint8_t prev = 0;
+    for (const uint8_t *p = (const uint8_t *)s; *p; p++) {
+        uint8_t ch = *p;
+        const gfx_glyph_t *gl = find_glyph(f, &ch);
+        if (prev && f->nkern) pen += 2 * kern_of(f, prev, ch);
+        if (!gl) { pen += 2 * (f->space + tracking); prev = 0; continue; }
+        const uint8_t *d = f->bits + gl->off;
+        for (int cx = 0; cx < gl->w; cx++, d += f->bpc) {
+            uint32_t col = d[0];
+            if (f->bpc > 1) col |= (uint32_t)d[1] << 8;
+            if (f->bpc > 2) col |= (uint32_t)d[2] << 16;
+            if (f->bpc > 3) col |= (uint32_t)d[3] << 24;
+            for (int r = 0; col; r++, col >>= 1) if (col & 1) oled_rect(pen + 2 * cx, y + 2 * r, 2, 2, font_on);
+        }
+        pen += 2 * (gl->adv + tracking);
+        prev = ch;
+    }
+    return pen;
+}
 int oled_ftext_ex(const gfx_font_t *f, int x, int y, const char *s, int tracking) { return x + walk(f, x, y, s, tracking, true); }
 int oled_ftext(const gfx_font_t *f, int x, int y, const char *s) { return oled_ftext_ex(f, x, y, s, 0); }
 int oled_ftext_w(const gfx_font_t *f, const char *s, int tracking) { return walk(f, 0, 0, s, tracking, false); }
@@ -270,16 +317,45 @@ int oled_pill(const gfx_font_t *f, int x, int y, const char *s, bool filled)
 // Called with the frame before it goes to the panel (main.c gives it to the rig); a weak no-op where nobody listens.
 __attribute__((weak)) void oled_on_flush(const uint8_t *frame) { (void)frame; }
 
+// Dim: the lowest contrast and a short pre-charge, about a quarter of the light. For a panel left lying with a
+// picture on it; sent at the next flush.
+void oled_dim(bool on) { dim_want = on; }
+int  oled_sent_bytes(void) { return (int)sent_bytes; }
+
+static bool send_span(int page, int c0, int c1)
+{
+    const uint8_t win[] = { 0x21, (uint8_t)c0, (uint8_t)c1, 0x22, (uint8_t)page, (uint8_t)page };
+    if (!cmd(win, sizeof win)) return false;
+    int n = c1 - c0 + 1;
+    txbuf[0] = 0x40;                            // control byte: data follows
+    memcpy(txbuf + 1, &front[page][c0], (size_t)n);
+    sent_bytes += (uint32_t)n + 9;
+    return i2c_master_transmit(dev, txbuf, n + 1, 50) == ESP_OK;
+}
+
 void oled_flush(void)
 {
-    oled_on_flush(&fb[0][0]);
+    memcpy(front, fb, sizeof front);
+    oled_on_flush(&front[0][0]);
     if (!present) return;
-    const uint8_t win[] = { 0x21, 0, OLED_W - 1, 0x22, 0x00, PAGES - 1 };
-    bool ok = cmd(win, sizeof win);
-    if (ok) {
-        txbuf[0] = 0x40;                        // control byte: data follows
-        memcpy(txbuf + 1, fb, sizeof fb);
-        ok = i2c_master_transmit(dev, txbuf, sizeof txbuf, 100) == ESP_OK;   // 1025 bytes: 26 ms at 400 kHz
+    bool ok = true;
+    sent_bytes = 0;
+    if (dim_want != dim_now) {
+        const uint8_t d[] = { 0x81, dim_want ? 0x01 : 0xAF, 0xD9, dim_want ? 0x11 : 0x22, 0xDB, dim_want ? 0x00 : 0x20 };
+        ok = cmd(d, sizeof d);
+        if (ok) dim_now = dim_want;
+    }
+    heal = (heal + 1) % PAGES;
+    for (int p = 0; p < PAGES && ok; p++) {
+        int c0 = 0, c1 = OLED_W - 1;
+        if (shown_ok[p] && p != heal) {
+            while (c0 < OLED_W && front[p][c0] == shown[p][c0]) c0++;
+            if (c0 == OLED_W) continue;         // this page is already there
+            while (front[p][c1] == shown[p][c1]) c1--;
+        }
+        ok = send_span(p, c0, c1);
+        if (ok) { memcpy(&shown[p][c0], &front[p][c0], (size_t)(c1 - c0 + 1)); shown_ok[p] = true; }
+        else shown_ok[p] = false;               // half sent, perhaps: this page goes whole next time
     }
     if (ok) { fails = 0; return; }
     if (++fails >= FAIL_LIMIT) {

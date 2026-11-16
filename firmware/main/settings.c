@@ -23,7 +23,9 @@ static const field_t fields[] = {
     F("vol ", T_INT, vol_pct),  F("inpt", T_INT, input),    F("slot", T_INT, slot),     F("spkr", T_BOOL, speaker),
     F("voic", T_INT, voice),    F("key ", T_INT, key),      F("scal", T_INT, scale),    F("mont", T_BOOL, monitor),
     F("rbtn", T_BOOL, rec_button), F("nlnk", T_BOOL, link),  F("ngrp", T_INT, group),    F("npow", T_INT, range),
+    F("knob", T_INT, knob),     F("hand", T_INT, hand),     F("lsta", T_BOOL, start_sound),
 };
+_Static_assert(sizeof fields / sizeof fields[0] <= 32, "settings_init reads at most 32 entries");
 #define NF (sizeof fields / sizeof fields[0])
 
 static bool    ready, dirty;

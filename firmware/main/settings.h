@@ -29,6 +29,9 @@ typedef struct {
     bool  link;          // the flock (flock.h): the radio
     int   group;         // 1..8: boards in the same group sync
     int   range;         // 0 NEAR, 1 ROOM, 2 FAR: the radio's power
+    int   knob;          // what the left knob turns (rev E): UI_KNOB_* in ui.h
+    int   hand;          // what the hand over the sensor does (rev E): UI_HAND_*
+    bool  start_sound;   // a take starts at the first sound, not at the press
 } settings_t;
 
 #define SETTINGS_DEBOUNCE_MS   3000

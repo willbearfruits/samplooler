@@ -31,7 +31,8 @@ static int16_t inj[INJ_N][6];
 static int inj_w, inj_r;
 
 // keys from the PC
-static int key_detents, key_sw = -1, key_rec = -1, key_jx = -1, key_jy = -1;
+static int key_detents, key_sw = -1, key_rec = -1, key_jx = -1, key_jy = -1, key_knob, key_hand = -1;
+static bool key_knob_on;
 static bool sw_release, rec_release;
 
 // events
@@ -67,7 +68,7 @@ void rig_init(void)
 static void streams_off(void)
 {
     m_on = q_on = o_on = e_on = false;
-    key_sw = key_rec = key_jx = key_jy = -1; key_detents = 0;
+    key_sw = key_rec = key_jx = key_jy = key_hand = -1; key_detents = key_knob = 0; key_knob_on = false;
 }
 
 static void parse_go(const char *t)
@@ -132,6 +133,8 @@ bool rig_sysex(uint8_t cmd, const uint8_t *body, int n)
         if (t[0] == 'e') key_detents += atoi(t + 1);
         else if (t[0] == 'E') { if (t[1] == '1') { key_sw = 1; sw_release = false; } else { key_sw = 0; sw_release = true; } }
         else if (t[0] == 'R') { if (t[1] == '1') { key_rec = 1; rec_release = false; } else { key_rec = 0; rec_release = true; } }
+        else if (t[0] == 'k') { key_knob += atoi(t + 1); key_knob_on = true; }       // the left knob, in detents
+        else if (t[0] == 'h') key_hand = t[1] == '-' ? -1 : atoi(t + 1);              // a hand at this many mm ('h-': the sensor's own)
         else if (t[0] == 'x') {
             const char *y = strchr(t, 'y');
             key_jx = t[1] == '-' ? -1 : atoi(t + 1);
@@ -149,6 +152,8 @@ void rig_keys(rig_keys_t *k, int steps, int dir)
     k->counts = key_detents * steps * dir;  // the gesture code counts them back into detents
     key_detents = 0;
     k->sw = key_sw; k->rec = key_rec; k->jx = key_jx; k->jy = key_jy;
+    k->knob = key_knob * TI(TU_KN_STEPS) * (TI(TU_KN_DIR) ? 1 : -1); key_knob = 0;
+    k->hand = key_hand; k->knob_on = key_knob_on;
     if (sw_release) { key_sw = -1; sw_release = false; }     // the release is seen once, then the pin rules again
     if (rec_release) { key_rec = -1; rec_release = false; }
 }
@@ -252,7 +257,7 @@ void rig_tick(int dt_ms)
 {
     (void)dt_ms;
     uint32_t now = rig_port_ms();
-    if (!hold && (m_on || q_on || o_on || e_on || key_sw >= 0 || key_rec >= 0 || key_jx >= 0) && now - last_g_ms > KEEPALIVE_MS) streams_off();
+    if (!hold && (m_on || q_on || o_on || e_on || key_sw >= 0 || key_rec >= 0 || key_jx >= 0 || key_hand >= 0 || key_knob_on) && now - last_g_ms > KEEPALIVE_MS) streams_off();
     // the tuning table, three lines a tick
     for (int s = 0; s < 3 && list_next >= 0; s++) {
         if (list_next >= TU_N) {

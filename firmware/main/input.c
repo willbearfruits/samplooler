@@ -16,8 +16,10 @@
 #include "esp_log.h"
 
 static const char *TAG = "input";
-static pcnt_unit_handle_t pcnt;
+static pcnt_unit_handle_t pcnt, pcnt2;
 static int glitch_ns = -1;
+static bool has_knob;
+static int  left_kind;
 
 // The joystick: ADC1 comes up the first time joy.on is set (a board without one leaves GPIO 1 and 2 alone).
 static adc_oneshot_unit_handle_t adc;
@@ -66,19 +68,96 @@ static void joy_start(void)
     input_joy_centre();
 }
 
+static esp_err_t set_glitch(pcnt_unit_handle_t u, int ns)
+{
+    if (!u) return ESP_OK;
+    pcnt_unit_stop(u);
+    pcnt_unit_disable(u);
+    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = (uint32_t)ns };
+    esp_err_t e = pcnt_unit_set_glitch_filter(u, ns > 0 ? &gf : NULL);
+    pcnt_unit_enable(u);
+    pcnt_unit_start(u);
+    return e;
+}
+
 void input_tune(void)
 {
     int ns = TI(TU_EN_GLITCH);
     if (ns == glitch_ns || !pcnt) return;
-    pcnt_unit_stop(pcnt);
-    pcnt_unit_disable(pcnt);
-    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = (uint32_t)ns };
-    esp_err_t e = pcnt_unit_set_glitch_filter(pcnt, ns > 0 ? &gf : NULL);
-    pcnt_unit_enable(pcnt);
-    pcnt_unit_start(pcnt);
+    esp_err_t e = set_glitch(pcnt, ns);
+    esp_err_t e2 = set_glitch(pcnt2, ns);
     glitch_ns = ns;
-    ESP_LOGI(TAG, "encoder glitch filter %d ns%s", ns, e == ESP_OK ? "" : " (refused)");
+    ESP_LOGI(TAG, "encoder glitch filter %d ns%s", ns, e == ESP_OK && e2 == ESP_OK ? "" : " (refused)");
 }
+
+// A quadrature encoder on two pins with pull-ups, every edge counted (four counts a detent on an EC11).
+static bool encoder_unit(pcnt_unit_handle_t *u, int pin_a, int pin_b)
+{
+    pcnt_unit_config_t uc = { .high_limit = 30000, .low_limit = -30000 };
+    if (pcnt_new_unit(&uc, u) != ESP_OK) { *u = NULL; return false; }
+    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = (uint32_t)glitch_ns };
+    if (glitch_ns > 0 && pcnt_unit_set_glitch_filter(*u, &gf) != ESP_OK) ESP_LOGW(TAG, "glitch filter %d ns refused", glitch_ns);
+    pcnt_channel_handle_t ca, cb;
+    pcnt_chan_config_t cca = { .edge_gpio_num = pin_a, .level_gpio_num = pin_b };
+    pcnt_chan_config_t ccb = { .edge_gpio_num = pin_b, .level_gpio_num = pin_a };
+    bool ok = pcnt_new_channel(*u, &cca, &ca) == ESP_OK && pcnt_new_channel(*u, &ccb, &cb) == ESP_OK;
+    if (ok) {
+        pcnt_channel_set_edge_action(ca, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE);
+        pcnt_channel_set_level_action(ca, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+        pcnt_channel_set_edge_action(cb, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE);
+        pcnt_channel_set_level_action(cb, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+        ok = pcnt_unit_enable(*u) == ESP_OK && pcnt_unit_clear_count(*u) == ESP_OK && pcnt_unit_start(*u) == ESP_OK;
+    }
+    if (!ok) { pcnt_del_unit(*u); *u = NULL; }
+    return ok;
+}
+
+// Rev C has a joystick on GPIO 1 and 2, rev E the left knob. A joystick's wipers rest near half the supply and are
+// stiff (a 10 k track); a knob's contacts are open or closed to ground, so with the pull-ups on its pins read the
+// supply or ground, and so do pins with nothing on them. Both pins near the middle, steadily: a joystick.
+static bool joystick_there(void)
+{
+    adc_oneshot_unit_handle_t a;
+    adc_oneshot_unit_init_cfg_t ac = { .unit_id = ADC_UNIT_1 };
+    if (adc_oneshot_new_unit(&ac, &a) != ESP_OK) return false;
+    adc_oneshot_chan_cfg_t cc = { .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_DEFAULT };
+    adc_oneshot_config_channel(a, CH_X, &cc);
+    adc_oneshot_config_channel(a, CH_Y, &cc);
+    gpio_pullup_en(PIN_JOY_X); gpio_pullup_en(PIN_JOY_Y);
+    vTaskDelay(pdMS_TO_TICKS(3));
+    int lox = 9999, hix = 0, loy = 9999, hiy = 0;
+    bool ok = true;
+    for (int i = 0; i < 16 && ok; i++) {
+        int x = 0, y = 0;
+        ok = adc_oneshot_read(a, CH_X, &x) == ESP_OK && adc_oneshot_read(a, CH_Y, &y) == ESP_OK;
+        if (x < lox) lox = x;
+        if (x > hix) hix = x;
+        if (y < loy) loy = y;
+        if (y > hiy) hiy = y;
+    }
+    adc_oneshot_del_unit(a);
+    bool joy = ok && lox > 900 && hix < 3300 && loy > 900 && hiy < 3300 && hix - lox < 400 && hiy - loy < 400;
+    ESP_LOGI(TAG, "GPIO %d/%d read %d..%d and %d..%d with the pull-ups on: %s", PIN_JOY_X, PIN_JOY_Y, lox, hix, loy, hiy,
+             joy ? "a joystick (rev C)" : "no joystick, so the left knob (rev E)");
+    return joy;
+}
+
+// What sits on GPIO 1 and 2, decided once at power-on: joy.on says a joystick (as before), knob.on says a knob or
+// none, and auto looks.
+static void left_start(void)
+{
+    int kn = TI(TU_KN_ON);                                    // 0 auto, 1 off, 2 on
+    if (TI(TU_JO_ON)) { left_kind = 2; return; }              // the joystick comes up in input_poll, as it always did
+    if (kn == 1) return;
+    if (kn == 0 && joystick_there()) { left_kind = 2; return; }   // there, but joy.on is off: the pins are left alone
+    gpio_config_t in = { .pin_bit_mask = (1ULL << PIN_KNOB_A) | (1ULL << PIN_KNOB_B), .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
+    gpio_config(&in);
+    has_knob = encoder_unit(&pcnt2, PIN_KNOB_A, PIN_KNOB_B);
+    left_kind = has_knob ? 1 : 0;
+    ESP_LOGI(TAG, "left knob on %d/%d (PCNT)%s", PIN_KNOB_A, PIN_KNOB_B, has_knob ? "" : ": NOT started");
+}
+bool input_has_knob(void) { return has_knob; }
+int  input_left_kind(void) { return left_kind; }
 
 void input_init(void)
 {
@@ -93,32 +172,17 @@ void input_init(void)
     ESP_LOGI(TAG, "record button on %d", PIN_REC);
 #endif
 
-    pcnt_unit_config_t uc = { .high_limit = 30000, .low_limit = -30000 };
-    ESP_ERROR_CHECK(pcnt_new_unit(&uc, &pcnt));
     glitch_ns = TI(TU_EN_GLITCH);
-    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = (uint32_t)glitch_ns };
-    if (glitch_ns > 0 && pcnt_unit_set_glitch_filter(pcnt, &gf) != ESP_OK) ESP_LOGW(TAG, "glitch filter %d ns refused", glitch_ns);
-    pcnt_channel_handle_t ca, cb;
-    pcnt_chan_config_t cca = { .edge_gpio_num = PIN_ENC_A, .level_gpio_num = PIN_ENC_B };
-    pcnt_chan_config_t ccb = { .edge_gpio_num = PIN_ENC_B, .level_gpio_num = PIN_ENC_A };
-    ESP_ERROR_CHECK(pcnt_new_channel(pcnt, &cca, &ca));
-    ESP_ERROR_CHECK(pcnt_new_channel(pcnt, &ccb, &cb));
-    pcnt_channel_set_edge_action(ca, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE);
-    pcnt_channel_set_level_action(ca, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
-    pcnt_channel_set_edge_action(cb, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE);
-    pcnt_channel_set_level_action(cb, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
-    ESP_ERROR_CHECK(pcnt_unit_enable(pcnt));
-    ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt));
-    ESP_ERROR_CHECK(pcnt_unit_start(pcnt));
+    if (!encoder_unit(&pcnt, PIN_ENC_A, PIN_ENC_B)) ESP_LOGE(TAG, "the encoder's counter did not start: no menu knob");
     ESP_LOGI(TAG, "encoder on %d/%d (PCNT), push on %d", PIN_ENC_A, PIN_ENC_B, PIN_ENC_SW);
+    left_start();
 }
 
 void input_poll(input_ev_t *ev)
 {
     memset(ev, 0, sizeof *ev);
     int cnt = 0;
-    pcnt_unit_get_count(pcnt, &cnt);
-    pcnt_unit_clear_count(pcnt);
+    if (pcnt) { pcnt_unit_get_count(pcnt, &cnt); pcnt_unit_clear_count(pcnt); }
     rig_keys_t k;
     rig_keys(&k, TI(TU_EN_STEPS), TI(TU_EN_DIR) ? 1 : -1);    // the rig's turns and presses, as if from the pins
 
@@ -132,8 +196,17 @@ void input_poll(input_ev_t *ev)
     ev->rec = gpio_get_level(PIN_REC) == 0;
 #endif
     ev->rec_pc = k.rec > 0;
+    ev->hand_mm = k.hand;
+    {   // the left knob: its counts, and the rig's turns of it (the rig can turn one that is not there)
+        int c2 = 0;
+        if (pcnt2) { pcnt_unit_get_count(pcnt2, &c2); pcnt_unit_clear_count(pcnt2); }
+        knob_out_t ko;
+        gest_knob(c2 + k.knob, &ko);
+        ev->has_knob = has_knob || k.knob_on;
+        ev->knob = ko.det; ev->knob_counts = ko.counts;
+    }
 
-    if (!TI(TU_JO_ON)) { ev->has_joy = false; return; }
+    if (!TI(TU_JO_ON) || has_knob) { ev->has_joy = false; return; }   // the knob has the joystick's pins
     if (!adc_ready) joy_start();
     bool over = k.jx >= 0 && k.jy >= 0;
     if (!adc_ready || (!has_joy && !over)) return;
