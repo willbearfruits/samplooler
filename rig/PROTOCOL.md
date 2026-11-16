@@ -34,6 +34,8 @@ Existing messages, unchanged:
 | `K` | `E1` / `E0` | encoder switch down / up |
 | `K` | `R1` / `R0` | REC down / up |
 | `K` | `x2048 y1900` | joystick raw ADC override (0..4095); `x- y-` ends the override |
+| `K` | `k+3` / `k-1` | the left knob (rev E) turned by n detents; it counts as fitted from then on, until the streams stop |
+| `K` | `h120` / `h-` | a hand held over the sensor at 120 mm (a board without the sensor acts as if it had one); `h-` gives the sensor back |
 
 `J` body: `n` (1..6), then n samples, each 6 raw sensor values (ax ay az gx gy gz, the IMU's own LSB at the
 current ranges, signed 16-bit) as three 7-bit bytes each (bits 15..14, 13..7, 6..0, two's complement),
@@ -149,8 +151,11 @@ Socket: `$XDG_RUNTIME_DIR/slrig/daemon.sock` (0600). One JSON object per line, U
 - `in_peak`, `out_peak` (0..1), `in_clips`;
 - `cpu` (%), `heap_kb`, `i2c_fail`, `bias` [x,y,z] (°/s, learned), `rest` (bool, the board thinks it is
   still);
-- `loop_ms` (the last pass of the board's 10 ms UI loop: I2C, the screen, the streams), `wire_drops` (the rig's
-  messages that did not fit on USB, since boot).
+- `loop_ms` (the last pass of the board's 10 ms control loop: I2C and the streams; the screen has its own task since
+  firmware 0.2), `wire_drops` (the rig's messages that did not fit on USB, since boot);
+- since firmware 0.2 (rev E): `knob` (the left knob's detents, a running count), `jog` (the extra speed its push gives
+  the tape, x), `hand` (0 no hand .. 1 fully down), `hand_mm` (0: nothing in range), `filter` (-1 a closed low-pass
+  .. 0 open .. 1 a high-pass), `ui_fps` (screen frames drawn in the last second); flag 4096: the left knob is there.
 
 **Tune item:**
 

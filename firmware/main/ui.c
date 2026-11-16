@@ -612,7 +612,8 @@ static void menu_list(const ui_t *u, int off)
         int y0 = by + (int)lroundf((float)(top + 1 - by) * e), y1 = by + ROW_H - 1 + (int)lroundf((float)(OLED_H - 1 - (by + ROW_H - 1)) * e);
         oled_rect(0, y0, OLED_W, y1 - y0 + 1, false);
         oled_rframe(0, y0, OLED_W, y1 - y0 + 1, 2);
-        if (edit_t >= 1.0f) {
+        if (y1 - y0 > 4) {                                      // what is inside shows as the box opens over it
+            oled_clip(1, y0 + 1 > top ? y0 + 1 : top, OLED_W - 2, y1 - y0 - 1);
             oled_pill(F_SMALL, 4, top + 4, upper(u->param_name ? u->param_name : ""), true);
             oled_ftext_r(F_TINY, OLED_W - 5, top + 6, "PRESS: DONE", 0);
             const char *val = u->param_val ? u->param_val : "";

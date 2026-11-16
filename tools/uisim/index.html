@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vessel screen</title>
+<!-- The screen as the firmware draws it, rendered on the PC by run.sh and tour.sh (the files in out/ are made, not kept
+     in git). Serve this folder: python3 -m http.server 8803 --bind 127.0.0.1 -->
+<style>
+  :root { color-scheme: dark; --bg: #060606; --ink: #ece8de; --mute: #9a968c; --line: #232220; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 28px 20px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; color: var(--mute); margin: 34px 0 10px; font-weight: 600; }
+  p { margin: 6px 0; color: var(--mute); } p b { color: var(--ink); font-weight: 600; }
+  video, img { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; background: #000; }
+  code { font: 13px ui-monospace, monospace; background: #151513; padding: 1px 5px; border-radius: 3px; }
+  ul { margin: 6px 0; padding-left: 20px; color: var(--mute); } li { margin: 3px 0; }
+</style>
+<div class="wrap">
+  <h1>Vessel: the screen</h1>
+  <p>Drawn by the firmware's own code on the PC. Not a photo: no rev E board exists yet.</p>
+
+  <h2>A session, 40 seconds, at the board's 30 frames a second</h2>
+  <video src="out/tour.mp4" controls loop muted autoplay playsinline width="816"></video>
+  <ul>
+    <li><b>0:00</b> the boot</li>
+    <li><b>0:04</b> REC held: it listens, and the take starts at the first sound</li>
+    <li><b>0:07</b> the loop, tilted faster, backwards, with delay, stutter, grains</li>
+    <li><b>0:20</b> a hand over the sensor closes the filter</li>
+    <li><b>0:25</b> the left knob drags the tape</li>
+    <li><b>0:27</b> the menu: a list, a value edited</li>
+    <li><b>0:33</b> flung at 8x, then the crawl</li>
+  </ul>
+
+  <h2>Every screen</h2>
+  <p>Made by <code>tools/uisim/run.sh</code>. The top band is yellow on the two-colour panels.</p>
+  <img src="out/sheet.png" alt="Every screen state, side by side">
+</div>

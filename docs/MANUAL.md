@@ -2,8 +2,13 @@
 
 Hold the button and make a sound. Let go and it loops. Tilt the box and the loop follows your hand.
 
-This manual is for the Samplooler firmware 0.1 on the Stack, the two-board ESP32-S3 version. Building one is in
+This manual is for the Samplooler firmware 0.2 on the Stack, the two-board ESP32-S3 version. Building one is in
 [BUILD.md](BUILD.md).
+
+One firmware runs on both boards. Rev C has a joystick whose click is the record button. Rev E, the Vessel, has two
+knobs and a hand sensor instead: the left knob's push is the record button. The firmware looks at power-on and
+tells them apart. Rev E has not been built yet, so the parts of this manual marked rev E are written from the
+firmware and its tests on a PC, not from a board.
 
 A Stack bought ready-made comes loaded with the Samplooler. The other instruments in
 [instruments/](../instruments/) flash onto the same boards, and the Samplooler flashes back the same way.
@@ -31,15 +36,23 @@ Everything it can do:
 | GRAIN mode | Speed and pitch come apart: the loop plays in grains, and Pitch shifts it up to two octaves either way at any speed. The operator juggles. |
 | Roll effects | Roll the box left for a delay, right for a stutter. Hold the angle to keep them, roll back to flat to let them go. |
 | Freeze | Hold the encoder and the speed, direction and effects stay where they are while you move the box. |
+| Left knob (rev E) | Turn it and you move the tape by hand, forwards or back, on top of what the tilt does. A setting puts it on speed, pitch or a filter instead. |
+| Hand (rev E) | Hold a hand over the sensor in the middle of the board. The lower the hand, the darker the sound. A setting makes it bend the pitch, brake the tape, turn it down or feed the delay instead. |
 | Slots | Eight loops saved on the board itself. They survive power cycles and firmware updates. |
 | USB | To a computer it is a MIDI device and a stereo sound card at once. Every setting is a MIDI CC, so a DAW or the plugin can automate it, and the loop comes out as audio. |
 | With the other instruments | Over the radio, with no setup: a take sets the tempo for WRECK and MANTRA, or lands on the beat they already play; the voice's key and scale are shared. See With the other instruments below. |
-| Screen | A tape between two reels with the loop's shape on it, and the operator running on top. |
+| Screen | A tape between two reels with the loop's shape on it, and the operator running on top. The menu is a list you scroll. |
 
 ## Playing it
 
-The nose is the edge with the USB-C and the line out. The record button is the joystick: press the stick down and
-hold it. The knob is the encoder.
+The nose is the edge with the USB-C and the line out. On rev C the record button is the joystick: press the stick
+down and hold it. On rev E it is the left knob: press it down and hold it. The encoder is the knob on the right:
+the only knob on rev C, the right one of the two on rev E. Below, REC means the record button.
+
+A take starts at the first sound, not at the press. Hold REC and the screen says LISTENING until you make a
+sound; the silence before it is not in the loop. The switch's own click is cut from both ends of the take (the
+first 0.12 s after the press and the last 0.04 s before the release are not recorded). Loop start in the menu
+sets this: SOUND or PRESS.
 
 > PHOTO: the Stack held in two hands, nose away from the player, a thumb on the stick, the knob on the right
 
@@ -49,7 +62,7 @@ hold it. The knob is the encoder.
 
 | Control | While playing | In the menu | Editing a setting |
 | - | - | - | - |
-| Stick, held down | record | record | record |
+| REC, held down | record | record | record |
 | Encoder tap | open the menu (0.3 s later, in case a second tap comes) | edit the setting, or run Save / Load | back to the list |
 | Encoder, two taps | the encoder turns Volume until it rests 3 s or is tapped (a toast shows it); the same in every instrument | | |
 | Encoder turn | adjust the last setting (a toast shows it) | choose a setting | adjust it |
@@ -65,6 +78,32 @@ hold it. The knob is the encoder.
 
 BOOT, under the small hole next to the screen, also records while you hold it.
 
+### The left knob and the hand (rev E)
+
+| Knob setting | A turn of the left knob |
+| - | - |
+| JOG | Moves the tape by hand: one whole turn is about 1.2 s of tape, either way, on top of the tilt. With the box flat it is the only thing moving the tape, so you can scrub through the loop. The operator is dragged along. The default. |
+| SPEED | Steps the tape's speed in semitones, up to two octaves either way. It stays where you leave it. |
+| PITCH | Steps the Pitch setting (GRAIN only). |
+| FILTER | Left of the middle closes a low-pass, right of it raises a high-pass. The middle is open. |
+
+| Hand setting | A hand over the sensor |
+| - | - |
+| OFF | Nothing. |
+| FILTER | Closes a low-pass: the lower the hand, the darker. The delay's tail darkens with it. The default. |
+| PITCH | Bends up, an octave with the hand fully down. In TAPE the speed bends with it. |
+| BRAKE | Slows the tape, to a stop with the hand fully down. |
+| VOLUME | Turns it down, to silence with the hand fully down. |
+| ECHO | Feeds the delay, like rolling left. |
+
+The hand counts from about 25 cm above the board down to 4 cm. Take it away and the sound opens again within a
+quarter of a second. On the screen a shade comes down over the operator, who ducks, and the strip names what the
+hand is doing. Without the sensor fitted, Hand does nothing and the menu says "no sensor".
+
+| ![Listening](../media/screens/listening.png) | ![The hand](../media/screens/hand.png) | ![The left knob](../media/screens/jog.png) |
+| - | - | - |
+| REC held, waiting for a sound | a hand fully down: the filter closed | the left knob dragging the tape |
+
 Rev C boards have older hints printed next to the screen ("stick click: tilt, hold: menu", "knob hold:
 record"). The firmware no longer works that way. Go by the tables above.
 
@@ -75,7 +114,7 @@ Recording, the menu and the slots all keep working while frozen.
 Tip: keep recordings short and the loop clean, and let go on a beat. The loop seam is click-free, so a tight loop
 turns into a rhythm by itself. Tilt a little, not a lot; the interesting speeds are between 0.5x and 2x.
 
-To empty the tape, tap the stick. A recording shorter than about a tenth of a second does not loop: the old loop is
+To empty the tape, tap REC. A recording shorter than about a tenth of a second does not loop: the old loop is
 gone and it goes quiet.
 
 Watch the operator. It runs at the real speed and direction, tumbles above 4.5x (with Speed max set above that),
@@ -139,8 +178,18 @@ frees the tempo for whoever sets it next.
 ## The menu and the settings
 
 Tap the encoder to open the menu, turn to choose, tap to edit, turn to adjust, tap to go back, hold half a second to
-leave. Outside the menu a turn adjusts whatever you chose last, with a toast on the screen. Save, Load and Who is
-there run only from the menu (tap); a turn outside it does nothing for them.
+leave. The menu is a list, four settings at a time, in groups: PLAY, TILT, SOUND, VOICE, SLOTS, LINK, SYSTEM. The
+top of the screen names the group and where you are in the list. Editing shows the value large. The loop keeps
+playing, and REC and the left knob keep working, while the menu is open.
+
+Outside the menu a turn adjusts whatever you chose last, with a toast on the screen. Save, Load, Who is there and
+Board check run only from the menu (tap); a turn outside it does nothing for them.
+
+| ![The menu](../media/screens/menu-save.png) | ![Editing](../media/screens/menu-edit.png) | ![Board check](../media/screens/check.png) |
+| - | - | - |
+| the list | editing a setting | the board check |
+
+The table is in the order of the MIDI CCs, not of the list on the screen.
 
 | Setting | Range | Step | Default | What it does |
 | - | - | - | - | - |
@@ -162,11 +211,15 @@ there run only from the menu (tap); a turn outside it does nothing for them.
 | Save | | | | Writes the loop to the slot. The sound fades out, a bar runs under SAVING, then SAVED, and the loop fades back in. A few seconds, more for a long loop. |
 | Load | | | | Reads the slot back. Same fade. Recording is ignored while a save or load runs. |
 | Speaker | on, off | | on | Off silences the speaker amp; the line out and USB keep playing. For when the speaker feeds back into the mic. Not on MIDI. |
-| Rec button | on, off | | on | Off ignores the stick's button (for a board whose REC pin is stuck); BOOT and MIDI note 60 still record. Not on MIDI. |
+| Rec button | on, off | | on | Off ignores REC (for a board whose REC pin is stuck); BOOT and MIDI note 60 still record. Not on MIDI. |
 | Link | on, off | | on | The radio to the other instruments (see With the other instruments). Not on MIDI. |
 | Group | 1 to 8 | | 1 | Boards in the same group play together. |
 | Range | NEAR, ROOM, FAR | | ROOM | The radio's power: 2, 8 or 14 dBm. Lower is kinder to the supply. |
 | Who is there | | | | Names the boards heard right now. |
+| Knob | JOG, SPEED, PITCH, FILTER | | JOG | What the left knob turns (rev E). "not fitted" on a board without it. Not on MIDI. |
+| Hand | OFF, FILTER, PITCH, BRAKE, VOLUME, ECHO | | FILTER | What a hand over the sensor does (rev E). "no sensor" without one. Not on MIDI. |
+| Loop start | SOUND, PRESS | | SOUND | SOUND: a take starts at the first sound. PRESS: at the press. Not on MIDI. |
+| Board check | | | | Shows every part and control live: the tilt, the hand's height in mm, both knobs counting, REC, the encoder's click, the mic's level, the boards on the link. Tap the encoder to leave. For checking a board you built. |
 
 Settings stay on the board. A change is written 3 seconds after the last one when no loop is playing, and 30
 seconds after it while a loop plays. Never while recording.
@@ -177,7 +230,7 @@ It cannot be bricked, and it can always be put back to how it came.
 
 | | |
 | - | - |
-| Factory reset | Hold the stick down while plugging in and keep it down. The screen counts "RESET? keep holding REC" 3, 2, 1, then asks you to let go: let go and the default settings are restored. Let go earlier and nothing happens. A button still down 6 s after power-on is taken as stuck: no reset, the screen says REC IS STUCK, BOOT records until the button has been up for a moment. Not with Rec button off. The saved loops stay. |
+| Factory reset | Hold REC down while plugging in and keep it down. The screen counts "RESET? keep holding REC" 3, 2, 1, then asks you to let go: let go and the default settings are restored. Let go earlier and nothing happens. A button still down 6 s after power-on is taken as stuck: no reset, the screen says REC IS STUCK, BOOT records until the button has been up for a moment. Not with Rec button off. The saved loops stay. |
 | Safe mode | Three crashes in a row and the next boot starts from the default settings and keeps them, so a bad value can never lock you out. Ten seconds of normal running clears the count, and so does unplugging it. |
 | Recovery | Whatever the firmware does, the chip's own download mode is reachable: hold BOOT, tap RST (or plug in with BOOT held), release BOOT. The flasher then sees the board. |
 | Console mode | Hold the encoder down while plugging in and the board keeps its plain serial console. USB MIDI and the sound card stay off; the looper and the line out still work. That is for developers. If the computer sees no Samplooler port, plug in again without touching anything. |
@@ -189,7 +242,7 @@ It cannot be bricked, and it can always be put back to how it came.
 | Safe saves | A loop is written to a temporary file and renamed at the end, so a power cut mid-save never leaves a half slot. |
 | Self-healing storage | Corrupt settings storage is re-formatted on boot. A slot filesystem that will not mount is re-formatted: the loops are lost, the device is not. |
 | Quiet start | The optional speaker amp is held off until the audio clock has run clean for 50 ms, so power-up does not thump. |
-| Screensaver | With no loop and three minutes without a touch, the screen drifts to a sleeping operator, so the OLED does not burn in. Any control wakes it. |
+| Screensaver | With no loop and three minutes without a touch, the screen drifts to a sleeping operator, so the OLED does not burn in. Any control wakes it. A loop left playing with the box lying still dims the screen after a minute, and after ten minutes leaves only the operator running in the dark. |
 
 ## With a computer
 
@@ -242,6 +295,7 @@ Channel 1. The CCs are sent when they change.
 | CC 4 | Loop position |
 | CC 5, 6 | Joystick X and Y. They stay at 64: the firmware does not read the stick's axes. |
 | CC 7 | Input level |
+| CC 8 | The hand (rev E): 0 no hand, 127 fully down |
 | CC 20 to 34 | A setting, when it changes on the device |
 | Note 60 | On while recording |
 | Note 62 | On while playing |
@@ -317,12 +371,15 @@ After a restart that was not a clean one, the screen says why for a few seconds 
 | SAFE MODE: 3 crashes | Three crashes in a row. It is running on the default settings. | The same. |
 | BROWNOUT | The supply dipped. | Try another USB port or cable. A speaker amp must draw from 5 V, not from the 3.3 V pin. |
 | NO PSRAM | The SuperMini is not the FH4R2 variant. The firmware needs its PSRAM for the take. | Fit an ESP32-S3FH4R2 SuperMini. |
-| RESET? keep holding REC | The stick was held down at power-on: the factory reset is counting. | Let go to cancel. |
-| REC IS STUCK | The stick's button was still down 6 s after power-on. | Nothing to do if it was you. If it was not, the button or its pin (GPIO 3) is shorted: BOOT records meanwhile, or set Rec button off. |
+| RESET? keep holding REC | REC was held down at power-on: the factory reset is counting. | Let go to cancel. |
+| REC IS STUCK | REC was still down 6 s after power-on. | Nothing to do if it was you. If it was not, the button or its pin (GPIO 3) is shorted: BOOT records meanwhile, or set Rec button off. |
 
 | Symptom | What to try |
 | - | - |
 | No sound | Check Volume is not 0. The line out is line level: powered speakers, an interface or a headphone amp, not bare headphones. On a board you built, see [BUILD.md](BUILD.md#when-something-is-wrong). |
+| LISTENING stays and nothing records | The take waits for a sound louder than it hears. Turn Mic gain up, or set Loop start to PRESS. |
+| Knob says "not fitted" on a rev E | The firmware saw a joystick's voltage on the left knob's pins, or the knob is not soldered. Board check shows what it found. |
+| The hand does nothing | Hand is OFF, or the menu says "no sensor": the VL53L1X is not answering. Board check shows its reading. |
 | Plays at one speed whatever the angle | Tilt is off in the menu, or the tilt sensor is not answering (the log says "no MPU6050"). Either way the ball at the bottom left of the screen is crossed out. |
 | Block at the right end of the input meter | The mic clipped. Turn Mic gain down. |
 | Settings lost after a power cycle | Wait half a minute after the last change before you unplug. |
@@ -344,17 +401,18 @@ device logs them once a minute.
 | Take | 20 s, 16-bit in PSRAM, played back in 32-bit float |
 | Speed | 0 to 8x, forward and backwards, TAPE or GRAIN |
 | Effects | Delay, 380 ms. Stutter, 260 ms down to 12 ms. |
-| Sensor | MPU-6050, pitch and roll, 50 readings a second |
+| Sensor | MPU-6050, pitch and roll, 50 readings a second. Rev E: a VL53L1X for the hand, 40 readings a second |
 | Storage | 8 slots as mono 16-bit WAV on a 2.4 MB wear-levelled flash partition |
 | USB | USB-C, USB 2.0 full speed. MIDI 1.0 and USB Audio Class 2, stereo 16-bit 32 kHz both ways. No driver. |
 | Radio | ESP-NOW between the instruments on Wi-Fi channel 1, 2 to 14 dBm; no network, no pairing. |
-| Screen | SSD1306 128 x 64 OLED, 20 frames per second |
+| Screen | SSD1306 128 x 64 OLED, 30 frames per second |
 | Power | 5 V over USB-C, about 150 mA; more with a speaker amp |
 | Size | Two 94 x 46 mm boards, 11 mm apart; about 25 mm tall to the top of the knob, plus the stick |
 | Firmware | ESP-IDF 5.5.1, GPL-3.0 |
 
-Current draw is an estimate from the parts' datasheets, not a measurement. Rev C is the current board: it was made
-and runs this firmware. Rev D, the board files in [hardware/](../hardware/), is being tested now (October 2026).
+Current draw is an estimate from the parts' datasheets, not a measurement. Rev C is the board that was made. It ran
+firmware 0.1; version 0.2 (the list menu, the takes that start at the first sound, the left knob and the hand) has
+been built and tested on a PC only, and has not run on any board yet. Rev D, the board files in [hardware/](../hardware/), is being tested now (October 2026).
 
 ## Other instruments
 
