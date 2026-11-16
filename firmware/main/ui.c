@@ -803,8 +803,33 @@ static void check_scene(const ui_t *u)
     oled_flush();
 }
 
-void ui_draw(const ui_t *u)
+// Whatever main.c hands over, the drawing code gets numbers it can count on: finite, in range, and a state it knows.
+// (A NaN angle or a loop length of minus one would otherwise decide how many pixels a loop draws.)
+static float fin(float x, float lo, float hi) { return !(x >= lo) ? lo : x > hi ? hi : x; }   // a NaN lands on lo
+static void clean(ui_t *v)
 {
+    v->state = v->state == REC_RECORDING || v->state == REC_PLAYING ? v->state : REC_IDLE;
+    v->mode = v->mode == REC_MODE_GRAIN ? REC_MODE_GRAIN : REC_MODE_TAPE;
+    v->speed_now = fin(v->speed_now, -16, 16); v->speed_cmd = fin(v->speed_cmd, -16, 16); v->spd_max = fin(v->spd_max, 0, 16);
+    v->pitch_ratio = fin(v->pitch_ratio, 0.01f, 100); v->tilt_pitch = fin(v->tilt_pitch, -180, 180); v->tilt_roll = fin(v->tilt_roll, -180, 180);
+    v->pos = fin(v->pos, 0, 1); v->rec_fill = fin(v->rec_fill, 0, 1); v->loop_s = fin(v->loop_s, 0, 999); v->max_s = clampi(v->max_s, 0, 999);
+    v->meter_in = fin(v->meter_in, 0, 4); v->meter_out = fin(v->meter_out, 0, 4); v->cpu = clampi(v->cpu, 0, 999);
+    v->param_frac = fin(v->param_frac, -1, 1); v->busy_frac = fin(v->busy_frac, 0, 1);
+    v->toast_ms = clampi(v->toast_ms, 0, 60000); v->idle_ms = v->idle_ms < 0 ? 0 : v->idle_ms; v->still_ms = v->still_ms < 0 ? 0 : v->still_ms;
+    v->peers = clampi(v->peers, 0, 99); v->param = clampi(v->param, 0, 998); v->param_n = clampi(v->param_n, 0, 999);
+    v->jog = fin(v->jog, -16, 16); v->hand = fin(v->hand, 0, 1); v->filter = fin(v->filter, -1, 1); v->knob_st = clampi(v->knob_st, -99, 99);
+    v->knob_mode = clampi(v->knob_mode, 0, UI_KNOB_N - 1); v->hand_mode = clampi(v->hand_mode, 0, UI_HAND_N - 1);
+    v->menu_n = clampi(v->menu_n, 0, 999); v->menu_sel = clampi(v->menu_sel, 0, v->menu_n > 0 ? v->menu_n - 1 : 0);
+    v->hand_mm = clampi(v->hand_mm, 0, 9999); v->chk_enc = clampi(v->chk_enc, -9999, 9999); v->chk_knob = clampi(v->chk_knob, -9999, 9999);
+    for (int r = 0; r < UI_ROWS; r++) v->row_val[r][UI_VAL_N - 1] = 0;
+    if (v->state != REC_RECORDING) v->waiting = false;
+}
+
+void ui_draw(const ui_t *in)
+{
+    ui_t v = *in;
+    clean(&v);
+    const ui_t *u = &v;
     clock_step(u);
     oled_dim(u->dim);
     if (splash()) return;
@@ -823,21 +848,21 @@ void ui_draw(const ui_t *u)
     if (menu_t < 0.02f && !u->menu) { menu_t = 0; list_sel = -1; edit_t = 0; }
     if (menu_t > 0.98f && u->menu) menu_t = 1;
     oled_clear();
-    ui_t v = *u; v.clip = clip_flash > 0;
-    header(&v, listed && menu_t > 0.5f);
+    v.clip = clip_flash > 0;
+    header(u, listed && menu_t > 0.5f);
     if (!(listed && menu_t >= 1.0f)) {                          // the tape, unless the list covers it all
-        tape(&v);
-        if (u->busy_text) busy_scene(&v);
+        tape(u);
+        if (u->busy_text) busy_scene(u);
         else if (u->note && !u->menu) note_scene(u->note);
         else {
-            operator_(&v);
-            if (u->toast_ms > 0 && !u->menu) toast(&v); else bottom_strip(&v);
+            operator_(u);
+            if (u->toast_ms > 0 && !u->menu) toast(u); else bottom_strip(u);
         }
     }
     if (menu_t > 0.0f) {
         float e = menu_t * (2.0f - menu_t);
-        if (listed) menu_list(&v, (int)((1.0f - e) * (float)(OLED_H - BODY_Y)));
-        else menu_strip(&v, e);
+        if (listed) menu_list(u, (int)((1.0f - e) * (float)(OLED_H - BODY_Y)));
+        else menu_strip(u, e);
     }
     if (flash > 0) { flash -= dt; oled_invert(0, 0, OLED_W, OLED_H); }
     oled_flush();

@@ -329,11 +329,15 @@ static void clamp_settings(void)
     S.knob     = clampi(S.knob, 0, UI_KNOB_N - 1);
     S.hand     = clampi(S.hand, 0, UI_HAND_N - 1);
 }
-// How a take starts and ends: the Loop start setting and the tuning table's rec.* (frames at 32 kHz).
+// How a take starts and ends: the Loop start setting and the tuning table's rec.* (frames at 32 kHz). The guard after
+// the press and the cut before the release are for a switch that clicks next to the mic: a take asked for over MIDI
+// or by the rig, or one that records the USB stream, has no click in it and loses nothing (take_clicks false).
+static bool take_clicks = true;
 static void apply_take(void)
 {
     const int ms = REC_SAMPLE_RATE / 1000;
-    recorder_set_take(S.start_sound, exp2f(TV(TU_RE_START_DB) / 6.0206f), TI(TU_RE_PREROLL) * ms, TI(TU_RE_GUARD) * ms, TI(TU_RE_TAIL) * ms);
+    bool cl = take_clicks && S.input == AUDIO_IN_MIC;
+    recorder_set_take(S.start_sound, exp2f(TV(TU_RE_START_DB) / 6.0206f), TI(TU_RE_PREROLL) * ms, cl ? TI(TU_RE_GUARD) * ms : 0, cl ? TI(TU_RE_TAIL) * ms : 0);
 }
 static void apply_settings(void)
 {
@@ -641,6 +645,7 @@ void app_main(void)
             rig_motion(src, n, f0, TI(TU_IMU_ARANGE) | TI(TU_IMU_GRANGE) << 2, flags);
         }
         bool down = gpio_get_level(PIN_BOOT) == 0 || midi_rec_hold;
+        bool by_switch = gpio_get_level(PIN_BOOT) == 0;      // a switch is what records (BOOT, REC), not MIDI or the rig
 #if HAS_CONTROLS
         input_poll(&in);
         in_has_joy = in.has_joy; in_jx = in.jx; in_jy = in.jy; in_raw_x = in.raw_x; in_raw_y = in.raw_y;
@@ -650,6 +655,7 @@ void app_main(void)
             rec_up_ms = in.rec ? 0 : rec_up_ms + 10;
             if (rec_up_ms >= 100) { rec_stuck = false; ESP_LOGI(TAG, "REC let go: it records again"); }
         }
+        by_switch = by_switch || (in.rec && S.rec_button && !rec_stuck);
         down = down || (in.rec && S.rec_button && !rec_stuck) || in.rec_pc;
 #endif
         if (job != JOB_NONE) down = false;                    // a slot job owns the take
@@ -674,6 +680,7 @@ void app_main(void)
         bool now = held_n >= deb ? true : held_n == 0 ? false : held;
         if (now != held) {
             static int64_t rec_t0;                            // rec.up carries how long REC was down
+            if (now && take_clicks != by_switch) { take_clicks = by_switch; apply_take(); }   // before the press reaches the recorder
             held = now; recorder_set_record(held);
             if (held) rec_t0 = esp_timer_get_time();
             gest_emit(held ? "rec.down" : "rec.up", 0, held ? 0 : (int)((esp_timer_get_time() - rec_t0) / 1000), "");
