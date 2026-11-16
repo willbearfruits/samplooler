@@ -9,6 +9,10 @@ The breath detector was reworked on 2026-10-22 for noisy rooms, with the six new
 range; checked in the host simulator (`tools/sim`, 126 checks) and on a board the same day, where the breath's
 real levels set the defaults. Not played much yet.
 
+Rev E of the board (the Vessel) has no joystick. It has a second knob on the left and a sensor that measures how
+high a hand is held over the board. Since 2026-11-16 HUFF uses both: the left knob is the octave, the hand is a
+mute. This is tested in the simulator only. No rev E board has run it.
+
 ![HUFF starting up](images/splash.gif) ![playing a tune](images/play.gif) ![a guitar solo](images/solo.gif)
 
 ## Playing
@@ -43,13 +47,18 @@ yet. A kick drum alone can still give a whisper.
 | blow | play; harder is louder (the guitar: harder is more sustain) |
 | tilt (bottom edge down / up) | higher / lower note (PITCH > TILT SPAN up to 180 degrees, PLAY > NOTES up to 24) |
 | lean left or right | vibrato (or a bend, see PITCH > LEAN DOES) |
-| joystick left / right | bend the note (2 semitones; PITCH > BEND RANGE) |
-| joystick up | more vibrato (PITCH > STICK UP/DN: or brightness, or octaves) |
+| joystick left / right (boards with a joystick) | bend the note (2 semitones; PITCH > BEND RANGE) |
+| joystick up (boards with a joystick) | more vibrato (PITCH > STICK UP/DN: or brightness, or octaves) |
+| left knob (rev E) | the octave: one click is one octave, from two down to two up. It is PLAY > OCTAVE, and it stays where you leave it |
+| a hand over the sensor (rev E) | a mute, like a hand over a trumpet's bell: the lower the hand, the darker and quieter. Fully down (4 cm) it is muffled, not silent. Wave the hand for a wah. PITCH > HAND DOES can make it vibrato or a bend instead |
 | turn the knob | next or previous sound |
 | press the knob | menu |
 | press the knob twice | the knob turns the volume, until it rests 3 s or you press it again |
 | hold the knob | keep the current note while you move (the tilt is held); again to let go |
-| REC | hold: record or add to the loop; tap: stop or play it |
+| REC (rev E: push the left knob) | hold: record or add to the loop; tap: stop or play it |
+
+Rev E's two controls are tested in the simulator only. They have run on no board. What a rev E cannot do that a
+board with a joystick can is listed in the manual ("Rev E").
 
 ## With other boards
 
@@ -90,7 +99,7 @@ four octaves down, so anything can be a bass.
 | - | - |
 | notes | the note you play, velocity from the breath |
 | CC 2 | breath |
-| pitch bend | the joystick's bend (full scale = BEND RANGE) |
+| pitch bend | the bend from the joystick, the lean or the hand (full scale = BEND RANGE) |
 | CC 20 and up | every setting, when you change it (the link's switches excepted) |
 | program change | the sound |
 

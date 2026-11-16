@@ -33,6 +33,11 @@
 // the mic); MIDI notes in override it while held, so a keyboard can play it while you blow. MIDI out:
 // notes, breath as CC 2, the bend as pitch bend.
 //
+// Rev E (the Vessel) has no joystick. Its left knob steps PLAY > OCTAVE, an octave a detent, between two down and two
+// up. A hand held over its sensor is a mute over the bell (HAND DOES: MUTE): a low pass that comes down over the
+// output with the hand, a little resonance on its edge, so a waved hand is a wah; fully down it is muffled, not
+// silent. HAND DOES can give the hand the stick's vibrato or its bend instead. Simulator only: no rev E has run it.
+//
 // The link (link.h): KEY and SCALE are the flock's harmony (change them here and the other boards follow, as
 // theirs change HUFF's), the SONG page's TEMPO is the flock's, and ECHO BEATS puts the echo on its beat.
 #include "core.h"
@@ -57,6 +62,7 @@ enum {
     P_BRANGE,
     P_ESYNC, P_TEMPO, P_LINK, P_GROUP, P_RANGE, P_PEERS,      // added with the link (2026-10-19): after the hidden one, so CCs stay
     P_DRIVE, P_NOISE, P_BWIND,                                // 2026-10-22: the amp, the room, the learned breath/room band ratio
+    P_HAND,                                                   // 2026-11-16: what a hand over rev E's sensor does
     P_N
 };
 enum { G_PLAY, G_PITCH, G_BREATH, G_TONE, G_SPACE, G_SONG, G_LINK, G_N };
@@ -88,6 +94,9 @@ enum { H_OFF, H_THIRD, H_FIFTH, H_OCTUP, H_OCTDN, H_DRONE, H_DRONE5 };
 static const char *const esync_l[] = { "OFF", "1/8", "1/8 DOT", "1/4", "1/4 DOT", "1/2" };
 static const float esync_beats[] = { 0, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f };
 static const char *const range_l[] = { "NEAR", "ROOM", "FAR" };
+static const char *const hand_l[] = { "MUTE", "VIBRATO", "BEND UP", "BEND DOWN" };
+enum { HD_MUTE, HD_VIB, HD_BENDUP, HD_BENDDN };
+#define OCT_KNOB 2             // rev E's left knob steps OCTAVE between this many down and up
 #define SYS (PF_SYS | PF_NOCC)
 
 static const param_t params[P_N] = {
@@ -134,6 +143,7 @@ static const param_t params[P_N] = {
     [P_DRIVE]  = { "DRIVE", "driv", G_TONE, PK_NUM, PF_INT, 0, 100, 5, 0, "%", NULL, "THE AMP: CLEAN TO FUZZ" },
     [P_NOISE]  = { "ROOM NOISE", "nois", G_BREATH, PK_NUM, PF_INT, 0, 100, 5, 50, "%", NULL, "MORE: ONLY WIND COUNTS" },
     [P_BWIND]  = { "BREATH BANDS", "bwnd", G_BREATH, PK_NUM, PF_HIDE | PF_SYS | PF_NOCC | PF_LOG, 0.3f, 20.0f, 1.1f, 0.6f, "", NULL, "SET BY BREATH SETUP" },
+    [P_HAND]   = { "HAND DOES", "hndo", G_PITCH, PK_ENUM, PF_SYS, 0, 3, 1, HD_MUTE, "", hand_l, "A HAND OVER THE SENSOR" },
 };
 
 // ---------------------------------------------------------------- the sounds
@@ -173,6 +183,8 @@ static const hint_t hints[] = {
     { "BLOW SOFT, THEN HARDER: IT FOLLOWS", L_OVERBLOW },
     { "TURN THE KNOB: NEW SOUND", LEARN_TURN },
     { "STICK LEFT OR RIGHT BENDS THE NOTE", LEARN_JOY },
+    { "LEFT KNOB: AN OCTAVE UP OR DOWN", LEARN_LKNOB },
+    { "A HAND OVER THE MIDDLE: MUTE, WAH", LEARN_HAND },
     { "HOLD REC TO LOOP, THEN PLAY ALONG", LEARN_REC },
     { "HOLD THE KNOB TO KEEP THE NOTE", LEARN_HOLD },
     { "PRESS THE KNOB FOR MORE", LEARN_MENU },
@@ -232,6 +244,7 @@ static volatile float a_midi = 72.0f, a_midi_h = 79.0f;   // target notes (MIDI,
 static volatile float a_bend;                            // semitones
 static volatile float a_vib;                             // vibrato depth now, semitones
 static volatile float a_bright_add;                      // brightness from the joystick, -0.5..0.5
+static volatile float a_hmute;                           // rev E: the hand as a mute, 0 away .. 1 fully down
 static volatile int   a_harm_on;                         // the harmony voice sounds
 static volatile int   a_mute;                            // breath setup listens with the voice off
 static volatile int   a_hum;                             // PITCH FROM HUMMING: a voice at the mic is the point, not noise
@@ -285,6 +298,17 @@ static float mfloor = 0.001f;                    // the room's middle, learned a
 static bool  bopen; static int open_n, close_n, unwind_n, cool_n, voice_n; static float open_pk;   // the breath gate
 static float lring[512]; static uint32_t lw; static float ac200, ac266;   // the low band's autocorrelation at two lags: a tone or not
 static float drive_s, cab_z, cab_k;              // the amp
+// the hand's mute (rev E): a state variable low pass after the amp. Its cutoff comes down with the hand from 6x the
+// note (2.5 to 12 kHz) to 1.2x the note (never under MUTE_LOW: low notes keep a body), so it closes over the note that
+// plays, high or low; its Q is 0.7 at both ends and 1.9 two thirds of the way down, where the cutoff is among the
+// note's first harmonics (the edge that makes a waved hand a wah; higher up it would make a lowered hand brighter
+// first); its level goes to 62 %. The hand is smoothed per sample (16 ms: the core hands it over in 10 ms steps), the
+// cutoff and the Q ramp per sample between their block-rate targets, and the whole fades in over the hand's first
+// eighth. No hand: it is not run, and the output is what it was. It sits before the echo, the reverb and the looper:
+// what is recorded through it is recorded muted, a loop that plays is not touched
+#define MUTE_LOW  350.0f
+static float mute_s, mute_g, mute_k, mute_ic1, mute_ic2;
+static bool  mute_on;
 static int   over;
 static float b_slow;
 static float vib_ph;
@@ -310,7 +334,7 @@ static float  echo_d_s = 0.33f * AUDIO_SR, echo_lp;
 static bool   echo_awake; static int echo_quiet;
 static float  fx_rvb_s, fx_echo_s;
 static float  a4_s = 440.0f, bend_s, vib_s;
-static float  blk_0005, blk_0008, blk_0015;       // the per-sample smoothers' steps over a whole block (set in init)
+static float  blk_0005, blk_0008, blk_0015, blk_002;   // the per-sample smoothers' steps over a whole block (set in init)
 static volatile int v_sleep;                      // what sleeps now: 1 the voice, 2 the harmony, 4 the reverb, 8 the echo (for tools/sim)
 int huff_sleep(void) { return v_sleep; }
 
@@ -674,6 +698,18 @@ static void audio(const float *in, float *out, int n)
     tone_k_s += 0.3f * (onepole_hz(clampf(tone_hz, 300.0f, 14000.0f)) - tone_k_s);
     float tone_k = tone_k_s;
     float drv = pv[P_DRIVE] * 0.01f;
+    // the hand's mute: where the cutoff and the Q should be at the end of this block
+    float mt = a_hmute, mute_dg = 0, mute_dk = 0;
+    bool muting = mt > 0.0f || mute_s > 0.0005f;
+    if (muting) {
+        float fn = a4 * exp2f((vo[0].m_s + bend_s - 69.0f) / 12.0f) * (vo[0].fold ? 0.5f : 1.0f);
+        if (ob) fn *= exp2f(md->ob_st / 12.0f);                      // overblown: the note that sounds
+        float lo = clampf(1.2f * fn, MUTE_LOW, 5000.0f), hi = clampf(6.0f * fn, 2500.0f, 12000.0f);
+        float fc = lo * exp2f((1.0f - mute_s) * log2f(hi / lo));
+        float g_t = tanf(3.14159265f * fc / (float)AUDIO_SR), k_t = 1.0f / (0.7f + 8.1f * mute_s * mute_s * (1.0f - mute_s));
+        if (!mute_on) { mute_on = true; mute_g = g_t; mute_k = k_t; mute_ic1 = mute_ic2 = 0; }   // it starts where it should be
+        mute_dg = (g_t - mute_g) / (float)n; mute_dk = (k_t - mute_k) / (float)n;
+    } else { mute_s = 0; mute_on = false; }
     // effects
     float size = pv[P_SIZE] * 0.01f, rt = 0.5f + 5.5f * size * size;
     float g_t = exp2f(-3.0f * 3.3219f * 1500.0f / (rt * (float)AUDIO_SR));     // per pass of an average line
@@ -697,6 +733,7 @@ static void audio(const float *in, float *out, int n)
         harm_g += blk_0005 * (hw - harm_g); efb_s += blk_0005 * (efb - efb_s);
         fx_echo_s += blk_0005 * (echo_t - fx_echo_s); fx_rvb_s += blk_0005 * (rvb_t - fx_rvb_s); rv_g_s += blk_0005 * (g_t - rv_g_s);
         vib_s += blk_0008 * (vib - vib_s); bend_s += blk_0015 * (bend - bend_s); drive_s += blk_0005 * (drv - drive_s);
+        if (muting) { mute_s += blk_002 * (mt - mute_s); mute_g += mute_dg * (float)n; mute_k += mute_dk * (float)n; mute_ic1 = mute_ic2 = 0; }
         vib_ph = wrap1(vib_ph + (float)n * vib_inc);
         vo[0].m_s += kg * (tgt - vo[0].m_s); vo[1].m_s += kg * (tgt_h - vo[1].m_s);
     } else
@@ -734,6 +771,16 @@ static void audio(const float *in, float *out, int n)
             cab_z += cab_k * (o - cab_z);
             o += drive_s * (cab_z - o);
             y += drive_s * (o - y);
+        }
+        // the hand's mute: darker and a little quieter the lower the hand; faded in over its first eighth
+        if (muting) {
+            mute_s += 0.002f * (mt - mute_s);
+            mute_g += mute_dg; mute_k += mute_dk;
+            float a1 = 1.0f / (1.0f + mute_g * (mute_g + mute_k)), a2 = mute_g * a1, a3 = mute_g * a2;
+            float v3 = y - mute_ic2, v1 = a1 * mute_ic1 + a2 * v3, v2 = mute_ic2 + a2 * mute_ic1 + a3 * v3;
+            mute_ic1 = 2.0f * v1 - mute_ic1; mute_ic2 = 2.0f * v2 - mute_ic2;
+            float mix = mute_s < 0.125f ? 8.0f * mute_s : 1.0f;
+            y += mix * (v2 * (1.0f - 0.38f * mute_s) - y);
         }
         float ay = fabsf(y); if (ay > ypk) ypk = ay;
         // effects
@@ -783,6 +830,7 @@ static void audio(const float *in, float *out, int n)
         if (!fed && wpk < 1e-5f) { if (++rvb_quiet >= 32) { rvb_awake = false; rvb_quiet = 0; } } else rvb_quiet = 0;
     }
     harm_g = flush_denormal(harm_g); vib_s = flush_denormal(vib_s); bend_s = flush_denormal(bend_s); cab_z = flush_denormal(cab_z);
+    mute_s = flush_denormal(mute_s); mute_ic1 = flush_denormal(mute_ic1); mute_ic2 = flush_denormal(mute_ic2);
     fx_echo_s = flush_denormal(fx_echo_s); fx_rvb_s = flush_denormal(fx_rvb_s); efb_s = flush_denormal(efb_s);
     bms = flush_denormal(bms); b_smooth = flush_denormal(b_smooth); b_slow = flush_denormal(b_slow);
     // our own low band, as the mic would hear it from the speaker (for the next block's threshold)
@@ -816,8 +864,12 @@ static float breath_s, amp_s, cc_breath_t;
 static int   blow_ms, over_was, over_flash;
 static float voice_hz, voice_conf;       // HUMMING: what YIN heard
 static float voice_m = -1;               // ... snapped, held until the voice moves well away
-float huff_dbg(int k) { return k == 0 ? v_benv : k == 1 ? v_floor : k == 2 ? v_oenv : k == 3 ? voice_hz : k == 4 ? voice_m : k == 5 ? v_menv : k == 6 ? (float)v_open : k == 7 ? vo[0].dyn : k == 8 ? vo[0].str_g : k == 9 ? vo[0].press_s : ac266 / (bms + 1e-9f); }   // for tools/sim
+float huff_dbg(int k) { return k == 11 ? mute_s : k == 12 ? a_bend : k == 13 ? a_vib : k == 14 ? a_hmute : k == 0 ? v_benv : k == 1 ? v_floor : k == 2 ? v_oenv : k == 3 ? voice_hz : k == 4 ? voice_m : k == 5 ? v_menv : k == 6 ? (float)v_open : k == 7 ? vo[0].dyn : k == 8 ? vo[0].str_g : k == 9 ? vo[0].press_s : ac266 / (bms + 1e-9f); }   // for tools/sim
 static int   ytick;
+// rev E: what the screen shows of the left knob and the hand
+static bool  ui_lknob, ui_hand_on;       // the board has them
+static float ui_hand;                    // the hand, 0 away .. 1 fully down, as the core glides it
+static int   oct_show;                   // frames the octave's pill still shows after the left knob turned
 // breath setup
 static int   setup_step, setup_ms;
 static float setup_quiet, setup_blow, setup_peak, setup_wind, setup_qmid;
@@ -946,7 +998,7 @@ static void init(void)
 {
     ms_k = onepole_s(0.03f); lp_k = onepole_hz(250.0f); mk1 = onepole_hz(500.0f); mk2 = onepole_hz(4000.0f); cab_k = onepole_hz(4500.0f);
     blk_0005 = 1.0f - powf(1.0f - 0.0005f, (float)AUDIO_BLOCK); blk_0008 = 1.0f - powf(1.0f - 0.0008f, (float)AUDIO_BLOCK);
-    blk_0015 = 1.0f - powf(1.0f - 0.0015f, (float)AUDIO_BLOCK);
+    blk_0015 = 1.0f - powf(1.0f - 0.0015f, (float)AUDIO_BLOCK); blk_002 = 1.0f - powf(1.0f - 0.002f, (float)AUDIO_BLOCK);
     biquad_set(&out_hp, BQ_HP, 60.0f, 0.707f, 0);
     for (int k = 0; k < 2; k++) voice_reset(&vo[k]);
     echo_buf = app_alloc(ECHO_N * sizeof(float));
@@ -1102,6 +1154,20 @@ static void tick(const ctl_t *c)
     over_was = v_over;
     if (cc_breath_t > 0) { cc_breath_t -= 0.01f; if (cc_breath_t <= 0) a_cc_breath = 0; }
 
+    // ---- rev E: the left knob steps PLAY > OCTAVE, a detent an octave, between two down and two up. A setting the menu
+    // put lower than that stays until the knob turns up. The note changes as it does when the tilt changes it
+    ui_lknob = c->has_lknob;
+    if (c->has_lknob && c->lknob) {
+        int o = (int)pv[P_OCT], n = clampi(o + c->lknob, o < -OCT_KNOB ? o : -OCT_KNOB, o > OCT_KNOB ? o : OCT_KNOB);
+        if (n != o) param_set(P_OCT, (float)n);
+        oct_show = 30;
+    }
+    // ... and the hand over the sensor: a mute, or the stick's vibrato or bend (HAND DOES)
+    int hd = (int)pv[P_HAND];
+    float hand = c->has_hand ? c->hand : 0.0f;
+    ui_hand_on = c->has_hand; ui_hand = hand;
+    a_hmute = hd == HD_MUTE ? hand : 0.0f;
+
     // ---- where the note comes from
     int src = (int)pv[P_SOURCE];
     if (src == 1 && !c->has_joy) src = 0;
@@ -1161,12 +1227,14 @@ static void tick(const ctl_t *c)
     if (c->has_joy) bend += c->jx * pv[P_BENDR];
     int lm = (int)pv[P_LEAN];
     if (c->has_imu && lm == 1) bend += clampf(c->lean_x / 40.0f, -1.0f, 1.0f) * pv[P_BENDR];
+    if (hd == HD_BENDUP) bend += hand * pv[P_BENDR]; else if (hd == HD_BENDDN) bend -= hand * pv[P_BENDR];
     a_bend = bend;
     float vdel = pv[P_VIBD];
     if (b > 0.05f) vib_env = vdel > 0.01f ? fminf(1.0f, vib_env + 0.01f / vdel) : 1.0f; else vib_env = 0;
     float depth = pv[P_VIB] * 0.01f * vib_env;
     if (c->has_imu && lm == 0) depth += clampf((fabsf(c->lean_x) - 10.0f) / 30.0f, 0.0f, 1.0f);
     if (c->has_joy && jy_mode == 0 && c->jy > 0) depth += c->jy;
+    if (hd == HD_VIB) depth += hand;                              // as the stick pushed up
     a_vib = 0.5f * depth;                                         // 100 %: half a semitone each way
     a_bright_add = c->has_joy && jy_mode == 1 ? 0.5f * c->jy : 0.0f;
 
@@ -1404,6 +1472,41 @@ static void ladder(int x, int y0, int y1)
     oled_line(x - 4, by - 2, x - 2, by, true); oled_line(x - 4, by + 2, x - 2, by, true); oled_pixel(x - 4, by - 1, true); oled_pixel(x - 4, by + 1, true); oled_pixel(x - 3, by, true);
 }
 
+// Rev E. The hand's shade over the instrument (HAND DOES: MUTE): it comes down from the top with the hand, what it
+// covers goes dim, and its edge is the palm. Fully down the whole instrument is under it.
+static void shade(float h)
+{
+    int edge = 18 + (int)lroundf(h * 27.0f);                       // the palm's row: 18 (just seen) .. 45
+    for (int y = 17; y < edge; y++)
+        for (int x = 2; x <= 61; x++) if (((x + (y >> 1)) & 1) == 0) oled_pixel(x, y, false);
+    oled_rect(2, edge - 2, 60, 5, false);
+    oled_rrect(8, edge - 1, 46, 3, 1, true);                       // the hand, flat, seen from its edge: the fingers to
+    for (int x = 13; x <= 28; x += 5) oled_rect(x, edge - 1, 1, 2, false);   // the left, the thumb standing up on the right
+    oled_rect(47, edge - 3, 3, 2, true);
+}
+// ... the hand in words and a bar, where the model's name is while no hand is there
+static void hand_line(int x, int y, int w, float h)
+{
+    static const char *const word[] = { "MUTE", "VIB", "BEND", "BEND" };
+    int hd = clampi((int)pv[P_HAND], 0, 3);
+    int x0 = oled_ftext_ex(F_TINY, x, y, word[hd], 1) + 3, bw = x + w - x0;
+    oled_hline_pat(x0, y + 2, bw, 0x55, true);
+    oled_rect(x0, y + 1, (int)(clampf(h, 0, 1) * (float)bw), 3, true);
+}
+// ... and the octave the left knob has chosen, beside the ladder: five places, two down to two up, a longer mark at
+// none, the one in force filled. An arrow under it: PLAY > OCTAVE is lower still (the menu goes to -4)
+static void octave_rail(int x, int y0, int y1)
+{
+    int o = (int)pv[P_OCT], at = clampi(o, -OCT_KNOB, OCT_KNOB);
+    for (int k = -OCT_KNOB; k <= OCT_KNOB; k++) {
+        int y = (y0 + y1) / 2 - k * (y1 - y0) / (2 * OCT_KNOB);
+        if (k == at) oled_rect(x, y - 1, 3, 3, true);
+        else if (k == 0) oled_rect(x, y, 3, 1, true);
+        else oled_pixel(x + 1, y, true);
+    }
+    if (o < -OCT_KNOB) { oled_rect(x, y1 + 3, 3, 1, true); oled_pixel(x + 1, y1 + 4, true); }
+}
+
 static void scene(const view_t *v)
 {
     float b = breath_s, amp = amp_s;
@@ -1445,6 +1548,8 @@ static void scene(const view_t *v)
     default:       ocarina(clampi((int)lroundf(frac * 12.0f), 0, 12), amp); break;
     }
     if (over_flash > 0) { int r = 13 - over_flash; oled_circle(wx > 40 ? 54 : 19, wx > 40 ? 33 : OC_CY, r, true); over_flash--; }
+    bool hand_up = ui_hand_on && ui_hand > 0.02f;                        // rev E: a hand is over the sensor
+    if (hand_up && (int)pv[P_HAND] == HD_MUTE) shade(ui_hand);
     // the note, big, with the bend
     char nm[8];
     int shown = (int)lroundf(midi_now) + models[m].shift + (v_over ? (int)lroundf(models[m].ob_st) : 0);
@@ -1457,8 +1562,17 @@ static void scene(const view_t *v)
         oled_line(bx + 2, 26, bx + 2, 26 + d * (2 + n), true);
         oled_line(bx, 26 + d * n, bx + 2, 26 + d * (2 + n), true); oled_line(bx + 4, 26 + d * n, bx + 2, 26 + d * (2 + n), true);
     }
-    if (v_over) oled_pill(F_TINY, tx, 34, m == M_CLARINET ? "TWELFTH UP" : "OCTAVE UP", true);
-    else ui_text_fit(F_TINY, tx, 35, 44, model_l[m]);
+    if (oct_show > 0) {                                                  // the left knob just turned: the octave it chose,
+        char ob[16]; int o = (int)pv[P_OCT];                             // in a pill cut close, to end before the rail
+        snprintf(ob, sizeof ob, o ? "OCTAVE %+d" : "OCTAVE %d", o);
+        int w = oled_ftext_ex(F_TINY, tx + 1, 36, ob, 1) - tx + 1;
+        oled_invert(tx, 34, w, 9);
+        oled_pixel(tx, 34, false); oled_pixel(tx, 42, false); oled_pixel(tx + w - 1, 34, false); oled_pixel(tx + w - 1, 42, false);
+        oct_show--;
+    }
+    else if (v_over) oled_pill(F_TINY, tx, 34, m == M_CLARINET ? "TWELFTH UP" : "OCTAVE UP", true);
+    else if (hand_up) hand_line(tx, 35, 42, ui_hand);
+    else ui_text_fit(F_TINY, tx, 35, ui_lknob ? 42 : 44, model_l[m]);
     // breath: a bar with the overblow mark
     const int bw = 42;
     oled_hline_pat(tx, 43, bw, 0x11, true);
@@ -1466,6 +1580,7 @@ static void scene(const view_t *v)
     float oba = pv[P_OVER] * 0.01f;
     if (oba < 0.999f && models[m].ob_st > 0) oled_rect(tx + (int)(oba * (float)bw), 40, 1, 7, true);
     ladder(117, 19, 43);
+    if (ui_lknob && (oct_show > 0 || !v_over)) octave_rail(108, 21, 41);     // (the overblow's pill ends over its place)
 }
 
 static void draw_setup(const view_t *v)

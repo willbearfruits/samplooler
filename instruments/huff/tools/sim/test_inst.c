@@ -1,9 +1,12 @@
 // HUFF on the host: breath noise into the mic; every model held on every note of the ladder and its pitch
 // measured; overblowing; silence without breath (and with the speaker leaking into the mic); the bend,
 // MIDI in and out, the harmony voice, humming, BREATH SETUP, the tilt ladder's hysteresis; GIFs and screens.
+// Last, rev E (the Vessel): the left knob's octaves and the hand's mute, vibrato and bends, and that the board with
+// the joystick has none of them.
 #include "sim.h"
 #include "looper.h"
 #include "link.h"
+#include "oled.h"
 #include <math.h>
 #include <string.h>
 #include <time.h>
@@ -21,6 +24,7 @@ enum {
     P_REVERB, P_SIZE, P_DAMP, P_ECHO, P_ETIME, P_EFB, P_BRANGE,
     P_ESYNC, P_TEMPO, P_LINK, P_GROUP, P_RANGE, P_PEERS,
     P_DRIVE, P_NOISE, P_BWIND,
+    P_HAND,
 };
 #define NM 13
 int huff_peers(void);
@@ -295,6 +299,346 @@ static void soak(float per)
     check(ok == 7, "%.0f s on each model with everything going: no NaN, under full scale, never silent while blown, the note stops with the breath, the breath floor recovers (%d of 7)", (double)per, ok);
     param_set(P_ESYNC, 0); param_set(P_ECHO, 0);
     sim_peer_power(k, false); sim_run(1.5f);
+}
+
+// ---- rev E (the Vessel): the left knob and the hand. No rev E has been built: this is how they are checked.
+// the level of what was played from fc up (eight one-pole high passes a sixth under fc: a note at a third of fc is
+// 69 dB down, its 2nd harmonic 33), between two times. With fc at 3x the note: its harmonics from the 3rd up, and the air
+static float hi_rms(float t0, float t1, float fc)
+{
+    int a = (int)(t0 * AUDIO_SR), b = (int)(t1 * AUDIO_SR);
+    if (a < 0) a = 0;
+    if (b > sim_n) b = sim_n;
+    float k = 1.0f - expf(-6.2831853f * fc / 1.2f / (float)AUDIO_SR), z[8] = { 0 };
+    double e = 0; int n = 0;
+    for (int i = a > 3200 ? a - 3200 : 0; i < b; i++) {
+        float x = sim_out[i];
+        for (int j = 0; j < 8; j++) { z[j] += k * (x - z[j]); x -= z[j]; }
+        if (i >= a) { e += (double)x * x; n++; }
+    }
+    return n ? (float)sqrt(e / n) : 0.0f;
+}
+// the pitch of what was played, read below 1.3x the wanted note (four one-pole low passes first): the autocorrelation's
+// peak then has the same shape whatever the tone above is, so a darker tone does not read as another pitch
+static float pitch_low(float t0, float t1, float want, bool sub)
+{
+    static float buf[AUDIO_SR];
+    int a = (int)(t0 * AUDIO_SR), b = (int)(t1 * AUDIO_SR);
+    if (a < 0) a = 0;
+    if (b > sim_n) b = sim_n;
+    if (b - a > AUDIO_SR) a = b - AUDIO_SR;
+    float k = 1.0f - expf(-6.2831853f * 1.3f * want / (float)AUDIO_SR), z[4] = { 0, 0, 0, 0 };
+    for (int i = a > 3200 ? a - 3200 : 0; i < b; i++) {
+        float x = sim_out[i];
+        for (int j = 0; j < 4; j++) { z[j] += k * (x - z[j]); x = z[j]; }
+        if (i >= a) buf[i - a] = x;
+    }
+    float f = b > a ? m_pitch(buf, b - a, want * (sub ? 0.4f : 0.75f), want * 1.33f) : 0.0f;
+    return sub && f > 0 && f < 0.75f * want ? 2.0f * f : f;          // the lead's sub octave, as the sweep reads it
+}
+// the largest step from one sample to the next
+static float max_step(float t0, float t1)
+{
+    int a = (int)(t0 * AUDIO_SR), b = (int)(t1 * AUDIO_SR);
+    if (a < 1) a = 1;
+    if (b > sim_n) b = sim_n;
+    float m = 0;
+    for (int i = a; i < b; i++) { float d = fabsf(sim_out[i] - sim_out[i - 1]); if (d > m) m = d; }
+    return m;
+}
+static float db(float a, float b) { return 20.0f * log10f((a + 1e-9f) / (b + 1e-9f)); }
+static float cents(float f, float want) { return f > 0 ? 1200.0f * log2f(f / want) : 9999.0f; }
+// a steady breath from MIDI CC 2 (0.63: under the overblow), kept up (CC 2 lets go after 2 s without news)
+#define STEADY 80
+static void held(float s) { while (s > 0.001f) { front_midi(0xB0, 2, STEADY); float d = s > 0.5f ? 0.5f : s; sim_run(d); s -= d; } }
+
+// the coach's hint is up: its dot with the "i" at the left of the bottom strip
+static bool hint_up(void) { return oled_get(1, 55) && oled_get(3, 55) && oled_get(4, 55) && !oled_get(5, 55) && oled_get(6, 55) && oled_get(7, 55) && oled_get(9, 55); }
+static bool wait_hint(float s) { for (float t = 0; t < s; t += 0.2f) { sim_run(0.2f); if (hint_up()) return true; } return false; }
+
+static void rev_e(void)
+{
+    sim_in_t keep = SI;
+    uint32_t learned = meta.learned;
+    float hints = pv[CP(CP_HINTS)];
+    front_midi(0xC0, 0, 0); sim_run(0.5f);                          // OCARINA, the first sound, as it comes
+    param_set(P_REVERB, 0); param_set(P_ECHO, 0); param_set(P_VIB, 0); param_set(P_BPITCH, 0);
+    blow(0); sim_tilt(0, 0); SI.jx = SI.jy = 0; sim_run(1.5f);
+    int notes[16], N = ladder(notes);
+    const ctl_t *c = front_ctl();
+    float w0 = midi_hz_((float)notes[3]);
+
+    // ---- the board with the joystick: no left knob, no sensor. Turns and a hand that reach its pins do nothing,
+    // whatever HAND DOES says
+    section("the board with the joystick: nothing new");
+    sim_tilt(0, lean_for(3, N)); held(1.5f);
+    {   float f_a = m_pitch_at(sim_t - 0.6f, sim_t, w0 * 0.75f, w0 * 1.33f), r_a = m_rms(sim_t - 0.6f, sim_t), h_a = hi_rms(sim_t - 0.6f, sim_t, 3.0f * w0);
+        float seen = 0; bool parts = false; int oct = 0;
+        float f_b = 0, r_b = 0, h_b = 0, worst_c = 0, worst_r = 0, worst_h = 0;
+        for (int hd = 0; hd < 4; hd++) {
+            param_set(P_HAND, (float)hd);
+            SI.hand_mm = 40; sim_lturn(hd & 1 ? -2 : 3);
+            for (int i = 0; i < 8; i++) {
+                held(0.1f);
+                seen = fmaxf(seen, fmaxf(fmaxf(fabsf(huff_dbg(11)), fabsf(huff_dbg(12))), fmaxf(fabsf(huff_dbg(13)), fabsf(huff_dbg(14)))));
+                if (c->has_lknob || c->has_hand || c->hand != 0.0f || c->lknob) parts = true;
+                if ((int)pv[P_OCT] != 0) oct++;
+            }
+            f_b = m_pitch_at(sim_t - 0.6f, sim_t, w0 * 0.75f, w0 * 1.33f); r_b = m_rms(sim_t - 0.6f, sim_t); h_b = hi_rms(sim_t - 0.6f, sim_t, 3.0f * w0);
+            worst_c = fmaxf(worst_c, fabsf(cents(f_b, f_a))); worst_r = fmaxf(worst_r, fabsf(db(r_b, r_a))); worst_h = fmaxf(worst_h, fabsf(db(h_b, h_a)));
+        }
+        sim_shot("joystick_board");
+        check(!parts && oct == 0 && seen == 0.0f && worst_c < 3.0f && worst_r < 1.0f && worst_h < 1.5f,
+              "a board with the joystick, the left knob's pins turned and a hand at 40 mm, HAND DOES on each of its four: OCTAVE stays %d, "
+              "the mute, the bend and the vibrato stay 0 (largest %.4f), the note moves %.1f cents, the level %.2f dB, the part above 3x the note %.2f dB",
+              (int)pv[P_OCT], (double)seen, (double)worst_c, (double)worst_r, (double)worst_h);
+        SI.hand_mm = 0; SI.lk = 0; param_set(P_HAND, 0); param_set(P_OCT, 0);
+        // the stick still bends, as before
+        SI.jx = 1.0f; held(0.8f);
+        float f = m_pitch_at(sim_t - 0.4f, sim_t, w0, w0 * 1.5f);
+        check(fabsf(cents(f, w0) - 100.0f * pv[P_BENDR]) < 15.0f, "... and its stick still bends by BEND RANGE (%.0f cents)", (double)cents(f, w0));
+        SI.jx = 0; front_midi(0xB0, 2, 0); sim_run(1.0f);
+        // the two new hints are not for this board: with everything else learned, the coach has nothing to say
+        pv[CP(CP_HINTS)] = 1; meta.learned = ~((1u << LEARN_LKNOB) | (1u << LEARN_HAND));
+        sim_run(5.0f);                                                // a hint that was up has gone by now (4.5 s)
+        bool shown = wait_hint(20.0f);
+        meta.learned = ~(1u << LEARN_JOY);
+        bool joy_hint = wait_hint(20.0f);
+        check(!shown && joy_hint, "the hints for the left knob and the hand never show on this board (20 s idle: %s); the stick's does (%s)", shown ? "SHOWN" : "none", joy_hint ? "yes" : "NO");
+        meta.learned = ~0u; sim_run(5.0f);
+    }
+
+    // ---- rev E from here on
+    sim_rev_e(); sim_run(0.3f);
+    check(c->has_lknob && c->has_hand && !c->has_joy, "rev E: the left knob and the sensor, no joystick");
+    // the two hints, each alone (the others learned), as the idle player gets them; doing what one says ends it
+    {   pv[CP(CP_HINTS)] = 1;
+        meta.learned = ~(1u << LEARN_LKNOB);
+        sim_run(5.0f);
+        bool h_knob = hint_up() || wait_hint(20.0f); sim_shot("rev_e_hint_knob");
+        sim_lturn(1); sim_run(0.3f); bool knob_done = (meta.learned >> LEARN_LKNOB) & 1 && !hint_up(); sim_lturn(-1);
+        meta.learned = ~(1u << LEARN_HAND);
+        bool h_hand = wait_hint(20.0f); sim_shot("rev_e_hint_hand");
+        sim_hand(60, 0.5f); bool hand_done = (meta.learned >> LEARN_HAND) & 1 && !hint_up(); sim_hand(0, 1.0f);
+        meta.learned = ~(1u << LEARN_JOY);
+        sim_run(5.0f);
+        bool none = !wait_hint(20.0f);
+        check(h_knob && h_hand && knob_done && hand_done && none, "rev E's two hints show to an idle player (the left knob's %s, the hand's %s), go once the knob has turned (%s) and the hand has come down (%s), and the stick's never shows (%s)",
+              h_knob ? "yes" : "NO", h_hand ? "yes" : "NO", knob_done ? "yes" : "NO", hand_done ? "yes" : "NO", none ? "yes" : "NO");
+        meta.learned = ~0u; param_set(P_OCT, 0); sim_run(2.0f);
+    }
+
+    section("rev E: the left knob is the octave");
+    sim_tilt(0, lean_for(3, N)); blow(0.12f); sim_run(1.0f);
+    {   float f0 = m_pitch_at(sim_t - 0.4f, sim_t, w0 * 0.75f, w0 * 1.33f);
+        static const int turn[10] = { 1, 1, 1, -1, -1, -1, -1, -1, 1, 1 };
+        static const int want_o[10] = { 1, 2, 2, 1, 0, -1, -2, -2, -1, 0 };
+        float at[10], worst = 0, fs[10]; int right = 0;
+        for (int i = 0; i < 10; i++) {
+            sim_lturn(turn[i]); at[i] = sim_t;
+            if (i == 0) { sim_run(0.3f); sim_shot("rev_e_octave"); sim_run(0.6f); } else sim_run(0.9f);
+            float want = w0 * powf(2.0f, (float)want_o[i]);
+            fs[i] = m_pitch_at(sim_t - 0.4f, sim_t, want * 0.75f, want * 1.33f);
+            float ct = fabsf(cents(fs[i], f0) - 1200.0f * (float)want_o[i]);
+            if (ct > worst) worst = ct;
+            if ((int)pv[P_OCT] == want_o[i]) right++;
+        }
+        note("the note at OCTAVE +1 +2 +2 +1 0 -1 -2 -2 -1 0: %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f Hz (from %.1f)", (double)fs[0], (double)fs[1], (double)fs[2],
+             (double)fs[3], (double)fs[4], (double)fs[5], (double)fs[6], (double)fs[7], (double)fs[8], (double)fs[9], (double)f0);
+        metric("lknob_octave_worst_cents", worst);
+        check(right == 10 && worst < 10.0f, "each detent of the left knob moves the note an octave: up two, down four, back (worst %.1f cents off a whole octave over ten turns)", (double)worst);
+        check((int)pv[P_OCT] == 0 && fabsf(cents(fs[2], fs[1])) < 5.0f && fabsf(cents(fs[7], fs[6])) < 5.0f,
+              "it stops at two up and at two down: a turn more leaves the note where it is (%.1f and %.1f cents)", (double)cents(fs[2], fs[1]), (double)cents(fs[7], fs[6]));
+        float wc = worst_click(at, 10);
+        metric("lknob_octave_click", wc);
+        check(wc < 3.0f, "the octave changes as a note change does, without a click (worst spike %.2f of the signal's own)", (double)wc);
+        sim_wav("-rev-e-octaves", at[0] - 0.8f, sim_t);
+        // three detents on one tick are three octaves, held at the end; it stays where it is left
+        sim_lturn(-1); sim_run(0.2f); sim_lturn(3); sim_run(3.5f);
+        check((int)pv[P_OCT] == 2, "three detents at once from -1: it stops at +2, and 3.5 s later it is still there: it is PLAY > OCTAVE itself (%+d)", (int)pv[P_OCT]);
+        sim_shot("rev_e_octave_rail");
+        // a setting the menu put lower than the knob goes: the knob does not jump it up, and turns up from where it is
+        param_set(P_OCT, -4); sim_run(0.2f); sim_lturn(-1); int o1 = (int)pv[P_OCT]; sim_run(0.2f); sim_lturn(1); int o2 = (int)pv[P_OCT];
+        sim_run(0.5f); sim_shot("rev_e_octave_low");
+        check(o1 == -4 && o2 == -3, "PLAY > OCTAVE at -4 from the menu: a turn down leaves it (%d), a turn up is one octave (%d)", o1, o2);
+        param_set(P_OCT, 0); blow(0); sim_run(1.0f);
+    }
+
+    section("rev E: a hand over the sensor is a mute");
+    float worst_dark = 0, worst_level = 0, worst_click_h = 0, worst_step = 0; int dark_m = 0, level_m = 0;
+    note("each model on the ladder's fourth note, a steady breath from CC 2. The highs: what is above 3x the note, or above 875 Hz for the notes under 292 Hz "
+         "(the mute closes to 1.2x the note, 350 Hz at least: 2.5x that)");
+    for (int m = 0; m < NM; m++) {
+        param_set(P_MODEL, (float)m); SI.hand_mm = 0; sim_tilt(0, lean_for(3, N)); sim_run(0.3f);
+        float w = midi_hz_((float)(notes[3] + model_shift[m]));
+        float top = fmaxf(3.0f * w, 875.0f);                           // the mute closes to 1.2x the note, 350 Hz at least: 2.5x that
+        held(1.0f);
+        // the note with no hand, for as long as the passage with the hand below
+        float t_ref = sim_t;
+        held(4.2f);
+        float r0 = m_rms(sim_t - 0.6f, sim_t), h0 = hi_rms(sim_t - 0.6f, sim_t, top), f0 = pitch_low(sim_t - 1.0f, sim_t, w, m == 11);
+        float wc_ref = worst_click_over(t_ref, sim_t - 0.2f), st_ref = max_step(t_ref, sim_t);
+        // the hand comes down at once (the core glides it), sits, and leaves
+        float t_hand = sim_t;
+        SI.hand_mm = 40; held(1.6f);
+        float r1 = m_rms(sim_t - 0.6f, sim_t), h1 = hi_rms(sim_t - 0.6f, sim_t, top), f1 = pitch_low(sim_t - 1.0f, sim_t, w, m == 11);
+        float mute = huff_dbg(11);
+        if (m == 7) sim_shot("rev_e_mute_down");
+        if (m == 0) sim_shot("rev_e_mute_ocarina");
+        SI.hand_mm = 0; held(1.0f);
+        float r2 = m_rms(sim_t - 0.4f, sim_t);
+        // ... and a hand waved fast: down and nearly away five times a second
+        for (int i = 0; i < 10; i++) { SI.hand_mm = i & 1 ? 240 : 40; held(0.1f); }
+        SI.hand_mm = 0; held(0.6f);
+        float wc = worst_click_over(t_hand - 0.05f, sim_t - 0.2f), st = max_step(t_hand, sim_t);
+        float dark = db(h1, h0) - db(r1, r0), lvl = db(r1, r0);
+        char key[48];
+        snprintf(key, sizeof key, "mute_highs_db_%s", model_name[m]); metric(key, db(h1, h0));
+        snprintf(key, sizeof key, "mute_level_db_%s", model_name[m]); metric(key, lvl);
+        snprintf(key, sizeof key, "mute_click_%s", model_name[m]); metric(key, wc);
+        check(mute > 0.97f && db(h1, h0) < -12.0f && dark < -4.0f && lvl > -14.0f && lvl < -3.0f && fabsf(cents(f1, f0)) < 6.0f && fabsf(db(r2, r0)) < 1.5f,
+              "%s, a hand at 40 mm: what is above %.0f Hz falls %.1f dB, the level %.1f dB (rms %.3f to %.3f), the note stays (%+.1f cents); "
+              "the hand gone, the level is back (%+.1f dB)", model_name[m], (double)top, (double)-db(h1, h0), (double)-lvl, (double)r0, (double)r1, (double)cents(f1, f0), (double)db(r2, r0));
+        check(wc < 3.0f && st < 1.5f * st_ref,
+              "%s, the hand down at once, there 1.6 s, away, then waved five times a second: no click (worst spike %.2f of the signal's own, %.2f in the "
+              "same note for as long with no hand; the largest step between samples %.4f, %.4f with no hand)", model_name[m], (double)wc, (double)wc_ref, (double)st, (double)st_ref);
+        if (db(h1, h0) > worst_dark || m == 0) { worst_dark = db(h1, h0); dark_m = m; }
+        if (lvl < worst_level) { worst_level = lvl; level_m = m; }
+        if (wc > worst_click_h) worst_click_h = wc;
+        if (st / (st_ref + 1e-9f) > worst_step) worst_step = st / (st_ref + 1e-9f);
+        if (m == 7) sim_wav("-rev-e-mute", t_hand - 1.0f, sim_t);
+    }
+    note("the mute over the thirteen models: the highs fall least on %s (%.1f dB), the level most on %s (%.1f dB); worst click %.2f, largest step %.2f of the open note's",
+         model_name[dark_m], (double)-worst_dark, model_name[level_m], (double)-worst_level, (double)worst_click_h, (double)worst_step);
+    metric("mute_highs_db_least", worst_dark); metric("mute_level_db_most", worst_level); metric("mute_click_worst", worst_click_h);
+    // the trumpet: the lower the hand the darker, and a waved hand is a wah
+    param_set(P_MODEL, 7); SI.hand_mm = 0; held(1.2f);
+    {   float w = midi_hz_((float)(notes[3] + model_shift[7]));
+        static const int mm[5] = { 0, 200, 145, 90, 40 };
+        float h[5], r[5]; bool falling = true;
+        for (int i = 0; i < 5; i++) {
+            SI.hand_mm = mm[i]; held(1.0f);
+            h[i] = hi_rms(sim_t - 0.5f, sim_t, 3.0f * w); r[i] = m_rms(sim_t - 0.5f, sim_t);
+            if (i && h[i] >= h[i - 1]) falling = false;
+            if (i == 2) sim_shot("rev_e_mute_half");
+        }
+        check(falling && c->hand_mm == 40, "TRUMPET, the lower the hand the darker: away, then at 200, 145, 90 and 40 mm, what is above 3x the note is at 0, %.1f, %.1f, %.1f, %.1f dB, the level at 0, %.1f, %.1f, %.1f, %.1f dB",
+              (double)db(h[1], h[0]), (double)db(h[2], h[0]), (double)db(h[3], h[0]), (double)db(h[4], h[0]), (double)db(r[1], r[0]), (double)db(r[2], r[0]), (double)db(r[3], r[0]), (double)db(r[4], r[0]));
+        // waved between 40 and 200 mm twice a second: the highs follow the hand
+        sim_gif_begin("rev-e-wah");
+        float t0 = sim_t; double lo_e = 0, hi_e = 0; int lo_n = 0, hi_n = 0;
+        for (int i = 0; i < 300; i++) {
+            SI.hand_mm = 120 + (int)lroundf(80.0f * sinf(6.2831853f * 2.0f * (float)i * 0.01f));
+            if (i % 40 == 0) front_midi(0xB0, 2, STEADY);
+            sim_tick();
+            if (i < 50) continue;
+            float e = hi_rms(sim_t - 0.01f, sim_t, 3.0f * w);
+            if (c->hand > 0.85f) { lo_e += (double)e * e; lo_n++; } else if (c->hand < 0.4f) { hi_e += (double)e * e; hi_n++; }
+        }
+        sim_gif_end();
+        float swing = db((float)sqrt(hi_e / (hi_n ? hi_n : 1)), (float)sqrt(lo_e / (lo_n ? lo_n : 1)));
+        float wc = worst_click_over(t0, sim_t);
+        metric("wah_swing_db", swing);
+        check(lo_n > 20 && hi_n > 20 && swing > 6.0f && wc < 3.0f, "a hand waved between 40 and 200 mm twice a second is a wah: what is above 3x the note is %.1f dB louder with the hand high than low, no click (worst spike %.2f)", (double)swing, (double)wc);
+        sim_wav("-rev-e-wah", t0 - 0.5f, sim_t);
+        SI.hand_mm = 0; held(0.8f);
+    }
+    // the mute is not a sound's: GUITAR SOLO (the amp at 70) and DEEP CHOIR as they come
+    {   static const int snd[2] = { 14, 23 }; static const char *const sn[2] = { "GUITAR SOLO", "DEEP CHOIR" };
+        for (int k = 0; k < 2; k++) {
+            front_midi(0xC0, (uint8_t)snd[k], 0); sim_run(0.5f);
+            int nl[24], n = ladder(nl); sim_tilt(0, lean_for(3, n));      // the sound's own ladder, its fourth note,
+            SI.hand_mm = 0; front_midi(0xB0, 2, 0); sim_run(2.0f); held(2.5f);   // begun from silence (the guitar's pick sets its tone)
+            float r0 = m_rms(sim_t - 0.8f, sim_t), h0 = hi_rms(sim_t - 0.8f, sim_t, 1500.0f);
+            float t0 = sim_t;
+            SI.hand_mm = 40; held(2.5f);
+            float r1 = m_rms(sim_t - 0.8f, sim_t), h1 = hi_rms(sim_t - 0.8f, sim_t, 1500.0f);
+            if (getenv("HUFF_TRACE")) note("%s: note %d (%.1f Hz played %.1f), key %d scale %d oct %d drive %.0f vib %.0f rvb %.0f echo %.0f; open rms %.4f highs %.5f, muted rms %.4f highs %.5f", sn[k], nl[3] + model_shift[(int)pv[P_MODEL]],
+                 (double)midi_hz_((float)(nl[3] + model_shift[(int)pv[P_MODEL]])), (double)m_pitch_at(sim_t - 0.5f, sim_t, 40, 2000), (int)pv[P_KEY], (int)pv[P_SCALE], (int)pv[P_OCT], (double)pv[P_DRIVE], (double)pv[P_VIB], (double)pv[P_REVERB], (double)pv[P_ECHO], (double)r0, (double)h0, (double)r1, (double)h1);
+            if (k == 0) sim_shot("rev_e_mute_guitar");
+            SI.hand_mm = 0; held(1.0f);
+            float wc = worst_click_over(t0 - 0.05f, sim_t - 0.2f);
+            // (the driven guitar loses 5 to 12 dB from one run to the next: its pick is noise, and how bright the string rings after it differs)
+            check(db(h1, h0) < -12.0f && db(r1, r0) > -16.0f && wc < 3.0f, "the sound %s with its reverb, echo and amp, a hand at 40 mm: what is above 1.5 kHz falls %.1f dB, the level %.1f dB, no click (%.2f)",
+                  sn[k], (double)-db(h1, h0), (double)-db(r1, r0), (double)wc);
+        }
+        front_midi(0xC0, 0, 0); sim_run(0.5f);
+        param_set(P_REVERB, 0); param_set(P_ECHO, 0); param_set(P_VIB, 0); param_set(P_BPITCH, 0); sim_tilt(0, lean_for(3, N)); held(1.0f);
+    }
+
+    section("rev E: HAND DOES vibrato, or a bend");
+    {   // pitch every 30 ms over 0.9 s: how far it swings
+        float pp[2];
+        param_set(P_HAND, 1);
+        for (int k = 0; k < 2; k++) {
+            SI.hand_mm = k ? 40 : 0; held(1.6f);
+            float lo = 1e9f, hi = 0;
+            for (int i = 0; i < 30; i++) { float f = m_pitch_at(sim_t - 0.93f + 0.03f * (float)i, sim_t - 0.9f + 0.03f * (float)i, w0 * 0.8f, w0 * 1.25f); if (f > 0) { if (f < lo) lo = f; if (f > hi) hi = f; } }
+            pp[k] = hi > 0 ? cents(hi, lo) : 0;
+            if (k) sim_shot("rev_e_vibrato");
+        }
+        float r_v = m_rms(sim_t - 0.6f, sim_t);
+        check(pp[1] > 60.0f && pp[1] < 130.0f && pp[0] < 12.0f && huff_dbg(11) == 0.0f, "HAND DOES VIBRATO: a hand at 40 mm swings the note %.0f cents end to end (half a semitone each way, as the stick pushed up); no hand, %.0f; nothing is muted (rms %.3f)", (double)pp[1], (double)pp[0], (double)r_v);
+        SI.hand_mm = 0; held(0.8f);
+        float fa = m_pitch_at(sim_t - 0.4f, sim_t, w0 * 0.75f, w0 * 1.33f);
+        param_set(P_HAND, 2);
+        float t0 = sim_t;
+        SI.hand_mm = 145; held(0.9f); float fh = m_pitch_at(sim_t - 0.4f, sim_t, w0 * 0.75f, w0 * 1.5f);
+        SI.hand_mm = 40; held(0.9f); float fu = m_pitch_at(sim_t - 0.4f, sim_t, w0 * 0.75f, w0 * 1.5f);
+        sim_shot("rev_e_bend");
+        int pbs = midi_count(t0, 0xE0, NULL);
+        SI.hand_mm = 0; held(2.4f); float fb = m_pitch_at(sim_t - 0.4f, sim_t, w0 * 0.75f, w0 * 1.33f);
+        float wc_u = worst_click_over(t0, sim_t);
+        check(fabsf(cents(fu, fa) - 100.0f * pv[P_BENDR]) < 10.0f && fabsf(cents(fh, fa) - 50.0f * pv[P_BENDR]) < 10.0f && fabsf(cents(fb, fa)) < 5.0f && pbs >= 2 && wc_u < 3.0f,
+              "HAND DOES BEND UP: at 145 mm the note is %.0f cents up, at 40 mm %.0f (BEND RANGE %d semitones), the hand gone %.0f; it goes out as pitch bend (%d messages), no click (%.2f)",
+              (double)cents(fh, fa), (double)cents(fu, fa), (int)pv[P_BENDR], (double)cents(fb, fa), pbs, (double)wc_u);
+        param_set(P_HAND, 3);
+        SI.hand_mm = 40; held(0.9f); float fd = m_pitch_at(sim_t - 0.4f, sim_t, w0 * 0.6f, w0 * 1.33f);
+        SI.hand_mm = 0; held(2.4f); fb = m_pitch_at(sim_t - 0.4f, sim_t, w0 * 0.75f, w0 * 1.33f);
+        check(fabsf(cents(fd, fa) + 100.0f * pv[P_BENDR]) < 10.0f && fabsf(cents(fb, fa)) < 5.0f && huff_dbg(11) == 0.0f, "HAND DOES BEND DOWN: at 40 mm the note is %.0f cents down, the hand gone %.0f", (double)cents(fd, fa), (double)cents(fb, fa));
+        // HAND DOES changed while the hand is down (the menu, or CC 63): the mute and the bend swap without a click
+        param_set(P_HAND, 0); SI.hand_mm = 40; held(1.0f);
+        float t_sw = sim_t;
+        param_set(P_HAND, 3); held(0.5f); param_set(P_HAND, 0); held(0.5f); param_set(P_HAND, 1); held(0.5f); param_set(P_HAND, 0); held(0.5f);
+        float wc_sw = worst_click_over(t_sw - 0.05f, sim_t - 0.2f);
+        SI.hand_mm = 0; held(1.0f);
+        check(wc_sw < 3.0f, "HAND DOES switched from MUTE to BEND DOWN, back, to VIBRATO and back with the hand at 40 mm: no click (worst spike %.2f)", (double)wc_sw);
+        // SYSTEM > HAND OFF: no mute
+        param_set(CP(CP_HAND), 0); SI.hand_mm = 40; held(0.8f);
+        float off = huff_dbg(11);
+        param_set(CP(CP_HAND), 1); SI.hand_mm = 0; held(0.5f);
+        check(off == 0.0f, "SYSTEM > HAND OFF: a hand at 40 mm mutes nothing");
+    }
+
+    // the cost with the mute on top of everything else: the same budget as without
+    section("rev E: cost");
+    param_set(P_REVERB, 60); param_set(P_ECHO, 40); param_set(P_HARM, 1); param_set(P_VIB, 15);
+    {   double worst = 0; int worst_m = 0, asleep = 0;
+        for (int m = 0; m < NM; m++) {
+            param_set(P_MODEL, (float)m); SI.hand_mm = 40; held(0.6f);
+            float in[AUDIO_BLOCK], out[AUDIO_BLOCK];
+            for (int i = 0; i < AUDIO_BLOCK; i++) in[i] = 0.05f * sim_noise();
+            double us = 1e9;
+            for (int k = 0; k < 8; k++) {
+                struct timespec a, b; clock_gettime(CLOCK_MONOTONIC, &a);
+                for (int r = 0; r < 1000; r++) { front_midi(0xB0, 2, 90); front_audio(in, out, AUDIO_BLOCK); }
+                clock_gettime(CLOCK_MONOTONIC, &b);
+                double t = ((double)(b.tv_sec - a.tv_sec) * 1e6 + (double)(b.tv_nsec - a.tv_nsec) / 1e3) / 1000.0;
+                if (t < us) us = t;
+            }
+            char key[56]; snprintf(key, sizeof key, "host_us_per_block_muted_%s", model_name[m]); metric(key, us);
+            if (us > worst) { worst = us; worst_m = m; }
+            if (huff_sleep() != 0 || huff_dbg(11) < 0.97f) asleep++;
+        }
+        check(worst < 20.0 && asleep == 0, "every model with harmony, reverb, echo and the hand's mute fully down: at most %.1f us per block on the host (%s; < 20, the budget without the mute)", worst, model_name[worst_m]);
+    }
+
+    // back to the board with the joystick, the first sound, as the tests found it
+    SI = keep; meta.learned = learned; pv[CP(CP_HINTS)] = hints;
+    front_midi(0xB0, 2, 0); blow(0); sim_tilt(0, 0);
+    front_midi(0xC0, 0, 0); param_set(P_HAND, 0); sim_run(0.5f);
+    sim_run(12.0f);
+    check(!c->has_lknob && !c->has_hand && (int)pv[P_OCT] == 0 && huff_dbg(11) == 0.0f && huff_sleep() == 15, "back on the board with the joystick: no left knob, no hand, no mute, everything asleep");
 }
 
 void inst_tests(void)
@@ -689,4 +1033,6 @@ void inst_tests(void)
     sim_gif_begin("saver"); sim_run(4.0f); sim_gif_end();
     sim_turn(1); sim_run(0.2f); sim_turn(-1);
     param_set(CP(CP_SAVER), param(CP(CP_SAVER))->def);
+
+    rev_e();
 }

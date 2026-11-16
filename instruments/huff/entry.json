@@ -12,7 +12,7 @@
     "wifi"
   ],
   "status": "board",
-  "status_note": "Installed from the app and ran on a board on 2026-10-19. The breath detector for noisy rooms, the six new models and the amp (2026-10-22) have only run in the simulator so far.",
+  "status_note": "Installed from the app and ran on a board on 2026-10-19. The breath detector for noisy rooms, the six new models and the amp (2026-10-22) have only run in the simulator so far. Rev E's left knob (the octave) and hand (a mute) are tested in the simulator only: no rev E board has run them.",
   "image": "images/play.gif",
   "more": [
     "images/solo.gif",
