@@ -12,6 +12,14 @@ on:
   workflow_dispatch:
 
 jobs:
+  # The firmware's own C files built for the PC and checked there: the controls, the hand's sensor against a pretend
+  # chip, the link, the voices, the screens (and the screen against nonsense, sanitizers on), an hour of soak.
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: tools/check.sh
+
   firmware:
     runs-on: ubuntu-latest
     steps:
