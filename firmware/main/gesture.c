@@ -14,7 +14,8 @@ static bool live;                          // out of the dead zone (the hysteres
 static int  zone_was = -1;
 static float detent_was, delay_was, stutter_was;
 
-void gest_reset(void) { live = false; zone_was = -1; detent_was = delay_was = stutter_was = 0; }
+static void hand_reset(void);
+void gest_reset(void) { live = false; zone_was = -1; detent_was = delay_was = stutter_was = 0; hand_reset(); }
 
 // The nearest detent within reach holds the speed; just past it the speed catches up over half an octave, so the
 // curve has no step.
@@ -174,4 +175,58 @@ void gest_joy(int raw_x, int raw_y, float cx, float cy, joy_out_t *o)
     o->jx = jx_f; o->jy = jy_f;
     flick(jx_f, &o->flick_l, &o->flick_r, 0, "left", "right");
     flick(jy_f, &o->flick_d, &o->flick_u, 1, "down", "up");
+}
+
+// ---------------------------------------------------------------- the left knob
+void gest_knob(int counts, knob_out_t *o)
+{
+    static int acc;
+    int steps = TI(TU_KN_STEPS);
+    if (steps < 1) steps = 1;
+    o->counts = counts * (TI(TU_KN_DIR) ? 1 : -1);
+    acc += o->counts;
+    o->det = acc / steps;
+    acc -= o->det * steps;
+    if (o->det) gest_emit("knob.turn", (float)o->det, 0, "");
+}
+
+// ---------------------------------------------------------------- the hand
+// A reading counts when the sensor calls it good and it is under hand.far. Two in a row bring the hand in, three
+// misses in a row (a glitch is one) send it away; the middle one of the last three readings is used, so one wild
+// number does nothing. The value glides between readings, which come every 25 ms, so what it drives never steps.
+static int   h_mm[3], h_n, h_hits, h_miss;
+static bool  h_seen;
+static float h_v, h_target;
+static int   h_last_mm;
+static void hand_reset(void) { h_n = h_hits = h_miss = 0; h_seen = false; h_v = h_target = 0; h_last_mm = 0; }
+
+static int median3(int a, int b, int c) { return a > b ? (b > c ? b : a > c ? c : a) : (a > c ? a : b > c ? c : b); }
+
+void gest_hand(bool fresh, int mm, int status, int dt_ms, hand_out_t *o)
+{
+    int near = TI(TU_HA_NEAR), far = TI(TU_HA_FAR);
+    if (far < near + 10) far = near + 10;
+    if (fresh) {
+        bool good = status == 0 && mm >= 0 && mm < far;
+        if (good) {
+            h_mm[h_n % 3] = mm; h_n++;
+            h_miss = 0;
+            if (h_hits < 2) h_hits++;
+            if (h_hits >= 2 && !h_seen) { h_seen = true; gest_emit("hand.on", (float)mm, 0, ""); }
+            int m = h_n >= 3 ? median3(h_mm[0], h_mm[1], h_mm[2]) : mm;
+            h_last_mm = m;
+            float t = (float)(far - m) / (float)(far - near);
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            float c = TV(TU_HA_CURVE);
+            h_target = c == 1.0f ? t : powf(t, c);
+        } else if (++h_miss >= 3) {
+            if (h_seen) gest_emit("hand.off", 0, 0, "");
+            h_seen = false; h_hits = 0; h_n = 0; h_target = 0;
+        }
+    }
+    float tau = h_seen ? TV(TU_HA_GLIDE) : TV(TU_HA_RELEASE);
+    float k = tau > (float)dt_ms ? (float)dt_ms / tau : 1.0f;
+    h_v += k * ((h_seen ? h_target : 0.0f) - h_v);
+    if (!h_seen && h_v < 0.002f) h_v = 0;
+    o->v = h_v; o->seen = h_seen; o->mm = h_seen ? h_last_mm : 0;
 }

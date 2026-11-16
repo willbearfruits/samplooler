@@ -40,6 +40,24 @@ static volatile int   rec_len;
 static volatile uint32_t loop_start;                       // the frame the loop began playing at (position 0)
 static volatile int   closing_v;                           // REC let go, recording on to the next beat
 static volatile float lock_err_v;                          // the head's distance from the grid (frames), for the screen
+static volatile int   waiting_v;                           // REC down, no sound yet
+static volatile float jog_pub;                             // the jog's extra speed, for the screen
+
+// The jog (the left knob): pushes gather here in 1/256 frames; the audio task turns them into an extra speed that
+// decays, so the distance asked for is travelled smoothly (the integral of the decay is the push).
+#define JOG_MAX     8.0f
+static volatile int32_t jog_req;
+static volatile float   jog_k = 1.0f / 1920.0f;           // 1 / the glide in samples: 60 ms
+static float jog_v;                                        // audio task only
+
+// How a take starts and ends (recorder_set_take).
+#define PRE_MAX     1600                                   // 50 ms of pre-roll at most
+#define DUCK_FADE   160                                    // 5 ms
+static volatile int   take_sound, take_pre, take_guard, take_tail;
+static volatile float take_thresh = 0.016f;
+static int16_t pre[PRE_MAX];                               // the last samples while waiting for a sound (internal RAM)
+static int   pre_w, pre_n, guard_left, duck_left;
+static bool  armed;
 
 // The grid (from the link, set by the UI task each tick under a seqlock): beat 0's frame in this recorder's frames
 // (a whole frame and a fraction), the frames per beat, and what the recorder does with it (GRID_* in recorder.h).
@@ -125,6 +143,25 @@ void  recorder_set_grain_ms(int ms)
     grain_len = ms * (REC_SAMPLE_RATE / 1000);
 }
 void  recorder_set_volume(float v) { volume = v < 0 ? 0 : v > 2 ? 2 : v; }
+void  recorder_jog(float fr)
+{
+    if (!finite_f(fr) || state != REC_PLAYING) return;
+    const float lim = (float)(REC_SAMPLE_RATE * 4);        // one call never asks for more than 4 s of tape
+    if (fr > lim) fr = lim; else if (fr < -lim) fr = -lim;
+    __atomic_fetch_add(&jog_req, (int32_t)(fr * 256.0f), __ATOMIC_ACQ_REL);
+}
+void  recorder_set_jog_ms(float ms) { if (finite_f(ms) && ms >= 1.0f) jog_k = 1.0f / (ms * (float)(REC_SAMPLE_RATE / 1000)); }
+float recorder_jog_now(void)       { return jog_pub; }
+void  recorder_set_take(bool on_sound, float thresh, int preroll, int guard, int tail)
+{
+    if (!finite_f(thresh) || thresh < 0.0005f) thresh = 0.0005f;
+    take_thresh = thresh > 0.9f ? 0.9f : thresh;
+    take_pre = preroll < 0 ? 0 : preroll > PRE_MAX ? PRE_MAX : preroll;
+    take_guard = guard < 0 ? 0 : guard > REC_SAMPLE_RATE ? REC_SAMPLE_RATE : guard;
+    take_tail = tail < 0 ? 0 : tail > REC_SAMPLE_RATE ? REC_SAMPLE_RATE : tail;
+    take_sound = on_sound;
+}
+bool  recorder_waiting(void)       { return waiting_v != 0; }
 int   recorder_state(void)        { return state; }
 int   recorder_mode(void)         { return mode_now; }
 float recorder_loop_seconds(void) { return (float)loop_len / (float)REC_SAMPLE_RATE; }
@@ -259,12 +296,16 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
     bool r = rec_req;
     if (r && !rec_prev) {
         rec_len = 0; rec_start = frames; closing = false; closing_v = 0; loop_len = 0; xf_left = 0;
+        guard_left = take_guard; armed = take_sound != 0; pre_w = pre_n = 0; duck_left = 0;
+        waiting_v = armed;
         state = REC_RECORDING;
     } else if (!r && rec_prev && state == REC_RECORDING) {
-        int L = rec_len;
-        for (int g = 0; g < GUARD; g++) buf[L + g] = buf[L > 0 ? L - 1 : 0];
+        // the release's click was recorded just before the release was seen: the take ends before it
+        const int full = rec_len, tail = take_tail;
+        int L = armed ? 0 : full > tail ? full - tail : 0;      // no sound ever came: nothing
+        armed = false; waiting_v = 0;
         if (L < MIN_LOOP + XF) {                               // a tap, not a take: the old loop is gone
-            loop_len = 0;
+            rec_len = 0; loop_len = 0;
             state = REC_IDLE;
         } else if ((G.mode & GRID_SNAP_END) && G.fpb) {
             // whole beats of the grid: the nearest, at least one; too short for that, it records on to the beat
@@ -272,24 +313,50 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
             if (nb < 1) nb = 1;
             int want = nb * fpb;
             if (want + XF > MAX_SAMPLES) { nb = (MAX_SAMPLES - XF) / fpb; want = nb * fpb; }
-            if (nb >= 1 && want + XF <= L) start_loop(want, true);
-            else if (nb >= 1) { closing = true; closing_v = 1; close_at = want + XF; }
-            else if (L - XF >= MIN_LOOP) start_loop(L - XF, true);
-            else { loop_len = 0; state = REC_IDLE; }
-        } else start_loop(L - XF, false);
+            if (nb >= 1 && want + XF <= L) { rec_len = L; start_loop(want, true); }
+            else if (nb >= 1) {
+                // it records on, so the click stays inside the take: faded out where it begins, silent while it rings
+                closing = true; closing_v = 1; close_at = want + XF;
+                if (tail > 0) {
+                    int f0 = L > DUCK_FADE ? L - DUCK_FADE : 0;
+                    for (int q = f0; q < L; q++) buf[q] = (int16_t)((int)buf[q] * (L - q) / (L - f0));
+                    for (int q = L; q < full; q++) buf[q] = 0;
+                    duck_left = tail + DUCK_FADE;
+                }
+            }
+            else if (L - XF >= MIN_LOOP) { rec_len = L; start_loop(L - XF, true); }
+            else { rec_len = 0; loop_len = 0; state = REC_IDLE; }
+        } else { rec_len = L; start_loop(L - XF, false); }
+        if (state != REC_RECORDING) { int e = rec_len; for (int g = 0; g < GUARD; g++) buf[e + g] = buf[e > 0 ? e - 1 : 0]; }
     }
     rec_prev = r;
 
     if (state == REC_RECORDING) {
         int len = rec_len;
+        const float thr = take_thresh;
         for (int i = 0; i < n; i++) {
             float x = in[i];
             out[i] = x;
-            if (len < MAX_SAMPLES) {
-                float s = x * 32767.0f;
-                if (s > 32767.0f) s = 32767.0f; else if (s < -32768.0f) s = -32768.0f;
-                buf[len++] = (int16_t)s;
+            if (guard_left > 0) { guard_left--; continue; }     // the press's click: not a sample of it is kept
+            float s = x * 32767.0f;
+            if (s > 32767.0f) s = 32767.0f; else if (s < -32768.0f) s = -32768.0f;
+            if (armed) {                                        // waiting for the first sound, the last moments kept by
+                if (x < thr && x > -thr) {
+                    pre[pre_w] = (int16_t)s;
+                    if (++pre_w >= PRE_MAX) pre_w = 0;
+                    if (pre_n < PRE_MAX) pre_n++;
+                    continue;
+                }
+                int k = take_pre < pre_n ? take_pre : pre_n;    // here it is: its attack goes in first
+                for (int j = 0; j < k; j++) { int q = pre_w - k + j; if (q < 0) q += PRE_MAX; buf[len++] = pre[q]; }
+                armed = false; waiting_v = 0;
+                rec_start = frames + (uint32_t)i - (uint32_t)k;
+            } else if (len == 0) rec_start = frames + (uint32_t)i;
+            if (duck_left > 0) {                                // recording on to the beat: the release's click rings out unheard
+                if (duck_left <= DUCK_FADE) s *= 1.0f - (float)duck_left * (1.0f / DUCK_FADE); else s = 0.0f;
+                duck_left--;
             }
+            if (len < MAX_SAMPLES) buf[len++] = (int16_t)s;
         }
         rec_len = len;
         frames += (uint32_t)n;
@@ -306,6 +373,7 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
         memset(out, 0, n * sizeof(float));
         frames += (uint32_t)n;
         vol_s = volume;
+        jog_v = 0.0f; jog_pub = 0.0f; jog_req = 0;
         return;
     }
 
@@ -341,9 +409,21 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
     float sp = speed;
     float pc = pitch;
 
+    // the jog: what the knob pushed since the last block becomes speed that dies away (its integral is the push)
+    const float jk = jog_k;
+    float jv = jog_v;
+    {
+        int32_t jq = __atomic_exchange_n(&jog_req, 0, __ATOMIC_ACQ_REL);
+        if (jq) jv += (float)jq * (1.0f / 256.0f) * jk;
+        if (jv > JOG_MAX) jv = JOG_MAX; else if (jv < -JOG_MAX) jv = -JOG_MAX;
+        if (jv < 1e-5f && jv > -1e-5f) jv = 0.0f;                 // no crawling into denormals
+    }
+    const bool jogging = jv > 0.01f || jv < -0.01f;
+
     // the grid lock, decided once per block: the loop is whole beats of the grid and the speed sits on a ratio
+    // (not while the knob moves the tape: the hand wins, and the beat takes the head back afterwards)
     float corr = 0.0f;
-    int k = (G.mode & GRID_LOCK) && G.fpb && (uint32_t)le % G.fpb == 0 ? ratio_of(fabsf(st)) : -1;
+    int k = !jogging && (G.mode & GRID_LOCK) && G.fpb && (uint32_t)le % G.fpb == 0 ? ratio_of(fabsf(st)) : -1;
     if (k >= 0 && fabsf(sp - st) < 0.01f * fabsf(st)) {
         float rt = st < 0 ? -ratios[k] : ratios[k];
         int e = grid_pos(frames, le, k, st < 0) - ip;
@@ -370,7 +450,7 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
                 float w = xf_w[XF - xf_left];
                 y = y * w + read_loop(xf_from_i, xf_from_f, le, len) * (1.0f - w);
                 xf_left--;
-                xf_from_f += sp + corr;
+                xf_from_f += sp + corr + jv;
                 if (xf_from_f >= 1.0f)      { int s = (int)xf_from_f; xf_from_i += s; xf_from_f -= (float)s; }
                 else if (xf_from_f < 0.0f)  { int s = (int)(-xf_from_f) + 1; xf_from_i -= s; xf_from_f += (float)s; }
                 if (xf_from_i >= le) xf_from_i -= le; else if (xf_from_i < 0) xf_from_i += le;
@@ -391,13 +471,15 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
         }
         out[i] = y * (vol + dvol * (float)i);
 
-        fp += sp + corr;
+        jv -= jv * jk;
+        fp += sp + corr + jv;
         if (fp >= 1.0f)      { int s = (int)fp; ip += s; fp -= (float)s; }
         else if (fp < 0.0f)  { int s = (int)(-fp) + 1; ip -= s; fp += (float)s; }
         if (ip >= le) ip -= le; else if (ip < 0) ip += le;
     }
 
     pos_i = ip; pos_f = fp; speed = sp; pitch = pc;
+    jog_v = jv; jog_pub = jv;
     frames += (uint32_t)n;
 }
 

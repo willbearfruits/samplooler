@@ -32,3 +32,13 @@ void gest_enc(int counts, bool pressed, int64_t now_us, enc_out_t *o);
 // The joystick: raw 12-bit ADC and the centres measured at rest.
 typedef struct { float jx, jy; bool flick_l, flick_r, flick_u, flick_d; } joy_out_t;
 void gest_joy(int raw_x, int raw_y, float cx, float cy, joy_out_t *o);
+
+// The left knob (rev E): raw quadrature counts every ~10 ms. counts: with knob.dir applied, for the jog (80 a turn);
+// det: whole detents, for stepping a value.
+typedef struct { int counts, det; } knob_out_t;
+void gest_knob(int counts, knob_out_t *o);
+
+// The hand over the ToF sensor, every ~10 ms. fresh: mm and status are a new reading (status 0 = a good one).
+// v: 0 no hand .. 1 fully down, by hand.near / hand.far / hand.curve, gliding (hand.glide; hand.release once it has gone).
+typedef struct { float v; bool seen; int mm; } hand_out_t;
+void gest_hand(bool fresh, int mm, int status, int dt_ms, hand_out_t *o);

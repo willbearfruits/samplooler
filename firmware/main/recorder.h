@@ -33,6 +33,18 @@ void  recorder_set_mode(int mode);
 void  recorder_set_grain_ms(int ms);        // GRAIN: 20..200
 void  recorder_set_volume(float v);         // 0..2
 
+// The left knob's jog (UI task): push the tape this many frames along (+ forwards), played out over the glide, on top
+// of the speed. One 32-bit add; the audio task takes what has gathered at the top of a block.
+void  recorder_jog(float frames);
+void  recorder_set_jog_ms(float ms);        // the glide (one-pole time constant), 60 ms by default
+float recorder_jog_now(void);               // the extra speed the push gives right now (x), for the screen
+// How a take starts and ends (UI task). on_sound: REC down waits for the first sample above thresh (0..1 of full
+// scale) and keeps preroll frames from before it (the attack); guard: frames after the press that are never
+// recorded (the switch's click, centimetres from the mic); tail: frames cut from the end (the release's click comes
+// before the release is seen). All zero and false: a take is exactly what was held, as it used to be.
+void  recorder_set_take(bool on_sound, float thresh, int preroll, int guard, int tail);
+bool  recorder_waiting(void);               // REC is down and no sound has come yet (the screen says so)
+
 int   recorder_state(void);
 int   recorder_mode(void);
 float recorder_loop_seconds(void);

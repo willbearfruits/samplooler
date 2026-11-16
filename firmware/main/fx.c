@@ -2,10 +2,12 @@
 #include "recorder.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include "esp_heap_caps.h"
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "diag.h"
+#include <math.h>
 
 static const char *TAG = "fx";
 
@@ -34,6 +36,36 @@ static float  stt_pos;
 static volatile float stt_amount;
 static bool   stt_on;
 static float  stt_mix;          // slewed dry/wet so entry and exit do not click
+
+// ---- filter ----
+// A state-variable filter in its trapezoidal form (Zavalishin's): stable while its cutoff moves, which is all it
+// does here. The UI task turns the position into g = tan(pi fc / fs) (libm, its side), the audio task glides g and
+// the wet share per sample. Low-pass or high-pass is only swapped while the wet share is at zero.
+#define FLT_OPEN    0.02f       // |position| below this: open
+static volatile float flt_g_t = 2.4f, flt_k_t = 1.0f, flt_wet_t;
+static volatile int   flt_hp_t;
+static volatile float flt_pos_v;
+static float flt_g = 2.4f, flt_wet, flt_ic1, flt_ic2;
+static int   flt_hp;
+
+void fx_set_filter(float pos, float res)
+{
+    uint32_t b; memcpy(&b, &pos, 4);
+    if ((b & 0x7f800000u) == 0x7f800000u) return;             // NaN or inf: as it was
+    if (pos > 1.0f) pos = 1.0f; else if (pos < -1.0f) pos = -1.0f;
+    if (!(res >= 0.0f)) res = 0.0f; else if (res > 0.9f) res = 0.9f;
+    flt_pos_v = pos;
+    float a = fabsf(pos);
+    if (a < FLT_OPEN) { flt_wet_t = 0.0f; return; }
+    float t = (a - FLT_OPEN) / (1.0f - FLT_OPEN);
+    // the wet share is full within the first tenth of the travel, the cutoff sweeps over all of it
+    float fc = pos < 0 ? 12000.0f * powf(150.0f / 12000.0f, t) : 30.0f * powf(5000.0f / 30.0f, t);
+    flt_g_t = tanf((float)M_PI * fc / (float)REC_SAMPLE_RATE);
+    flt_k_t = 2.0f - 2.0f * res;
+    flt_hp_t = pos > 0;
+    flt_wet_t = t < 0.1f ? t * 10.0f : 1.0f;
+}
+float fx_filter_pos(void) { return flt_pos_v; }
 
 void fx_init(void)
 {
@@ -107,4 +139,28 @@ void IRAM_ATTR fx_process(float *buf, int n)
         if (d > 0.002f || d < -0.002f) any = true;
     }
     dly_active = any;
+
+    // ---- filter ----
+    float wet_t = flt_wet_t;
+    const int hp_t = flt_hp_t;
+    if (hp_t != flt_hp) { if (flt_wet < 0.002f) flt_hp = hp_t; else wet_t = 0.0f; }   // the other kind: through open first
+    if (wet_t <= 0.0f && flt_wet < 0.0005f) { flt_wet = 0.0f; flt_ic1 = flt_ic2 = 0.0f; return; }   // open: nothing runs
+    const float g_t = flt_g_t, kq = flt_k_t;
+    const bool hp = flt_hp != 0;
+    float g = flt_g, wet = flt_wet, ic1 = flt_ic1, ic2 = flt_ic2;
+    for (int i = 0; i < n; i++) {
+        g += 0.002f * (g_t - g);                                  // 16 ms: the hand's 25 ms readings never step
+        wet += 0.004f * (wet_t - wet);
+        float a1 = 1.0f / (1.0f + g * (g + kq)), a2 = g * a1, a3 = g * a2;
+        float x = buf[i], v3 = x - ic2;
+        float v1 = a1 * ic1 + a2 * v3, v2 = ic2 + a2 * ic1 + a3 * v3;
+        ic1 = 2.0f * v1 - ic1; ic2 = 2.0f * v2 - ic2;
+        float y = hp ? x - kq * v1 - v2 : v2;
+        buf[i] = x + (y - x) * wet;
+    }
+    {   // never left ringing on a bad number (the exponent's bits: -ffast-math hides a NaN from a compare)
+        uint32_t b1, b2; memcpy(&b1, &ic1, 4); memcpy(&b2, &ic2, 4);
+        if ((b1 & 0x7f800000u) >= 0x42000000u || (b2 & 0x7f800000u) >= 0x42000000u) ic1 = ic2 = 0.0f;   // 32 or more, inf, NaN
+    }
+    flt_g = g; flt_wet = wet; flt_ic1 = ic1; flt_ic2 = ic2;
 }

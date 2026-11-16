@@ -1,6 +1,8 @@
-// The tuning table: every number behind the controls (IMU, motion, tilt, roll, joystick, encoder, REC, mic, USB),
-// changeable while it plays (the rig's SysEx 'T', rig/PROTOCOL.md) and kept in NVS ("tune", apart from the settings).
-// The defaults are the firmware as it was before the table (preset v1): with them nothing plays differently.
+// The tuning table: every number behind the controls (IMU, motion, tilt, roll, joystick, the two knobs, the hand, REC,
+// mic, USB, the screen), changeable while it plays (the rig's SysEx 'T', rig/PROTOCOL.md) and kept in NVS ("tune",
+// apart from the settings). The defaults of everything up to rig.screen_fps are the firmware as it was before the
+// table (preset v1; rig/twin/test_v1.c holds them to it). What follows came with rev E: the left knob, the hand,
+// the take's start and end, the filter, the screen.
 // Pure C: tools and rig/twin build it on the PC (the NVS part is ESP only).
 #pragma once
 #include <stdbool.h>
@@ -77,7 +79,27 @@ X(MI_HPF,      "mic.hpf",         TK_FLOAT,  20,    400,  5,     80,   "Hz",  ""
 X(MI_SLOT,     "mic.slot",        TK_ENUM,   0,     2,    1,     0,    "",    "auto|L|R", "which I2S slot carries the mic") \
 X(MI_TRIM,     "mic.trim",        TK_FLOAT, -12,    12,   0.5f,  0,    "dB",  "", "added to Mic gain") \
 X(US_OUT,      "usb.out",         TK_ENUM,   0,     1,    1,     0,    "",    "mix|mix + raw mic", "what the board sends to the computer (right channel)") \
-X(RG_FPS,      "rig.screen_fps",  TK_INT,    1,     20,   1,     10,   "fps", "", "screen frames a second to the rig")
+X(RG_FPS,      "rig.screen_fps",  TK_INT,    1,     20,   1,     10,   "fps", "", "screen frames a second to the rig") \
+X(KN_ON,       "knob.on",         TK_ENUM,   0,     2,    1,     0,    "",    "auto|off|on", "the left knob on GPIO 1 and 2 (rev E), at the next start. auto: there unless a joystick answers on those pins") \
+X(KN_DIR,      "knob.dir",        TK_ENUM,   0,     1,    1,     0,    "",    "-1|+1", "which way a turn of the left knob counts") \
+X(KN_STEPS,    "knob.steps",      TK_INT,    1,     8,    1,     4,    "",    "", "counts per detent of the left knob") \
+X(KN_REV,      "knob.counts_rev", TK_INT,    20,    400,  4,     80,   "",    "", "counts in one whole turn (an EC11 with 20 detents: 80)") \
+X(KN_TURN,     "knob.jog_turn",   TK_FLOAT,  0.1f,  8,    0.1f,  1.2f, "s",   "", "JOG: one turn of the knob moves the tape this far") \
+X(KN_GLIDE,    "knob.jog_glide",  TK_FLOAT,  5,     500,  5,     60,   "ms",  "", "JOG: how long a push on the tape takes to play out") \
+X(HA_NEAR,     "hand.near",       TK_INT,    10,    200,  5,     40,   "mm",  "", "the hand counts as fully down at this height") \
+X(HA_FAR,      "hand.far",        TK_INT,    80,    1000, 10,    250,  "mm",  "", "the hand starts to count below this height (above it: no hand)") \
+X(HA_GLIDE,    "hand.glide",      TK_FLOAT,  5,     500,  5,     40,   "ms",  "", "how fast the value follows the hand") \
+X(HA_RELEASE,  "hand.release",    TK_FLOAT,  5,     3000, 5,     250,  "ms",  "", "the glide back to open once the hand has gone") \
+X(HA_CURVE,    "hand.curve",      TK_FLOAT,  0.3f,  3,    0.05f, 1,    "",    "", "1: straight; above 1 the last centimetres do more") \
+X(HA_PITCH,    "hand.pitch_st",   TK_FLOAT,  1,     24,   1,     12,   "st",  "", "Hand PITCH: the hand fully down bends this far up") \
+X(RE_GUARD,    "rec.guard_ms",    TK_INT,    0,     500,  10,    120,  "ms",  "", "nothing is recorded this long after the press (the switch's click)") \
+X(RE_TAIL,     "rec.tail_ms",     TK_INT,    0,     300,  5,     40,   "ms",  "", "the take ends this long before the release was seen (its click)") \
+X(RE_START_DB, "rec.start_db",    TK_FLOAT, -60,   -10,   1,    -36,   "dB",  "", "Loop start SOUND: the take starts at the first sound louder than this") \
+X(RE_PREROLL,  "rec.preroll_ms",  TK_INT,    0,     50,   1,     12,   "ms",  "", "Loop start SOUND: this much before the first sound is kept (its attack)") \
+X(FL_RES,      "filter.res",      TK_FLOAT,  0,     0.9f, 0.05f, 0.5f, "",    "", "the filter's resonance") \
+X(SC_FPS,      "screen.fps",      TK_INT,    10,    40,   1,     30,   "fps", "", "screen frames a second") \
+X(SC_FAST,     "screen.fast",     TK_BOOL,   0,     1,    1,     0,    "",    "off|on", "the screen's bus at 800 kHz instead of 400, at the next start (try it: not every panel takes it)") \
+X(SC_DIM,      "screen.dim_s",    TK_INT,    0,     3600, 10,    60,   "s",   "", "the screen dims after lying untouched this long (0: never)")
 
 #define TUNE_ID(id, ...) TU_##id,
 enum { TUNE_TABLE(TUNE_ID) TU_N };
