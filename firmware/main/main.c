@@ -594,7 +594,7 @@ void app_main(void)
     // The screen's task, one step below this loop, which goes up a step: the controls come first, and both stay
     // under the USB and radio tasks.
     ui_q = xQueueCreate(1, sizeof(ui_frame_t));
-    if (ui_q) xTaskCreatePinnedToCore(ui_task, "ui", 6144, NULL, 2, NULL, 0);
+    if (ui_q) xTaskCreatePinnedToCore(ui_task, "ui", 8192, NULL, 2, NULL, 0);   // printf with floats, as the main task has room for
     vTaskPrioritySet(NULL, 3);
 #endif
 

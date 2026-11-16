@@ -162,13 +162,13 @@ size_t diag_status(char *buf, size_t n)
     const esp_app_desc_t *app = esp_app_get_description();
     int k = snprintf(buf, n,
                      "v %s | up %lus | cpu %d%% (max %d%%) | audio blocks %lu rx ovf %lu tx ovf %lu read err %lu flash stalls %lu\n"
-                     "heap int %u (min %u, largest %u) psram %u | stack free audio %u main %u",
+                     "heap int %u (min %u, largest %u) psram %u | stack free audio %u main %u ui %u",
                      app->version, (unsigned long)(esp_timer_get_time() / 1000000), a.cpu_avg, a.cpu_max,
                      (unsigned long)a.blocks, (unsigned long)a.rx_ovf, (unsigned long)a.tx_ovf, (unsigned long)a.read_err,
                      (unsigned long)a.stalls_flash,
                      (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
                      (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
-                     stack_free("audio"), stack_free("main"));
+                     stack_free("audio"), stack_free("main"), stack_free("ui"));
     if (k < 0) k = 0;
     return (size_t)k < n ? (size_t)k : n - 1;
 }

@@ -117,6 +117,33 @@ static void test_take(void)
     run(2, false);
 }
 
+// A loop loaded from a slot with boards around is anchored to the nearest beat. When that beat is still ahead, the
+// loop must begin where the grid has it, not somewhere else to be pulled or jumped back (found by the soak).
+static void test_load_on_grid(void)
+{
+    printf("== a loaded loop starts on the beat, whichever side the nearest beat is\n");
+    recorder_set_take(false, 0.016f, 0, 0, 0);
+    recorder_set_speed(1.0f);
+    for (int ahead = 0; ahead < 2; ahead++) {
+        settle();
+        // beat 0 placed so that the nearest beat is 3000 frames behind now, or 3000 ahead
+        uint32_t now = recorder_frames() + BL;                 // the grid is picked up by the next block
+        recorder_set_grid(16000, ahead ? now + 3000 : now - 3000, 0.0f, GRID_LOCK | GRID_SNAP_END);
+        source = NULL; run(1, false);
+        int max = 0; int16_t *b = recorder_load_begin(&max);
+        for (int i = 0; i < 32320; i++) b[i] = (int16_t)(8000.0f * sinf((float)i * 2.0f * (float)M_PI * 220.0f / SR));
+        recorder_load_end(32320, 32000, true);                 // two beats and the seam
+        float p0 = recorder_position() * 32000.0f;
+        float want = ahead ? 32000.0f - 3000.0f : 3000.0f;     // 3000 frames before the beat, or 3000 after it
+        run(2, false);
+        float err = recorder_lock_error();
+        check(recorder_state() == REC_PLAYING && fabsf(p0 - want) < 2.0f, "the nearest beat %s: the loop begins at frame %.0f of 32000 (the grid says %.0f)", ahead ? "3000 frames ahead" : "3000 frames behind", (double)p0, (double)want);
+        check(fabsf(err) < 4.0f, "  and the head is on the grid from its first block: %.1f frames off", (double)err);
+    }
+    recorder_set_grid(0, 0, 0.0f, 0);
+    run(2, false);
+}
+
 // the head's place, unwrapped, from the loop position
 static void test_jog(void)
 {
@@ -298,6 +325,7 @@ int main(void)
     fx_init();
     if (!recorder_init()) return 2;
     test_take();
+    test_load_on_grid();
     test_jog();
     test_filter();
     test_gestures();

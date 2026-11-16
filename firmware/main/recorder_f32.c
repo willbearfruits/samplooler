@@ -265,7 +265,12 @@ static int ratio_of(float a)                               // index of the ratio
 // divide 8 loops, so the count since the anchor is kept below that and never wraps)
 static int grid_pos(uint32_t now, int le, int k, bool back)
 {
-    uint32_t g8 = (now - (G.origin + anchor_off)) % (uint32_t)(8 * le);
+    // Frames since the anchor, within eight loops. The anchor can lie ahead of now: a loaded loop is anchored to the
+    // nearest beat, which may be up to half a beat away still. Counted as a signed number, or that loop would
+    // start somewhere else and jump back (or, without Snap, stay off the beat).
+    const uint32_t per = (uint32_t)(8 * le);
+    int32_t d = (int32_t)(now - (G.origin + anchor_off));
+    uint32_t g8 = d >= 0 ? (uint32_t)d % per : per - 1u - ((uint32_t)(-(d + 1)) % per);
     uint32_t num = k >= 2 ? 1u << (k - 2) : 1u, den = k < 2 ? 1u << (2 - k) : 1u;     // 1/4 1/2 1 2 4 8
     uint32_t e = (uint32_t)(((uint64_t)g8 * num / den) % (uint32_t)le);
     if (back) e = e ? (uint32_t)le - e : 0;
@@ -419,6 +424,10 @@ void IRAM_ATTR recorder_process(const float *in, float *out, int n)
         if (jv < 1e-5f && jv > -1e-5f) jv = 0.0f;                 // no crawling into denormals
     }
     const bool jogging = jv > 0.01f || jv < -0.01f;
+
+    // A loop left playing for days: the anchor is moved up by whole runs of eight loops (which changes nothing) before
+    // the frames since it outgrow a signed 32-bit count (18 hours).
+    if ((int32_t)(frames - (G.origin + anchor_off)) > 0x40000000) anchor_off += (0x40000000u / (uint32_t)(8 * le)) * (uint32_t)(8 * le);
 
     // the grid lock, decided once per block: the loop is whole beats of the grid and the speed sits on a ratio
     // (not while the knob moves the tape: the hand wins, and the beat takes the head back afterwards)

@@ -52,7 +52,10 @@ static void use(int k) { cur = k; link_use(k < 0 ? NULL : P.st); }
 // ---------------------------------------------------------------- the performance
 static int    fails;
 static double hours = 2.0;
-static long   ticks, blocks, takes, loops, loads, scrubs, voices_changed;
+static long   ticks, blocks, takes, loops, loads, scrubs, voices_changed, jogs, sweeps;
+static bool   take_new;                                    // the take's start and end as rev E has them (the first sound, the clicks cut)
+static int    jog_ticks;                                   // ticks since the knob last pushed the tape
+static float  flt_goal, flt_now;
 static float  worst_peak, worst_drift;
 static int    rec_hold_ticks, state_was = -1, closing_ticks;
 static uint32_t loop_seen = 0xFFFFFFFFu;
@@ -90,11 +93,25 @@ static void every_tick(void)
     else if (recorder_state() != REC_RECORDING && r < 0.004) {       // a take now and then, 0.05 .. 12 s
         rec_hold_ticks = (int)(5 + rnd() * rnd() * 1200);
         take_len_ticks = rec_hold_ticks;
-        expect_loop = take_len_ticks >= 11;                            // 0.1 s plus the seam
+        // 0.1 s plus the seam; the new way, the guard after the press and the tail before the release come off first
+        // (the mic sings all the time, so the first sound comes at once)
+        expect_loop = take_len_ticks >= (take_new ? 11 + 12 + 4 + 2 : 11);
         takes++;
     }
     bool rec = rec_hold_ticks > 0;
     if (rnd() < 0.002) { speed_goal = (float)(rnd() * 16.0 - 8.0); scrubs++; }
+    // rev E: the left knob pushes the tape (a burst of turns now and then, sometimes a wild spin), the filter sweeps,
+    // and the way a take starts and ends changes between takes
+    static int jog_burst; static float jog_size;
+    if (rnd() < 0.003) { jog_burst = 5 + (int)(rnd() * 80); jog_size = (float)((rnd() - 0.5) * (rnd() < 0.1 ? 40000.0 : 2400.0)); }
+    if (jog_burst > 0) { jog_burst--; recorder_jog(jog_size * (float)(0.5 + rnd())); jogs++; jog_ticks = 0; } else jog_ticks++;
+    if (rnd() < 0.004) { flt_goal = rnd() < 0.3 ? 0.0f : (float)(rnd() * 2.0 - 1.0); sweeps++; }
+    flt_now += (rnd() < 0.02 ? 1.0f : 0.08f) * (flt_goal - flt_now);                 // a glide, and now and then a jump
+    fx_set_filter(flt_now, (float)(rnd() * 0.9));
+    if (recorder_state() != REC_RECORDING && rec_hold_ticks == 0 && rnd() < 0.002) {
+        take_new = !take_new;
+        if (take_new) recorder_set_take(true, 0.016f, 12 * 32, 120 * 32, 40 * 32); else recorder_set_take(false, 0.016f, 0, 0, 0);
+    }
     if (rnd() < 0.01) speed_goal = 1.0f;
     speed_cmd += 0.1f * (speed_goal - speed_cmd);
     if (rnd() < 0.001) snap_setting = !snap_setting;
@@ -163,6 +180,8 @@ static void after_tick(void)
     float pos = recorder_position(), spn = recorder_speed_now();
     if (!finite_f(pos) || pos < 0.0f || pos >= 1.0f) fail("head position %.3f", (double)pos);
     if (!finite_f(spn) || fabsf(spn) > 8.01f) fail("speed now %.3f", (double)spn);
+    float jn = recorder_jog_now();
+    if (!finite_f(jn) || fabsf(jn) > 8.01f) fail("the knob's push %.3f", (double)jn);
     if (s != state_was) {
         if (s != REC_PLAYING) flock_loop_gone();
         if (state_was == REC_RECORDING && s == REC_IDLE && expect_loop) fail("a %d ms take ended in silence", take_len_ticks * 10);
@@ -172,7 +191,8 @@ static void after_tick(void)
     else closing_ticks = 0;
     if (s == REC_PLAYING && recorder_loop_start() != loop_seen) { loop_seen = recorder_loop_start(); flock_loop_made(recorder_loop_frames(), loop_seen); loops++; }
     // drift: at 1x with Snap on and the board around, the head stays on the beat once it has had a second to settle
-    bool at_1x = s == REC_PLAYING && snap_setting && fabsf(spn - 1.0f) < 0.001f && recorder_loop_frames() % (int)link_fpb() == 0;
+    // (a push from the knob moves the head off it on purpose: the second starts again once the push has played out)
+    bool at_1x = s == REC_PLAYING && snap_setting && fabsf(spn - 1.0f) < 0.001f && recorder_loop_frames() % (int)link_fpb() == 0 && jog_ticks > 100;
     ticks_at_1x = at_1x ? ticks_at_1x + 1 : 0;
     if (ticks_at_1x > 200) {
         float e = fabsf(recorder_lock_error());
@@ -204,7 +224,7 @@ int main(int argc, char **argv)
     }
     clock_gettime(CLOCK_MONOTONIC, &b);
     double wall = (double)(b.tv_sec - a.tv_sec) + (double)(b.tv_nsec - a.tv_nsec) * 1e-9;
-    printf("%.2f simulated hours in %.0f s: %ld blocks, %ld takes, %ld loops, %ld loads, %ld scrubs, %ld voice changes\n", hours, wall, blocks, takes, loops, loads, scrubs, voices_changed);
+    printf("%.2f simulated hours in %.0f s: %ld blocks, %ld takes, %ld loops, %ld loads, %ld scrubs, %ld voice changes, %ld pushes of the knob, %ld filter sweeps\n", hours, wall, blocks, takes, loops, loads, scrubs, voices_changed, jogs, sweeps);
     printf("worst output peak %.2f (the device soft-clips at 1.5), worst drift at 1x %.1f frames, link peers %d\n", (double)worst_peak, (double)worst_drift, flock_peers());
     printf("%d failures\n", fails);
     return fails ? 1 : 0;
