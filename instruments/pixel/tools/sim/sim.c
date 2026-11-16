@@ -185,14 +185,20 @@ void sim_tick(void)
         .enc = SI.enc, .tap = SI.tap, .pressed = SI.pressed, .held_ms = held_ms, .rec = SI.rec,
         .imu_ok = SI.imu, .acc_raw = imu_axes(SI.acc), .gyro_raw = imu_axes(SI.gyro), .burst_raw = burst_raw, .nburst = SI.nburst, .gburst_raw = gburst_raw,
         .joy_ok = SI.joy, .jx = SI.jx, .jy = SI.jy, .dt = 0.01f, .frames = frames_now,
+        // the sensor measures every 25 ms: a reading on two ticks of five; no hand reads as nothing in range
+        .lknob_ok = SI.lknob, .lknob = SI.lk, .tof_ok = SI.tof, .tof_fresh = SI.tof && (ticks % 5 == 0 || ticks % 5 == 2),
+        .tof_mm = SI.hand_mm > 0 ? SI.hand_mm : 0, .tof_status = SI.hand_mm > 0 ? 0 : 2,
     };
     front_tick(&fi);
-    SI.enc = 0; SI.tap = false; SI.nburst = 0;
+    SI.enc = 0; SI.tap = false; SI.nburst = 0; SI.lk = 0;
     if (++ticks % 4 == 0) { front_draw(); if (gif_on) gif_frame(); }
 }
 
 void sim_run(float s) { int n = (int)(s * 100.0f + 0.5f); for (int i = 0; i < n; i++) sim_tick(); }
 void sim_turn(int d) { SI.enc = d; sim_tick(); }
+void sim_rev_e(void) { SI.joy = false; SI.jx = SI.jy = 0; SI.lknob = true; SI.tof = true; SI.hand_mm = 0; }
+void sim_lturn(int detents) { SI.lk = detents; sim_tick(); }
+void sim_hand(int mm, float seconds) { SI.hand_mm = mm; sim_run(seconds); }
 // A click in play opens the menu only once the double-click window has passed (front.c's DOUBLE_MS): wait it out,
 // so a test that clicks and then turns finds the menu open, as a player would after the same click.
 void sim_tap(void)

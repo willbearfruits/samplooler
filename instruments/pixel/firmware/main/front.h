@@ -23,6 +23,11 @@ typedef struct {
     const vec3_t *gburst_raw;              // the gyro at the same instants (INST.burst_gyro), or NULL
     bool     joy_ok;           // a joystick was found
     float    jx, jy;
+    bool     lknob_ok;         // rev E: the left knob is there
+    int      lknob;            // its detents since the last tick
+    bool     tof_ok;           // rev E: the hand's sensor answers
+    bool     tof_fresh;        // tof_mm and tof_status are a new reading (every 25 ms or so)
+    int      tof_mm, tof_status;   // millimetres; status 0 is a good reading
     float    dt;
     uint32_t frames;
 } front_in_t;
@@ -53,6 +58,7 @@ bool front_dirty(void);                          // params or meta changed since
 void front_saved(void);
 bool front_quiet(void);                          // the output has been near silent for 0.3 s: a good moment to write flash
 bool front_busy(void);                           // splash or tilt setup on screen (the shell holds off saving)
+const ctl_t *front_ctl(void);                    // what the instrument was handed on the last tick (for tools/sim)
 int  front_menu_level(void);                     // 0 closed, 1 pages, 2 items, 3 editing (for tools/sim)
 int  front_screen(void);                         // 0 splash, 1 play, 2 tilt setup, 3 about; 4 the screensaver (for tools/sim)
 

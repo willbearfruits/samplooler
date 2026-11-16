@@ -51,6 +51,16 @@ bool plat_sysex(const uint8_t *m, int n)
     sim_sysex_n++;
     return true;
 }
+uint8_t sim_sx_raw[1 << 18]; int sim_sx_raw_n;
+bool plat_sysex_try(const uint8_t *m, int n)
+{
+    if (sim_sysex_off) return false;
+    if (n < 3 || m[0] != 0xF0 || m[n - 1] != 0xF7) return false;
+    if (sim_sx_raw_n + n > (int)sizeof sim_sx_raw) return false;
+    memcpy(sim_sx_raw + sim_sx_raw_n, m, (size_t)n);
+    sim_sx_raw_n += n;
+    return true;
+}
 const char *plat_version(void) { return "0.1.0-sim"; }
 const char *plat_serial(void) { return "SM-00000000"; }
 int  plat_about(char l[][32], int max)
@@ -149,14 +159,13 @@ void sim_wav(const char *suffix, float t0, float t1)
 // The sim's IMU is a right-handed one fitted with x to the right and z out of the screen, so its y points
 // to the top edge: screen y is its -y (meta.axis 1, -2, 3, what tilt setup finds for it).
 static vec3_t imu_axes(vec3_t s) { return (vec3_t){ s.x, -s.y, s.z }; }
-static vec3_t burst_raw[64];
+static vec3_t burst_raw[64], gburst_raw[64];
 
 __attribute__((weak)) void sim_tick_hook(void) { }
 
 void sim_tick(void)
 {
     sim_tick_hook();
-    for (int i = 0; i < SI.nburst && i < 64; i++) burst_raw[i] = imu_axes(SI.burst[i]);
     float in[AUDIO_BLOCK], out[AUDIO_BLOCK];
     for (int b = 0; b < TICK_FRAMES / AUDIO_BLOCK; b++) {
         for (int i = 0; i < AUDIO_BLOCK; i++) {
@@ -170,19 +179,26 @@ void sim_tick(void)
         frames_now += AUDIO_BLOCK;
     }
     sim_t = (float)frames_now / (float)AUDIO_SR;
+    for (int i = 0; i < SI.nburst && i < 64; i++) { burst_raw[i] = imu_axes(SI.burst[i]); gburst_raw[i] = imu_axes(SI.gburst[i]); }   // after the audio: a mic callback may have filled them
     held_ms = SI.pressed ? held_ms + 10 : 0;
     front_in_t fi = {
         .enc = SI.enc, .tap = SI.tap, .pressed = SI.pressed, .held_ms = held_ms, .rec = SI.rec,
-        .imu_ok = SI.imu, .acc_raw = imu_axes(SI.acc), .gyro_raw = imu_axes(SI.gyro), .burst_raw = burst_raw, .nburst = SI.nburst,
+        .imu_ok = SI.imu, .acc_raw = imu_axes(SI.acc), .gyro_raw = imu_axes(SI.gyro), .burst_raw = burst_raw, .nburst = SI.nburst, .gburst_raw = gburst_raw,
         .joy_ok = SI.joy, .jx = SI.jx, .jy = SI.jy, .dt = 0.01f, .frames = frames_now,
+        // the sensor measures every 25 ms: a reading on two ticks of five; no hand reads as nothing in range
+        .lknob_ok = SI.lknob, .lknob = SI.lk, .tof_ok = SI.tof, .tof_fresh = SI.tof && (ticks % 5 == 0 || ticks % 5 == 2),
+        .tof_mm = SI.hand_mm > 0 ? SI.hand_mm : 0, .tof_status = SI.hand_mm > 0 ? 0 : 2,
     };
     front_tick(&fi);
-    SI.enc = 0; SI.tap = false; SI.nburst = 0;
+    SI.enc = 0; SI.tap = false; SI.nburst = 0; SI.lk = 0;
     if (++ticks % 4 == 0) { front_draw(); if (gif_on) gif_frame(); }
 }
 
 void sim_run(float s) { int n = (int)(s * 100.0f + 0.5f); for (int i = 0; i < n; i++) sim_tick(); }
 void sim_turn(int d) { SI.enc = d; sim_tick(); }
+void sim_rev_e(void) { SI.joy = false; SI.jx = SI.jy = 0; SI.lknob = true; SI.tof = true; SI.hand_mm = 0; }
+void sim_lturn(int detents) { SI.lk = detents; sim_tick(); }
+void sim_hand(int mm, float seconds) { SI.hand_mm = mm; sim_run(seconds); }
 // A click in play opens the menu only once the double-click window has passed (front.c's DOUBLE_MS): wait it out,
 // so a test that clicks and then turns finds the menu open, as a player would after the same click.
 void sim_tap(void)

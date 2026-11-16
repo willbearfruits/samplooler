@@ -36,7 +36,7 @@ static uint32_t ticks;
 static float  t_now;
 
 // ---------------------------------------------------------------- motion
-static vec3_t acc_s = { 0, 0, 1 }, gyro_s, burst_s[64];
+static vec3_t acc_s = { 0, 0, 1 }, gyro_s, burst_s[64], gburst_s[64];
 static vec3_t raw_avg = { 0, 0, 1 };
 static float  lean_x, lean_y;
 static ctl_t  ctl;
@@ -236,9 +236,10 @@ static int mlev, sel1, sel2, top1;             // level: 0 closed, 1 pages, 2 it
 static int pick_k;                              // SAVE AS: the user slot being chosen
 static int edit_ms;
 
+static const char *sound_word(void) { return INST.sound_word ? INST.sound_word : "SOUND"; }
 static const char *group_name(int g)
 {
-    if (g == G_SOUND) return "SOUND";
+    if (g == G_SOUND) return sound_word();
     if (g == GROUP_LOOP) return "LOOP";
     if (g == GROUP_SYSTEM) return "SYSTEM";
     return INST.groups[g];
@@ -271,7 +272,7 @@ static const char *item_name(int it)
 {
     switch (it) {
     case ITEM_BACK: return S_LEFT " BACK";
-    case SND_SOUND: return "SOUND";
+    case SND_SOUND: return sound_word();
     case SND_SAVE: return "SAVE AS";
     case SND_REVERT: return "REVERT";
     default: return param(it)->name;
@@ -345,7 +346,7 @@ static void menu_tap(void)
     if (mlev == 2) {
         int it = items[sel2];
         if (it == ITEM_BACK) { mlev = 1; return; }
-        if (it == SND_REVERT) { if (load_sound(meta.sound, true)) toast("BACK TO THE SAVED SOUND", 1300); return; }
+        if (it == SND_REVERT) { if (load_sound(meta.sound, true)) { char t[40]; snprintf(t, sizeof t, "BACK TO THE SAVED %s", sound_word()); toast(t, 1300); } return; }
         if (it == SND_SAVE) { pick_k = meta.sound >= SOUND_ID_USER ? meta.sound - SOUND_ID_USER : 0; mlev = 3; edit_ms = 0; return; }
         if (it == SND_SOUND) { mlev = 3; edit_ms = 0; return; }
         if (param(it)->kind == PK_ACT) { run_action(it); return; }
@@ -381,6 +382,8 @@ static bool hint_ok(int i)
     const hint_t *h = &INST.hints[i];
     if (meta.learned & (1u << h->learn)) return false;
     if (h->learn == LEARN_JOY && !ctl.has_joy) return false;
+    if (h->learn == LEARN_LKNOB && !ctl.has_lknob) return false;
+    if (h->learn == LEARN_HAND && !ctl.has_hand) return false;
     if (h->learn == LEARN_TILT && !ctl.has_imu) return false;
     if (h->learn == LEARN_REC && INST.looper && !looper_ready()) return false;
     return true;
@@ -443,19 +446,113 @@ const front_status_t *front_status(void)
     return &status;
 }
 
+// The hand over the sensor (rev E), from its readings to a value an instrument can put on a sound. A reading counts
+// when the sensor calls it good and it is under 25 cm. Two in a row bring the hand in, three misses in a row send
+// it away (one is a glitch); the middle one of the last three is used, so a wild number does nothing. Readings
+// come every 25 ms and the value glides between them (40 ms), and back to 0 once the hand has gone (250 ms).
+#define HAND_NEAR 40
+#define HAND_FAR  250
+static int   hd_mm[3], hd_n, hd_hits, hd_miss, hd_last;
+static bool  hd_seen;
+static float hd_v, hd_target;
+static int hd_median(int a, int b, int c) { return a > b ? (b > c ? b : a > c ? c : a) : (a > c ? a : b > c ? c : b); }
+static void hand_tick(const front_in_t *in, ctl_t *c)
+{
+    bool on = in->tof_ok && pv[CP(CP_HAND)] >= 1.0f;
+    if (!on) { hd_n = hd_hits = hd_miss = 0; hd_seen = false; hd_target = 0; }
+    else if (in->tof_fresh) {
+        if (in->tof_status == 0 && in->tof_mm >= 0 && in->tof_mm < HAND_FAR) {
+            hd_mm[hd_n % 3] = in->tof_mm; hd_n++;
+            hd_miss = 0;
+            if (hd_hits < 2) hd_hits++;
+            if (hd_hits >= 2) hd_seen = true;
+            hd_last = hd_n >= 3 ? hd_median(hd_mm[0], hd_mm[1], hd_mm[2]) : in->tof_mm;
+            float t = (float)(HAND_FAR - hd_last) / (float)(HAND_FAR - HAND_NEAR);
+            hd_target = t < 0 ? 0 : t > 1 ? 1 : t;
+        } else if (++hd_miss >= 3) { hd_seen = false; hd_hits = 0; hd_n = 0; hd_target = 0; }
+    }
+    float tau = hd_seen ? 0.040f : 0.250f, k = in->dt < tau ? in->dt / tau : 1.0f;
+    hd_v += k * ((hd_seen ? hd_target : 0.0f) - hd_v);
+    if (!hd_seen && hd_v < 0.002f) hd_v = 0;
+    c->has_hand = on; c->hand_seen = on && hd_seen; c->hand = on ? hd_v : 0.0f; c->hand_mm = on && hd_seen ? hd_last : 0;
+}
+
+const ctl_t *front_ctl(void) { return &ctl; }
+
 static void telemetry(void)
 {
-    static int last[4] = { -1, -1, -1, -1 };
+    static int last[5] = { -1, -1, -1, -1, -1 };
     if (pv[CP(CP_MIDI_OUT)] < 1.0f) return;
-    int v[4] = { (int)(64.0f + ctl.lean_y * 64.0f / 90.0f), (int)(64.0f + ctl.lean_x * 64.0f / 90.0f),
-                 (int)(64.0f + ctl.jx * 63.0f), (int)(64.0f + ctl.jy * 63.0f) };
-    for (int i = 0; i < 4; i++) {
+    int v[5] = { (int)(64.0f + ctl.lean_y * 64.0f / 90.0f), (int)(64.0f + ctl.lean_x * 64.0f / 90.0f),
+                 (int)(64.0f + ctl.jx * 63.0f), (int)(64.0f + ctl.jy * 63.0f), (int)(ctl.hand * 127.0f) };   // CC 12..16
+    for (int i = 0; i < 5; i++) {
         if (i < 2 && !ctl.has_imu) continue;
-        if (i >= 2 && !ctl.has_joy) continue;
+        if (i >= 2 && i < 4 && !ctl.has_joy) continue;
+        if (i == 4 && !ctl.has_hand) continue;
         int c = v[i] < 0 ? 0 : v[i] > 127 ? 127 : v[i];
         int d = c - last[i]; if (d < 0) d = -d;
         if (d >= 2 || (c != last[i] && (c == 0 || c == 127))) { last[i] = c; plat_midi3((uint8_t)(0xB0 | ch()), (uint8_t)(12 + i), (uint8_t)c); }
     }
+}
+
+// ---------------------------------------------------------------- the motion stream (front.h; tools/motion_rec.py)
+#define MO_QUIET_TICKS 200                     // 2 s in which nothing went out: nobody reads, the stream stops
+static bool     mo_on;
+static uint8_t  mo_seq;
+static uint32_t mo_sent, mo_drops;
+static int      mo_fail;                       // ticks in a row that nothing went out
+
+bool front_motion_on(void) { return mo_on; }
+
+static int q14(float v, float scale, int lim)  // a signed 14-bit step count, clamped to +-lim
+{
+    uint32_t u; memcpy(&u, &v, 4);
+    if ((u & 0x7f800000u) == 0x7f800000u) return 0;            // NaN or inf (a bit test: -ffast-math drops v != v)
+    float s = v * scale;
+    if (s >= (float)lim) return lim;
+    if (s <= (float)-lim) return -lim;
+    return (int)(s + (s >= 0.0f ? 0.5f : -0.5f));
+}
+
+int front_motion_packet(uint8_t *m, uint8_t seq, uint32_t frames, uint8_t flags, const vec3_t *acc, const vec3_t *gyro, int n)
+{
+    if (n < 0) n = 0;
+    if (n > MOTION_MAX) n = MOTION_MAX;
+    int k = 0;
+    m[k++] = 0xF0; m[k++] = 0x7D; m[k++] = 'm';
+    m[k++] = seq & 0x7F;
+    for (int s = 28; s >= 0; s -= 7) m[k++] = (uint8_t)((frames >> s) & 0x7F);
+    m[k++] = flags & 0x7F;
+    m[k++] = (uint8_t)n;
+    for (int i = 0; i < n; i++) {
+        const vec3_t z = { 0, 0, 0 }, *a = &acc[i], *g = gyro ? &gyro[i] : &z;
+        int q[6] = { q14(a->x, 1024.0f, 8191), q14(a->y, 1024.0f, 8191), q14(a->z, 1024.0f, 8191),
+                     q14(g->x, 4.0f, 8000), q14(g->y, 4.0f, 8000), q14(g->z, 4.0f, 8000) };
+        for (int j = 0; j < 6; j++) { unsigned w = (unsigned)q[j] & 0x3FFFu; m[k++] = (uint8_t)(w >> 7); m[k++] = (uint8_t)(w & 0x7F); }
+    }
+    m[k++] = 0xF7;
+    return k;
+}
+
+static void motion_set(bool on)
+{
+    if (on && !INST.burst) { app_log("motion: %s has no 1 kHz motion (INST.burst): no stream", INST.name); on = false; }
+    if (on) { mo_seq = 0; mo_sent = mo_drops = 0; mo_fail = 0; app_log("motion: on"); }
+    else if (mo_on) app_log("motion: off, %lu sent, %lu dropped", (unsigned long)mo_sent, (unsigned long)mo_drops);
+    mo_on = on;
+}
+
+// One message a tick with what the instrument was just given (ctl), the raw REC and the knob. Never waits.
+static void motion_tick(bool rec, bool knob)
+{
+    if (!mo_on) return;
+    static UI_RAM uint8_t m[12 + MOTION_MAX * 12];
+    uint8_t fl = (uint8_t)((rec ? 1 : 0) | (knob ? 2 : 0) | (ctl.gburst ? 4 : 0));
+    int k = front_motion_packet(m, mo_seq, ctl.frames, fl, ctl.burst, ctl.gburst, ctl.nburst);
+    mo_seq = (uint8_t)((mo_seq + 1) & 0x7F);
+    if (plat_sysex_try(m, k)) { mo_sent++; mo_fail = 0; return; }
+    mo_drops++;
+    if (++mo_fail >= MO_QUIET_TICKS) { app_log("motion: nothing went out for 2 s, stream stopped"); motion_set(false); }
 }
 
 static void calib_tick(const front_in_t *in, bool hold)
@@ -499,6 +596,8 @@ void front_tick(const front_in_t *in)
     }
     int nb = 0;
     if (INST.burst && motion) { nb = in->nburst > 64 ? 64 : in->nburst; for (int i = 0; i < nb; i++) burst_s[i] = to_screen(&in->burst_raw[i]); }
+    bool gb = INST.burst_gyro && nb > 0 && in->gburst_raw && !frozen;
+    if (gb) for (int i = 0; i < nb; i++) gburst_s[i] = to_screen(&in->gburst_raw[i]);
 
     // the knob: a hold fires once at HOLD_MS; the release after it is not a tap
     if (!in->pressed) hold_used = false;
@@ -594,7 +693,7 @@ void front_tick(const front_in_t *in)
         .rec = INST.looper ? false : rec_now, .rec_press = INST.looper ? false : rec_press,
         .rec_release = INST.looper ? false : rec_release, .rec_ms = rec_release ? rec_held : rec_ms,
         .has_imu = motion, .frozen = frozen, .acc = acc_s, .gyro = frozen ? (vec3_t){ 0, 0, 0 } : gyro_s,
-        .lean_x = lean_x, .lean_y = lean_y, .burst = burst_s, .nburst = nb,
+        .lean_x = lean_x, .lean_y = lean_y, .burst = burst_s, .nburst = nb, .gburst = gb ? gburst_s : NULL,
         .has_joy = in->joy_ok && pv[CP(CP_JOY)] >= 1.0f, .menu_open = mlev > 0,
         .knob = g_enc, .knob_tap = g_tap, .knob_hold = g_hold, .knob_down = grab && in->pressed, .knob_turned = grab && grab_turned,
     };
@@ -610,7 +709,13 @@ void front_tick(const front_in_t *in)
         if (fabsf(x) > 0.5f || fabsf(y) > 0.5f) coach_done(LEARN_JOY);
     }
     if (motion && (fabsf(lean_x) > 20.0f || fabsf(lean_y) > 20.0f)) coach_done(LEARN_TILT);
+    ctl.has_lknob = in->lknob_ok;
+    ctl.lknob = in->lknob_ok ? in->lknob : 0;
+    if (ctl.lknob) coach_done(LEARN_LKNOB);
+    hand_tick(in, &ctl);
+    if (ctl.hand > 0.5f) coach_done(LEARN_HAND);
     INST.tick(&ctl);
+    motion_tick(in->rec || midi_rec, in->pressed);
     if (ticks % 2 == 0) telemetry();
 
     // timers
@@ -781,6 +886,7 @@ void front_sysex(uint8_t cmd, const uint8_t *body, int n)
     if (n > (int)sizeof t - 1) n = (int)sizeof t - 1;
     for (int i = 0; i < n; i++) t[i] = (char)body[i];
     t[n < 0 ? 0 : n] = 0;
+    if (cmd == 'M') { motion_set(n > 0 && body[0] == 1); return; }   // the motion stream (not the app's line)
     rm_quiet_ms = 0;
     if (cmd == 'I') {
         int shown = 0;
@@ -862,7 +968,7 @@ static void draw_sound_card(int y)
     strip_bg(y);
     int16_t ids[SOUND_LIST_MAX];
     int n = sound_list(ids), i = sound_pos(ids, n, meta.sound);
-    char b[24]; snprintf(b, sizeof b, "SOUND %d/%d", i + 1, n);
+    char b[24]; snprintf(b, sizeof b, "%s %d/%d", sound_word(), i + 1, n);
     oled_ftext_ex(F_TINY, 3, y + 3, b, 1);
     if (meta.sound == -1) oled_ftext_r(F_TINY, OLED_W - 3, y + 3, "YOUR EDIT", 1);
     else if (meta.sound >= SOUND_ID_USER) oled_ftext_r(F_TINY, OLED_W - 3, y + 3, "USER", 1);

@@ -12,8 +12,9 @@
 #include "freertos/task.h"
 
 static const char *TAG = "input";
-static pcnt_unit_handle_t pcnt;
-static int  enc_acc;
+static pcnt_unit_handle_t pcnt, pcnt2;      // the knob; rev E's left knob
+static int  enc_acc, enc2_acc;
+static bool lknob_turned;
 static bool was_pressed;
 static int64_t t_press;
 static bool has_joy;
@@ -45,6 +46,28 @@ static bool wiper_on(adc_channel_t ch, int gpio)
     return hi >= 0 && lo >= 0 && hi - lo < 1500;
 }
 
+// A quadrature encoder on two pins with pull-ups, every edge counted (four counts a detent on an EC11).
+static bool encoder_unit(pcnt_unit_handle_t *u, int pin_a, int pin_b)
+{
+    pcnt_unit_config_t uc = { .high_limit = 30000, .low_limit = -30000 };
+    if (pcnt_new_unit(&uc, u) != ESP_OK) { *u = NULL; return false; }
+    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = 1000 };
+    pcnt_unit_set_glitch_filter(*u, &gf);
+    pcnt_channel_handle_t ca, cb;
+    pcnt_chan_config_t cca = { .edge_gpio_num = pin_a, .level_gpio_num = pin_b };
+    pcnt_chan_config_t ccb = { .edge_gpio_num = pin_b, .level_gpio_num = pin_a };
+    bool ok = pcnt_new_channel(*u, &cca, &ca) == ESP_OK && pcnt_new_channel(*u, &ccb, &cb) == ESP_OK;
+    if (ok) {
+        pcnt_channel_set_edge_action(ca, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE);
+        pcnt_channel_set_level_action(ca, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+        pcnt_channel_set_edge_action(cb, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE);
+        pcnt_channel_set_level_action(cb, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+        ok = pcnt_unit_enable(*u) == ESP_OK && pcnt_unit_clear_count(*u) == ESP_OK && pcnt_unit_start(*u) == ESP_OK;
+    }
+    if (!ok) { pcnt_del_unit(*u); *u = NULL; }
+    return ok;
+}
+
 void input_init(void)
 {
     gpio_config_t in = {
@@ -53,22 +76,7 @@ void input_init(void)
     };
     ESP_ERROR_CHECK(gpio_config(&in));
 
-    pcnt_unit_config_t uc = { .high_limit = 30000, .low_limit = -30000 };
-    ESP_ERROR_CHECK(pcnt_new_unit(&uc, &pcnt));
-    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = 1000 };
-    ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(pcnt, &gf));
-    pcnt_channel_handle_t ca, cb;
-    pcnt_chan_config_t cca = { .edge_gpio_num = PIN_ENC_A, .level_gpio_num = PIN_ENC_B };
-    pcnt_chan_config_t ccb = { .edge_gpio_num = PIN_ENC_B, .level_gpio_num = PIN_ENC_A };
-    ESP_ERROR_CHECK(pcnt_new_channel(pcnt, &cca, &ca));
-    ESP_ERROR_CHECK(pcnt_new_channel(pcnt, &ccb, &cb));
-    pcnt_channel_set_edge_action(ca, PCNT_CHANNEL_EDGE_ACTION_DECREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE);
-    pcnt_channel_set_level_action(ca, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
-    pcnt_channel_set_edge_action(cb, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_DECREASE);
-    pcnt_channel_set_level_action(cb, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
-    ESP_ERROR_CHECK(pcnt_unit_enable(pcnt));
-    ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt));
-    ESP_ERROR_CHECK(pcnt_unit_start(pcnt));
+    if (!encoder_unit(&pcnt, PIN_ENC_A, PIN_ENC_B)) ESP_LOGE(TAG, "the encoder's counter did not start: no knob");
     ESP_LOGI(TAG, "encoder on %d/%d, push on %d, record button on %d", PIN_ENC_A, PIN_ENC_B, PIN_ENC_SW, PIN_REC);
 
     adc_oneshot_unit_init_cfg_t ac = { .unit_id = ADC_UNIT_1 };
@@ -90,6 +98,15 @@ void input_init(void)
     jx0 = (float)sx / 64.0f; jy0 = (float)sy / 64.0f;
     has_joy = wired && jx0 > 900 && jx0 < 3300 && jy0 > 900 && jy0 < 3300 && maxx - minx < 500 && maxy - miny < 500;
     ESP_LOGI(TAG, "joystick %s (centre %d,%d spread %d,%d)", has_joy ? "found" : "not found", (int)jx0, (int)jy0, maxx - minx, maxy - miny);
+    if (!has_joy) {
+        // No joystick: on rev E these two pins are the left knob (the Mini leaves them open, and then nothing ever
+        // counts). The ADC lets go of them and they become inputs with pull-ups on a counter of their own.
+        adc_oneshot_del_unit(adc); adc = NULL;
+        gpio_config_t kn = { .pin_bit_mask = (1ULL << PIN_JOY_X) | (1ULL << PIN_JOY_Y), .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
+        gpio_config(&kn);
+        bool ok = encoder_unit(&pcnt2, PIN_JOY_Y, PIN_JOY_X);     // A on GPIO 1, B on GPIO 2
+        ESP_LOGI(TAG, "left knob on %d/%d%s", PIN_JOY_Y, PIN_JOY_X, ok ? "" : ": its counter did not start");
+    }
 }
 
 static float axis(int raw, float centre)
@@ -105,8 +122,7 @@ void input_poll(input_ev_t *ev)
 {
     memset(ev, 0, sizeof *ev);
     int cnt = 0;
-    pcnt_unit_get_count(pcnt, &cnt);
-    pcnt_unit_clear_count(pcnt);
+    if (pcnt) { pcnt_unit_get_count(pcnt, &cnt); pcnt_unit_clear_count(pcnt); }
     enc_acc += cnt * ENC_DIR;
     ev->enc = enc_acc / ENC_STEPS;
     enc_acc -= ev->enc * ENC_STEPS;
@@ -122,6 +138,16 @@ void input_poll(input_ev_t *ev)
     was_pressed = pressed;
     ev->rec = gpio_get_level(PIN_REC) == 0;
 
+    if (pcnt2) {                                // rev E's left knob: it counts the same way round as the other
+        int c2 = 0;
+        pcnt_unit_get_count(pcnt2, &c2);
+        pcnt_unit_clear_count(pcnt2);
+        enc2_acc += c2 * ENC_DIR;
+        ev->lknob = enc2_acc / ENC_STEPS;
+        enc2_acc -= ev->lknob * ENC_STEPS;
+        if (ev->lknob) lknob_turned = true;
+    }
+    ev->lknob_turned = lknob_turned;
     ev->has_joy = has_joy;
     if (has_joy) {
         float ax = axis(adc_read(CH_X), jx0), ay = axis(adc_read(CH_Y), jy0);

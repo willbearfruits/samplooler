@@ -723,6 +723,40 @@ static void screens(void)
     param_set(CP(CP_SAVER), param(CP(CP_SAVER))->def);
 }
 
+// Rev E: the left knob and the hand reach the instrument as core.h says, and a board without them hands over nothing.
+static void rev_e_controls(void)
+{
+    sim_in_t keep = SI;
+    const ctl_t *c = front_ctl();
+    sim_run(0.1f);
+    check(!c->has_lknob && !c->has_hand && c->lknob == 0 && c->hand == 0.0f, "a board with a joystick: no left knob, no hand");
+    sim_rev_e();
+    sim_run(0.1f);
+    check(c->has_lknob && c->has_hand && !c->has_joy && c->hand == 0.0f && !c->hand_seen, "rev E: the left knob and the sensor are there, no joystick, no hand yet");
+    sim_lturn(3);
+    int got = c->lknob; sim_tick();
+    check(got == 3 && c->lknob == 0, "three detents of the left knob reach the instrument on that tick, and only then");
+    SI.hand_mm = 145; sim_tick();
+    check(!c->hand_seen && c->hand == 0.0f, "one reading is not a hand yet");
+    float worst = 0, was = c->hand;
+    for (int i = 0; i < 50; i++) { sim_tick(); float d = fabsf(c->hand - was); if (d > worst) worst = d; was = c->hand; }
+    check(c->hand_seen && fabsf(c->hand - 0.5f) < 0.02f && c->hand_mm == 145 && worst < 0.14f, "a hand at 145 mm: half way (%.3f), reached by gliding (largest step %.3f)", (double)c->hand, (double)worst);
+    sim_hand(40, 0.5f);
+    check(c->hand > 0.98f, "at 40 mm: fully down (%.3f)", (double)c->hand);
+    sim_hand(600, 0.04f);                                      // four ticks: two readings at most
+    check(c->hand_seen && c->hand > 0.9f, "a reading or two out of range are a glitch: the hand stays");
+    sim_hand(0, 0.25f);
+    check(!c->hand_seen && c->hand > 0.2f && c->hand < 0.75f, "taken away: it lets go without a jump (%.3f after 0.25 s)", (double)c->hand);
+    sim_run(2.0f);
+    check(c->hand == 0.0f && c->hand_mm == 0, "and is 0 two seconds later");
+    param_set(CP(CP_HAND), 0); sim_hand(60, 0.5f);
+    check(!c->has_hand && c->hand == 0.0f, "SYSTEM > HAND OFF: the sensor is ignored");
+    param_set(CP(CP_HAND), 1); sim_hand(0, 0.3f);
+    SI = keep;
+    sim_run(0.5f);
+    check(!c->has_lknob && !c->has_hand && c->hand == 0.0f, "back on the board with a joystick: all of it gone again");
+}
+
 void core_checks(void)
 {
     tables();
@@ -739,6 +773,6 @@ void core_checks(void)
 }
 
 // After the instrument's own tests, so the time and the motion it takes cannot change what they hear.
-void core_late_checks(void) { motion_takes(); }
+void core_late_checks(void) { motion_takes(); rev_e_controls(); }
 
 void core_health(void) { health(); }

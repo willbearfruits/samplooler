@@ -14,7 +14,7 @@ rm -f obj/*.o sim
 pids=""
 for f in $CORE; do gcc $FLAGS -Wdouble-promotion -Werror -c $M/$f.c -o obj/$f.o & pids="$pids $!"; done
 for f in $INST_SRCS; do gcc $FLAGS -Wdouble-promotion -Werror -c $f -o obj/inst_$(basename $f .c).o & pids="$pids $!"; done
-for f in sim core_checks main link_sim $(ls test_*.c | sed "s/\.c$//"); do gcc $FLAGS -c $f.c -o obj/$f.o & pids="$pids $!"; done
+for f in sim core_checks main link_sim take $(ls test_*.c | sed "s/\.c$//"); do gcc $FLAGS -c $f.c -o obj/$f.o & pids="$pids $!"; done
 for p in $pids; do wait $p; done
 gcc -o sim obj/*.o -lm
 ./sim "$@"

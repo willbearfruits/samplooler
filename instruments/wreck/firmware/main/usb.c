@@ -21,6 +21,7 @@
 #include "usb/usb_itf.h"
 #include "audio.h"
 #include "diag.h"
+#include "front.h"                           // plat_sysex_try, for the motion stream
 
 static const char *TAG = "usb";
 extern char usb_serial[];                    // usb_descriptors.c; filled from the chip's MAC before enumeration
@@ -171,6 +172,20 @@ bool usb_midi_send_sysex(const uint8_t *m, int n)
     return off == n;
 }
 
+// The motion stream's way out (front.c, plat_sysex_try): the whole message now, or nothing, never waiting. The lock
+// is tried once (a log line from another task may hold it). TinyUSB has room for 256 four-byte USB-MIDI packets (1024
+// bytes, 768 bytes of SysEx); a message that finds less is cut and closed with F7 where that still fits, so the
+// host's parser throws it away by its length, and its sequence number shows the gap.
+bool plat_sysex_try(const uint8_t *m, int n)
+{
+    if (!midi_lock || !tud_midi_mounted()) return false;
+    if (xSemaphoreTake(midi_lock, 0) != pdTRUE) return false;
+    uint32_t w = tud_midi_stream_write(0, m, (uint32_t)n);
+    if (w > 0 && w < (uint32_t)n) { static const uint8_t end = 0xF7; tud_midi_stream_write(0, &end, 1); }
+    xSemaphoreGive(midi_lock);
+    return w == (uint32_t)n;
+}
+
 // Byte-stream parser: channel messages to the handler, our SysEx commands here.
 void usb_midi_poll(usb_midi_handler_t h)
 {
@@ -236,4 +251,7 @@ bool usb_start(void)
     ESP_LOGI(TAG, "USB composite up: MIDI + audio %d Hz, logs over SysEx, serial %s", AUDIO_SR, usb_serial);
     return true;
 }
+#else
+#include "front.h"
+bool plat_sysex_try(const uint8_t *m, int n) { (void)m; (void)n; return false; }
 #endif

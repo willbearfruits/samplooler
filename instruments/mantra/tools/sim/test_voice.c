@@ -698,9 +698,13 @@ static void c_effect(void)
     fresh("");
     vmic = sung_mic; with_fx = true;
     FX = (mv_fx_t){ 1.0f, 1.0f, 0, 0, 0, 0, 0 };
-    run(1.5); int s0 = bn; run(1.0);
+    // The singer has vibrato (vvib=30), and the tracker follows it: its reading swings some 24 cents either side
+    // of the note. What is checked is where it sits, so the reading is averaged over this second, not taken at
+    // whatever instant the second ends on (which passed or failed by the vibrato's phase).
+    run(1.5); int s0 = bn;
+    double tr = 0, want = hz2midi(98);
+    for (int q = 0; q < 50; q++) { run(0.02); tr += mv_track() / 50.0; }
     double fe[2]; formants(buf + s0, 32000, fe);
-    double tr = mv_track(), want = hz2midi(98);
     FX.jaw = 0.0f; run(1.0); s0 = bn; run(1.0);
     double fo[2]; formants(buf + s0, 32000, fo);
     check(fabs(fe[0] - 270) < 27 && fabs(fe[1] - 2290) < 229 && fabs(fo[0] - 300) < 30 && fabs(fo[1] - 870) < 87,

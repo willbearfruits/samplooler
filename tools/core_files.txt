@@ -50,6 +50,8 @@ firmware/main/settings.c
 firmware/main/settings.h
 firmware/main/shell.c
 firmware/main/spsc.h
+firmware/main/tof.c
+firmware/main/tof.h
 firmware/main/ui.c
 firmware/main/ui.h
 firmware/main/usb.c

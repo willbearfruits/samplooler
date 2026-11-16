@@ -12,6 +12,12 @@ amp, MPU-6050 (accelerometer + gyro), 128x64 SSD1306 on the same I2C bus, encode
 joystick (Stack and kit; found at boot by a pull-up/pull-down test on its pins, so the Mini runs without
 it), WS2812 RGB LED on GPIO 48, native USB (MIDI + a 32 kHz sound card).
 
+Rev E (the Vessel) has no joystick. On the same two pins it has a second knob, the left one, whose push is REC, and
+in the middle of the board a VL53L1X that measures how high a hand is held over it (`tof.c`, 0x29 on the I2C bus).
+The core finds both by itself: with no joystick the two pins are counted as a knob, and the board is taken for a
+rev E when the sensor or the GY-87's barometer (0x77) answers, or once the left knob has turned. The same firmware
+runs on rev C and rev E. None of this has run on a board yet: no rev E has been built.
+
 ## Files
 
 | File | What | Host (tools/sim) |
@@ -41,6 +47,8 @@ it), WS2812 RGB LED on GPIO 48, native USB (MIDI + a 32 kHz sound card).
 | hold the knob 0.6 s | hold the motion (freeze): tilt and spin stay where they are, a padlock shows; again to let go (or the instrument's own use of it: `INST.hold`) | back to play |
 | REC (or BOOT) | the instrument's; with `INST.looper` the core's looper: hold = record (or add), tap = stop / play. SYSTEM > REC BUTTON OFF ignores the REC pin (BOOT and MIDI CC 64 still record); `INST.rec_button_off` starts it OFF | the same |
 | joystick | the instrument's (when one is fitted) | |
+| left knob (rev E) | the instrument's: `ctl.lknob`, detents a tick, when `ctl.has_lknob` | the same |
+| a hand over the sensor (rev E) | the instrument's: `ctl.hand`, 0 no hand to 1 fully down (25 cm to 4 cm), gliding, 0 again 0.25 s after the hand has gone; `ctl.hand_seen`, `ctl.hand_mm`, when `ctl.has_hand`. SYSTEM > HAND OFF ignores the sensor. Sent as CC 16 with MIDI CC OUT | the same |
 | REC held 3 s from power-on, then let go | factory reset (tilt setup kept); a REC still down after 6 s is taken as stuck: no reset, REC ignored until it lets go, BOOT records meanwhile. Not with REC BUTTON OFF (RESET ALL in the menu still works) | |
 | knob held at power-on | USB stays the Serial/JTAG console (for `idf.py monitor`) | |
 
@@ -122,7 +130,9 @@ from a board, and the simulator plays them back ("Motion takes" below).
 
 `INST.hints`: what to try, each tied to a LEARN bit. The core shows one at the bottom when the player has
 been idle a few seconds, and drops each for good once the player has done it (the core marks turning,
-the menu, REC, holding, the joystick and tilting; mark your own with `coach_done(LEARN_INST + k)`).
+the menu, REC, holding, the joystick, tilting, the left knob (`LEARN_LKNOB`) and the hand (`LEARN_HAND`); mark your
+own with `coach_done(LEARN_INST + k)`). A `LEARN_JOY` hint shows only on a board with a joystick, a `LEARN_LKNOB` or
+`LEARN_HAND` hint only on one with that part: write a hint for each, and each board shows its own.
 SYSTEM > HINTS brings them back. Two lines of 112 px in F_SMALL at most. An instrument with a full-screen
 flow of its own (a setup run from the menu) calls `menu_leave()` to close the menu and `coach_pause()` each
 tick while the flow is up.
@@ -200,6 +210,11 @@ instrument's own (`tools/sim/test_inst.c`). Out: `out/<name>.png` (every screen 
 (animations at 25 fps), `out/<name>.wav` (all of it), `out/results.json`. `./run.sh inst` runs only the
 instrument's own scenarios. `tools/sim/take.c` replays recorded motion (below): each instrument's `run.sh`
 compiles it with the sim's own files (`sim core_checks main take ...`).
+
+The sim boots as a rev C with a joystick. `sim_rev_e()` turns it into a rev E from then on (no joystick, the left
+knob and the hand's sensor); `sim_lturn(n)` turns the left knob n detents on one tick; `sim_hand(mm, seconds)` holds
+a hand at that height for that long (0 mm: taken away). `front_ctl()` is what the instrument was handed last. Test
+what the instrument does with both on a rev E, and that nothing changed on the board with the joystick.
 
 ## Motion takes
 

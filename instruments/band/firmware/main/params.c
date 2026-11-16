@@ -34,6 +34,7 @@ static const param_t core_params[CP_N] = {
     [CP_LED]        = { "LED", "led ", GROUP_SYSTEM, PK_ENUM, SYS, 0, 2, 1, 1, "", led_l, "THE BOARD'S COLOUR LIGHT" },
     [CP_HINTS]      = { "HINTS", "hint", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 1, "", on_off, "ON: THE TIPS COME BACK" },
     [CP_SAVER]      = { "SAVER", "svr ", GROUP_SYSTEM, PK_ENUM, SYS, 0, 3, 1, 2, "", saver_l, "DARK WHEN LEFT ALONE" },
+    [CP_HAND]       = { "HAND", "hand", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 1, "", on_off, "OFF: THE SENSOR IS IGNORED" },
     [CP_ABOUT]      = { "ABOUT", "abut", GROUP_SYSTEM, PK_ACT, SYS, 0, 0, 0, 0, "", NULL, "VERSION, CPU, MEMORY" },
     [CP_RESET]      = { "RESET ALL", "rset", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 0, "", reset_l, "TURN TO YES, THEN PRESS" },
 };

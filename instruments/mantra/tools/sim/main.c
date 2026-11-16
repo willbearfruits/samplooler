@@ -3,6 +3,7 @@
 #include "sim.h"
 #include <string.h>
 void core_checks(void);
+void core_late_checks(void);
 void core_health(void);
 void sim_finish(void);
 int main(int argc, char **argv)
@@ -12,6 +13,7 @@ int main(int argc, char **argv)
     if (!only_inst) core_checks();
     section("instrument");
     inst_tests();
+    if (!only_inst) core_late_checks();
     core_health();
     sim_finish();
     printf("\n%d checks, %d failed\n", checks_run, checks_failed);

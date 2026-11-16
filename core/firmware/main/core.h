@@ -54,7 +54,17 @@ typedef struct {
     // dead zone applied. 0, 0 without one.
     bool     has_joy;
     float    jx, jy;
-    bool     menu_open;        // the menu has the knob; motion, joystick and REC still come through
+    // Rev E (the Vessel) has no joystick. In its place: the left knob (its push is REC) and, in the middle of the
+    // board, a sensor that measures how high a hand is held over it. Both are the instrument's, in play and in the
+    // menu. lknob: detents this tick, signed. hand: 0 no hand .. 1 fully down (4 cm), from 25 cm; it glides, and
+    // is 0 again a quarter of a second after the hand has gone. hand_mm: the reading while a hand is seen, else 0.
+    // Without the parts, or with SYSTEM > HAND OFF: has_lknob / has_hand false and the rest 0.
+    bool     has_lknob;
+    int      lknob;
+    bool     has_hand, hand_seen;
+    float    hand;
+    int      hand_mm;
+    bool     menu_open;        // the menu has the knob; motion, joystick, the left knob, the hand and REC still come through
     // The knob, only while the instrument holds it (knob_grab(true)): in play the core then leaves it alone
     // (no sound change, no menu, no motion hold) and hands it over here.
     int      knob;             // detents turned this tick, signed
@@ -101,7 +111,8 @@ typedef struct { const char *name; const char *set; } preset_t;
 
 // The coach shows each hint at the bottom of the play screen while the player is idle, until the player
 // has done what it says once (learn), then never again (SYSTEM > HINTS brings them back).
-enum { LEARN_TURN, LEARN_MENU, LEARN_REC, LEARN_HOLD, LEARN_JOY, LEARN_TILT, LEARN_INST = 8 };   // 8..31: yours
+enum { LEARN_TURN, LEARN_MENU, LEARN_REC, LEARN_HOLD, LEARN_JOY, LEARN_TILT, LEARN_LKNOB, LEARN_HAND, LEARN_INST = 8 };   // 8..31: yours
+// (a LEARN_JOY hint shows only with a joystick, LEARN_LKNOB only with the left knob, LEARN_HAND only with the sensor)
 typedef struct { const char *text; uint8_t learn; } hint_t;   // text: two lines of 112 px in F_SMALL at most
 void coach_done(int learn);                            // the player did it (UI task)
 

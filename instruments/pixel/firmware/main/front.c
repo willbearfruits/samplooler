@@ -382,6 +382,8 @@ static bool hint_ok(int i)
     const hint_t *h = &INST.hints[i];
     if (meta.learned & (1u << h->learn)) return false;
     if (h->learn == LEARN_JOY && !ctl.has_joy) return false;
+    if (h->learn == LEARN_LKNOB && !ctl.has_lknob) return false;
+    if (h->learn == LEARN_HAND && !ctl.has_hand) return false;
     if (h->learn == LEARN_TILT && !ctl.has_imu) return false;
     if (h->learn == LEARN_REC && INST.looper && !looper_ready()) return false;
     return true;
@@ -444,15 +446,49 @@ const front_status_t *front_status(void)
     return &status;
 }
 
+// The hand over the sensor (rev E), from its readings to a value an instrument can put on a sound. A reading counts
+// when the sensor calls it good and it is under 25 cm. Two in a row bring the hand in, three misses in a row send
+// it away (one is a glitch); the middle one of the last three is used, so a wild number does nothing. Readings
+// come every 25 ms and the value glides between them (40 ms), and back to 0 once the hand has gone (250 ms).
+#define HAND_NEAR 40
+#define HAND_FAR  250
+static int   hd_mm[3], hd_n, hd_hits, hd_miss, hd_last;
+static bool  hd_seen;
+static float hd_v, hd_target;
+static int hd_median(int a, int b, int c) { return a > b ? (b > c ? b : a > c ? c : a) : (a > c ? a : b > c ? c : b); }
+static void hand_tick(const front_in_t *in, ctl_t *c)
+{
+    bool on = in->tof_ok && pv[CP(CP_HAND)] >= 1.0f;
+    if (!on) { hd_n = hd_hits = hd_miss = 0; hd_seen = false; hd_target = 0; }
+    else if (in->tof_fresh) {
+        if (in->tof_status == 0 && in->tof_mm >= 0 && in->tof_mm < HAND_FAR) {
+            hd_mm[hd_n % 3] = in->tof_mm; hd_n++;
+            hd_miss = 0;
+            if (hd_hits < 2) hd_hits++;
+            if (hd_hits >= 2) hd_seen = true;
+            hd_last = hd_n >= 3 ? hd_median(hd_mm[0], hd_mm[1], hd_mm[2]) : in->tof_mm;
+            float t = (float)(HAND_FAR - hd_last) / (float)(HAND_FAR - HAND_NEAR);
+            hd_target = t < 0 ? 0 : t > 1 ? 1 : t;
+        } else if (++hd_miss >= 3) { hd_seen = false; hd_hits = 0; hd_n = 0; hd_target = 0; }
+    }
+    float tau = hd_seen ? 0.040f : 0.250f, k = in->dt < tau ? in->dt / tau : 1.0f;
+    hd_v += k * ((hd_seen ? hd_target : 0.0f) - hd_v);
+    if (!hd_seen && hd_v < 0.002f) hd_v = 0;
+    c->has_hand = on; c->hand_seen = on && hd_seen; c->hand = on ? hd_v : 0.0f; c->hand_mm = on && hd_seen ? hd_last : 0;
+}
+
+const ctl_t *front_ctl(void) { return &ctl; }
+
 static void telemetry(void)
 {
-    static int last[4] = { -1, -1, -1, -1 };
+    static int last[5] = { -1, -1, -1, -1, -1 };
     if (pv[CP(CP_MIDI_OUT)] < 1.0f) return;
-    int v[4] = { (int)(64.0f + ctl.lean_y * 64.0f / 90.0f), (int)(64.0f + ctl.lean_x * 64.0f / 90.0f),
-                 (int)(64.0f + ctl.jx * 63.0f), (int)(64.0f + ctl.jy * 63.0f) };
-    for (int i = 0; i < 4; i++) {
+    int v[5] = { (int)(64.0f + ctl.lean_y * 64.0f / 90.0f), (int)(64.0f + ctl.lean_x * 64.0f / 90.0f),
+                 (int)(64.0f + ctl.jx * 63.0f), (int)(64.0f + ctl.jy * 63.0f), (int)(ctl.hand * 127.0f) };   // CC 12..16
+    for (int i = 0; i < 5; i++) {
         if (i < 2 && !ctl.has_imu) continue;
-        if (i >= 2 && !ctl.has_joy) continue;
+        if (i >= 2 && i < 4 && !ctl.has_joy) continue;
+        if (i == 4 && !ctl.has_hand) continue;
         int c = v[i] < 0 ? 0 : v[i] > 127 ? 127 : v[i];
         int d = c - last[i]; if (d < 0) d = -d;
         if (d >= 2 || (c != last[i] && (c == 0 || c == 127))) { last[i] = c; plat_midi3((uint8_t)(0xB0 | ch()), (uint8_t)(12 + i), (uint8_t)c); }
@@ -673,6 +709,11 @@ void front_tick(const front_in_t *in)
         if (fabsf(x) > 0.5f || fabsf(y) > 0.5f) coach_done(LEARN_JOY);
     }
     if (motion && (fabsf(lean_x) > 20.0f || fabsf(lean_y) > 20.0f)) coach_done(LEARN_TILT);
+    ctl.has_lknob = in->lknob_ok;
+    ctl.lknob = in->lknob_ok ? in->lknob : 0;
+    if (ctl.lknob) coach_done(LEARN_LKNOB);
+    hand_tick(in, &ctl);
+    if (ctl.hand > 0.5f) coach_done(LEARN_HAND);
     INST.tick(&ctl);
     motion_tick(in->rec || midi_rec, in->pressed);
     if (ticks % 2 == 0) telemetry();

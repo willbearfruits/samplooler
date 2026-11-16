@@ -27,6 +27,10 @@ typedef struct {
     int     nburst;
     bool    joy;               // a joystick is fitted
     float   jx, jy;
+    bool    lknob;             // rev E: the left knob is fitted (false by default: the sim boots as a rev C with a stick)
+    int     lk;                // its detents this tick (cleared after it)
+    bool    tof;               // rev E: the hand's sensor is fitted
+    int     hand_mm;           // a hand held at this height over it; 0: no hand
     mic_fn  mic; void *mic_u;
 } sim_in_t;
 extern sim_in_t SI;
@@ -41,6 +45,9 @@ void sim_tick_hook(void);                      // runs before every tick; weak, 
 void sim_tick(void);
 void sim_run(float seconds);
 void sim_turn(int detents);                    // one tick with the knob turned
+void sim_rev_e(void);                          // from now on the board is a rev E: no joystick, the left knob and the hand's sensor
+void sim_lturn(int detents);                   // one tick with the left knob turned
+void sim_hand(int mm, float seconds);          // a hand at that height (0: taken away) for that long (runs the ticks)
 void sim_tap(void);                            // a short press: down 3 ticks, up (in play: and the menu's wait)
 void sim_double_tap(void);                     // two short presses 0.1 s apart: the knob on VOLUME
 void sim_hold_knob(void);                      // 0.7 s: past the hold
