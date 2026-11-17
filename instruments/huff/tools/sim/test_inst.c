@@ -633,6 +633,28 @@ static void rev_e(void)
         check(worst < 20.0 && asleep == 0, "every model with harmony, reverb, echo and the hand's mute fully down: at most %.1f us per block on the host (%s; < 20, the budget without the mute)", worst, model_name[worst_m]);
     }
 
+    // a clip for the page (out/huff-rev-e.gif and .wav, the same stretch): the first sound, the left knob through the
+    // octaves, a hand coming down over the sensor and lifting, then waved
+    {   front_midi(0xC0, 0, 0); param_set(P_HAND, 0); param_set(P_OCT, 0); SI.hand_mm = 0;
+        sim_tilt(0, lean_for(3, N)); held(1.0f);
+        float t0 = sim_t;
+        sim_gif_begin("rev-e");
+        held(1.0f);
+        static const int turn[6] = { 1, 1, -1, -1, -1, 1 };
+        for (int i = 0; i < 6; i++) { sim_lturn(turn[i]); held(0.7f); }
+        for (int mm = 240; mm >= 40; mm -= 8) { SI.hand_mm = mm; held(0.08f); }
+        held(0.8f);
+        for (int mm = 40; mm <= 240; mm += 20) { SI.hand_mm = mm; held(0.08f); }
+        for (int i = 0; i < 250; i++) {
+            SI.hand_mm = 120 + (int)lroundf(80.0f * sinf(6.2831853f * 2.0f * (float)i * 0.01f));
+            if (i % 40 == 0) front_midi(0xB0, 2, STEADY);
+            sim_tick();
+        }
+        SI.hand_mm = 0; held(1.0f);
+        sim_gif_end();
+        sim_wav("-rev-e", t0, sim_t);
+    }
+
     // back to the board with the joystick, the first sound, as the tests found it
     SI = keep; meta.learned = learned; pv[CP(CP_HINTS)] = hints;
     front_midi(0xB0, 2, 0); blow(0); sim_tilt(0, 0);

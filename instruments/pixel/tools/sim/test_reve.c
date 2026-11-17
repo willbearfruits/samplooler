@@ -431,6 +431,7 @@ static void breakdown(void)
         uint32_t o0, o1; float f0, f1; link_origin(&o0, &f0);
         uint32_t fpb0 = link_fpb(), ver0 = link_time()->ver;
         if (run >= 0) n0[run] = sim_n;
+        float t_clip = sim_t;                                     // (the page's clip: the screen and its sound, the same stretch)
         if (run == 1) sim_gif_begin("breakdown");
         for (int t = 0, hold = 0; t < RUN_TICKS; t++) {
             int here = (int)px_pos.bars * PX_STEPS + px_pos.step;  // the step of the song the last tick's sound was in
@@ -443,7 +444,7 @@ static void breakdown(void)
             sim_tick();
             if (run == 1 && px_hand_mute != was && npos < 6) pos[npos++] = (int)px_pos.bars * PX_STEPS + px_pos.step;
         }
-        if (run == 1) sim_gif_end();
+        if (run == 1) { sim_gif_end(); sim_wav("-breakdown", t_clip, sim_t); }
         if (run == 0 || run == 1) where[run] = px_pos.running && px_pos.bars == 4 && px_pos.slot == 4 && px_pos.step == 0;
         if (run == 1) { link_origin(&o1, &f1); link_same = o1 == o0 && f1 == f0 && link_fpb() == fpb0 && link_time()->ver == ver0; note("beat 0 at frame %u, %u frames a beat, the session's version %u", (unsigned)o1, (unsigned)link_fpb(), (unsigned)link_time()->ver); }
         px_stop(); sim_run(0.8f);
@@ -543,6 +544,33 @@ static void hints(void)
     sim_run(0.3f);
 }
 
+// a clip for the page (out/pixel-rev-e-write.gif and .wav, the same stretch): a bar written with the two knobs at a
+// player's pace (the left one moves, the right one puts the note and its pitch), then the left knob pushed to hear it
+static void clip(void)
+{
+    calm(); rev_c(); sim_menu_close(); px_stop(); program(PX_NSONGS - 1); sim_run(0.3f);    // EMPTY
+    sim_rev_e(); sim_run(0.2f);
+    edit_test_home();
+    sim_hold_knob(); sim_run(0.2f);
+    float t0 = sim_t;
+    sim_gif_begin("rev-e-write");
+    sim_run(0.8f);
+    static const int8_t at[6] = { 0, 2, 4, 7, 10, 12 }, up[6] = { 0, 2, 4, 2, 5, 3 };
+    int step = 0;
+    for (int k = 0; k < 6; k++) {
+        while (step < at[k]) { sim_lturn(1); sim_run(0.11f); step++; }
+        sim_turn(1); sim_run(0.25f);
+        for (int j = 0; j < up[k]; j++) { sim_turn(1); sim_run(0.1f); }
+        sim_run(0.25f);
+    }
+    sim_rec(0.1f); sim_run(4.2f);
+    sim_rec(0.1f); sim_run(0.5f);
+    sim_gif_end();
+    sim_wav("-rev-e-write", t0, sim_t);
+    sim_hold_knob(); sim_run(0.3f);
+    px_stop(); rev_c(); calm(); sim_run(0.3f);
+}
+
 void test_rev_e(void)
 {
     editor_two_knobs();
@@ -550,4 +578,5 @@ void test_rev_e(void)
     breakdown();
     linked();
     hints();
+    clip();
 }

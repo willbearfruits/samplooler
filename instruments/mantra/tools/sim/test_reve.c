@@ -435,6 +435,25 @@ static void cost(void)
     check(down < 20.0 && vib < 20.0, "SUNN, the busiest sound: %.1f us per 64-frame block; the hand at 40 mm and the note an octave up %.1f, as the vibrato %.1f (the same budget: 20)", plain, down, vib);
 }
 
+// a clip for the page (out/mantra-rev-e.gif and .wav, the same stretch): AH as the sound comes, the left knob walks a
+// little tune and comes home, then a hand comes down over his mouth, sits, and lifts
+static void clip(void)
+{
+    vowels(false);
+    set("hnot", 0); set("hhnd", 0); sim_hand(0, 0.5f);
+    float t0 = sim_t;
+    sim_gif_begin("rev-e");
+    ui_awake(); sim_run(1.0f);
+    static const int tune[6] = { 2, 2, 1, 2, -3, -4 };
+    for (int i = 0; i < 6; i++) { sim_lturn(tune[i]); ui_awake(); sim_run(0.6f); }
+    for (int mm = 240; mm >= 40; mm -= 8) sim_hand(mm, 0.08f);
+    ui_awake(); sim_run(1.0f);
+    for (int mm = 40; mm <= 240; mm += 20) sim_hand(mm, 0.08f);
+    sim_hand(0, 1.2f);
+    sim_gif_end();
+    sim_wav("-rev-e", t0, sim_t);
+}
+
 void test_rev_e(void)
 {
     sim_in_t keep = SI;
@@ -449,6 +468,7 @@ void test_rev_e(void)
     knob_note();
     hints();
     cost();
+    clip();
     // back on the board with the joystick, NOTE left at +5 and HAND at VIBRATO: nothing of rev E is left
     section("mantra: back on the board with the joystick");
     vowels(true);

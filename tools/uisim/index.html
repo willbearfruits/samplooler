@@ -2,23 +2,38 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vessel screen</title>
-<!-- The screen as the firmware draws it, rendered on the PC by run.sh and tour.sh (the files in out/ are made, not kept
-     in git). Serve this folder: python3 -m http.server 8803 --bind 127.0.0.1 -->
+<!-- The screen as the firmware draws it, rendered on the PC. The files in out/ are made, not kept in git:
+       ./run.sh            every screen of the Samplooler (out/sheet.png)
+       ./tour.sh           the session (out/tour.mp4)
+       ./instruments.sh    the instruments' rev E clips (out/inst/), after each instruments/<id>/tools/sim/run.sh
+     Serve this folder: python3 -m http.server 8803 --bind 127.0.0.1 -->
 <style>
   :root { color-scheme: dark; --bg: #060606; --ink: #ece8de; --mute: #9a968c; --line: #232220; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, sans-serif; }
   .wrap { max-width: 900px; margin: 0 auto; padding: 28px 20px 64px; }
-  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; color: var(--mute); margin: 34px 0 10px; font-weight: 600; }
-  p { margin: 6px 0; color: var(--mute); } p b { color: var(--ink); font-weight: 600; }
-  video, img { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; background: #000; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 15px; color: var(--mute); margin: 38px 0 10px; font-weight: 600; }
+  h3 { font-size: 17px; margin: 0 0 6px; }
+  p { margin: 6px 0; color: var(--mute); } p b, li b, td b { color: var(--ink); font-weight: 600; }
+  video, img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 4px; background: #000; }
   code { font: 13px ui-monospace, monospace; background: #151513; padding: 1px 5px; border-radius: 3px; }
   ul { margin: 6px 0; padding-left: 20px; color: var(--mute); } li { margin: 3px 0; }
+  a { color: var(--ink); }
+  nav { margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+  .inst { display: grid; grid-template-columns: minmax(0, 384px) minmax(0, 1fr); gap: 18px; padding: 20px 0; border-top: 1px solid var(--line); }
+  .inst .clips { display: grid; gap: 10px; align-content: start; }
+  .inst table { border-collapse: collapse; width: 100%; margin: 4px 0 8px; }
+  .inst td { vertical-align: top; padding: 4px 0; color: var(--mute); }
+  .inst td:first-child { color: var(--ink); white-space: nowrap; padding-right: 14px; width: 1%; }
+  .inst .t { font-size: 14px; }
+  @media (max-width: 720px) { .inst { grid-template-columns: minmax(0, 1fr); } }
 </style>
 <div class="wrap">
   <h1>Vessel: the screen</h1>
-  <p>Drawn by the firmware's own code on the PC. Not a photo: no rev E board exists yet.</p>
+  <p>Drawn by the firmware's own code on the PC. Not a photo: no rev E board exists yet, and nothing here has run
+     on a board.</p>
+  <nav><a href="#session">The session</a><a href="#changes">What changed</a><a href="#programs">The other programs on rev E</a><a href="#screens">Every screen</a></nav>
 
-  <h2>A session, 40 seconds, at the board's 30 frames a second</h2>
+  <h2 id="session">A session, 40 seconds, at the board's 30 frames a second</h2>
   <video src="out/tour.mp4" controls loop muted autoplay playsinline width="816"></video>
   <ul>
     <li><b>0:00</b> the boot</li>
@@ -30,7 +45,108 @@
     <li><b>0:33</b> flung at 8x, then the crawl</li>
   </ul>
 
-  <h2>Every screen</h2>
+  <h2 id="changes">What changed in the Samplooler's firmware (0.2)</h2>
+  <ul>
+    <li><b>One image for both boards.</b> At power-on it looks for a joystick; without one it takes the left knob.
+        Rev C plays as before.</li>
+    <li><b>The left knob</b> moves the tape (JOG). Its push is REC. PLAY &gt; Knob makes it SPEED, PITCH or FILTER.</li>
+    <li><b>A hand over the sensor</b> closes a filter. PLAY &gt; Hand makes it PITCH, BRAKE, VOLUME, ECHO or OFF.</li>
+    <li><b>A take starts at the first sound</b> and leaves REC's click out. PLAY &gt; Loop start: SOUND or PRESS.</li>
+    <li><b>The screen has its own task.</b> It sends only what changed, up to 30 frames a second, and no longer holds
+        up the controls.</li>
+    <li><b>The menu is a list</b> in groups, with the value edited in place.</li>
+    <li><b>SYSTEM &gt; Board check</b> shows every switch, knob and sensor as it is read.</li>
+    <li><b>A bug fixed:</b> a loop loaded from a slot next to other boards started off the beat half the time.</li>
+  </ul>
+
+  <h2 id="programs">The other programs on rev E</h2>
+  <p>The same two parts in the other programs: the left knob (its push is REC) and a hand over the sensor, from 25 cm
+     down to 4 cm. Each clip is the program's own screen with the sound it made in its simulator.
+     <b>The clips start muted: unmute one to hear it.</b> Every range and timing is a first guess, unheard on a board.</p>
+
+  <div class="inst" id="huff">
+    <div class="clips"><video src="out/inst/huff-rev-e.mp4" controls loop muted autoplay playsinline width="384"></video></div>
+    <div>
+      <h3>HUFF</h3>
+      <table>
+        <tr><td>Left knob</td><td>the octave, two up and two down (PLAY &gt; OCTAVE)</td></tr>
+        <tr><td>Hand</td><td>a mute: the lower the hand the darker; waved, it is a wah.
+            PITCH &gt; HAND DOES: MUTE, VIBRATO, BEND UP, BEND DOWN</td></tr>
+      </table>
+      <p class="t"><b>0:01</b> octaves up and down · <b>0:05</b> the hand comes down, sits, lifts · <b>0:09</b> waved</p>
+      <p class="t">Open: a face close to the mic may read as a hand. <a href="out/inst/huff-screens.png">Every screen</a></p>
+    </div>
+  </div>
+
+  <div class="inst" id="wreck">
+    <div class="clips"><video src="out/inst/wreck-rev-e.mp4" controls loop muted autoplay playsinline width="384"></video></div>
+    <div>
+      <h3>WRECK</h3>
+      <table>
+        <tr><td>Left knob</td><td>crush to the left, drive to the right, 12 detents to full</td></tr>
+        <tr><td>Hand</td><td>the roll, faster the lower the hand.
+            WRECK &gt; HAND: ROLL, DIVE, CRUSH, DRIVE</td></tr>
+      </table>
+      <p class="t"><b>0:01</b> full crush · <b>0:03</b> full drive · <b>0:05</b> back to the middle · <b>0:06</b> the hand comes down: the roll</p>
+      <p class="t">Open: if the knob counts the other way, crush and drive swap. <a href="out/inst/wreck-screens.png">Every screen</a></p>
+    </div>
+  </div>
+
+  <div class="inst" id="mantra">
+    <div class="clips"><video src="out/inst/mantra-rev-e.mp4" controls loop muted autoplay playsinline width="384"></video></div>
+    <div>
+      <h3>MANTRA</h3>
+      <table>
+        <tr><td>Left knob</td><td>the note, a semitone a detent, an octave either way (HANDS &gt; NOTE)</td></tr>
+        <tr><td>Hand</td><td>a hand over his mouth: it closes to a hum.
+            HANDS &gt; HAND: HUM, VIBRATO</td></tr>
+      </table>
+      <p class="t"><b>0:01</b> the knob walks a tune and comes home · <b>0:05</b> the hand comes down: AH closes to a hum · <b>0:08</b> it lifts</p>
+      <p class="t"><a href="out/inst/mantra-screens.png">Every screen</a></p>
+    </div>
+  </div>
+
+  <div class="inst" id="band">
+    <div class="clips"><video src="out/inst/band-rev-e.mp4" controls loop muted autoplay playsinline width="384"></video></div>
+    <div>
+      <h3>BAND</h3>
+      <table>
+        <tr><td>Left knob</td><td>the live layer's level, 5 % a detent (the mixer's own value)</td></tr>
+        <tr><td>Hand</td><td>one move for the live layer: DRUMS roll, BASS filter opens, LEAD bends down, KEYS more
+            motion, BREATH vibrato, HOWL more gain</td></tr>
+      </table>
+      <p class="t"><b>0:01</b> KEYS turned down, then up · <b>0:05</b> the hand on KEYS: motion · <b>0:10</b> the hand on DRUMS: a roll</p>
+      <p class="t">Lost against the stick: drum repeat and filter, breath bend, bass accent. <a href="out/inst/band-screens.png">Every screen</a></p>
+    </div>
+  </div>
+
+  <div class="inst" id="pixel">
+    <div class="clips">
+      <video src="out/inst/pixel-rev-e-write.mp4" controls loop muted autoplay playsinline width="384"></video>
+      <video src="out/inst/pixel-breakdown.mp4" controls loop muted autoplay playsinline width="384"></video>
+    </div>
+    <div>
+      <h3>PIXEL</h3>
+      <table>
+        <tr><td>Left knob</td><td>in the editor it moves the cursor while the right knob writes; with the right knob
+            held it changes the row. In play it is the tempo, 1 BPM a detent</td></tr>
+        <tr><td>Hand</td><td>the breakdown: LEAD out below 19 cm, CHORDS below 14, BASS below 9. The drums stay</td></tr>
+      </table>
+      <p class="t">First clip: a bar written with the two knobs, then the left knob pushed at <b>0:07</b> to hear it.</p>
+      <p class="t">Second clip: <b>0:01</b> lead out · <b>0:01.5</b> chords · <b>0:02</b> bass · <b>0:03</b> to <b>0:04</b> they come back as the hand lifts.</p>
+      <p class="t">Lost against the stick: muting one part alone, or the drums. <a href="out/inst/pixel-screens.png">Every screen</a></p>
+    </div>
+  </div>
+
+  <div class="inst" id="sing">
+    <div class="clips"></div>
+    <div>
+      <h3>SING</h3>
+      <p class="t">Not done yet. It is on the current core; the left knob and the hand have no job in it so far.</p>
+    </div>
+  </div>
+
+  <h2 id="screens">Every screen of the Samplooler</h2>
   <p>Made by <code>tools/uisim/run.sh</code>. The top band is yellow on the two-colour panels.</p>
   <img src="out/sheet.png" alt="Every screen state, side by side">
 </div>
