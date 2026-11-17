@@ -607,7 +607,8 @@ void front_tick(const front_in_t *in)
     int enc = in->enc;
     int det = enc * (enc > 1 || enc < -1 ? 3 : 1);              // a fast turn moves numbers further
     bool rec = in->rec || midi_rec;
-    bool any = enc || tap || hold || (rec && !rec_was) || in->pressed;
+    // (the left knob and a hand over the sensor are playing too: no hint over what they do, no screensaver)
+    bool any = enc || tap || hold || (rec && !rec_was) || in->pressed || (in->lknob && !in->joy_ok) || hd_seen;
     if (any) { idle_ms = 0; saver_idle_ms = 0; } else { idle_ms += dtm; saver_idle_ms += dtm; }
 
     // the screensaver swallows the input that wakes it
@@ -709,8 +710,11 @@ void front_tick(const front_in_t *in)
         if (fabsf(x) > 0.5f || fabsf(y) > 0.5f) coach_done(LEARN_JOY);
     }
     if (motion && (fabsf(lean_x) > 20.0f || fabsf(lean_y) > 20.0f)) coach_done(LEARN_TILT);
-    ctl.has_lknob = in->lknob_ok;
-    ctl.lknob = in->lknob_ok ? in->lknob : 0;
+    // The left knob: the shell says whether this is a rev E (the sensor or the barometer answered). SYSTEM > LEFT KNOB
+    // ON takes it as fitted on a board that shows neither, OFF never; a board with a joystick has none, whatever.
+    int lkm = (int)pv[CP(CP_LKNOB)];
+    ctl.has_lknob = !in->joy_ok && (lkm >= 2 || (lkm == 1 && in->lknob_ok));
+    ctl.lknob = ctl.has_lknob ? in->lknob : 0;
     if (ctl.lknob) coach_done(LEARN_LKNOB);
     hand_tick(in, &ctl);
     if (ctl.hand > 0.5f) coach_done(LEARN_HAND);

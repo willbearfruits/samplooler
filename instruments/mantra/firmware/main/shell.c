@@ -200,7 +200,7 @@ void app_main(void)
     i2c_master_bus_handle_t bus = i2c_start();
     has_imu = imu_init(bus);
     // Rev E: the hand's sensor, and the GY-87's barometer at 0x77, which no rev C carries: with either one this is a
-    // rev E, and its left knob is taken as fitted before it has ever turned.
+    // rev E, and the two pins a joystick would use are its left knob (SYSTEM > LEFT KNOB ON for a rev E that shows neither).
     has_tof = tof_init(bus);
     rev_e = has_tof || i2c_master_probe(bus, 0x77, 20) == ESP_OK;
     ESP_LOGI(TAG, "hand sensor %s, board %s", has_tof ? "found" : "not found", rev_e ? "rev E" : "rev C or the Mini (no barometer at 0x77)");
@@ -241,7 +241,7 @@ void app_main(void)
         usb_midi_poll(front_midi);
         input_poll(&in);
         has_joy = in.has_joy;
-        has_lknob = !in.has_joy && (rev_e || in.lknob_turned);
+        has_lknob = !in.has_joy && rev_e;                     // not by its counts: a rev C's stick that failed its test would count too
         int tof_mm = 0, tof_st = 255;
         bool tof_fresh = tof_poll(&tof_mm, &tof_st);          // a step of its bring-up, or a reading; it is looked for again if it went
         has_tof = tof_present();

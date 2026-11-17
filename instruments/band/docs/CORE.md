@@ -15,7 +15,8 @@ it), WS2812 RGB LED on GPIO 48, native USB (MIDI + a 32 kHz sound card).
 Rev E (the Vessel) has no joystick. On the same two pins it has a second knob, the left one, whose push is REC, and
 in the middle of the board a VL53L1X that measures how high a hand is held over it (`tof.c`, 0x29 on the I2C bus).
 The core finds both by itself: with no joystick the two pins are counted as a knob, and the board is taken for a
-rev E when the sensor or the GY-87's barometer (0x77) answers, or once the left knob has turned. The same firmware
+rev E when the sensor or the GY-87's barometer (0x77) answers (SYSTEM > LEFT KNOB ON takes the knob as fitted on a
+rev E that shows neither; its counts alone are not trusted, since a rev C whose stick failed its test would count too). The same firmware
 runs on rev C and rev E. None of this has run on a board yet: no rev E has been built.
 
 ## Files

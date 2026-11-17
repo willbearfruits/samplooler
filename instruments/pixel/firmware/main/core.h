@@ -58,7 +58,7 @@ typedef struct {
     // board, a sensor that measures how high a hand is held over it. Both are the instrument's, in play and in the
     // menu. lknob: detents this tick, signed. hand: 0 no hand .. 1 fully down (4 cm), from 25 cm; it glides, and
     // is 0 again a quarter of a second after the hand has gone. hand_mm: the reading while a hand is seen, else 0.
-    // Without the parts, or with SYSTEM > HAND OFF: has_lknob / has_hand false and the rest 0.
+    // Without the parts, or with SYSTEM > HAND OFF / LEFT KNOB OFF: has_lknob / has_hand false and the rest 0.
     bool     has_lknob;
     int      lknob;
     bool     has_hand, hand_seen;

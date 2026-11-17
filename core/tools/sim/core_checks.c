@@ -752,6 +752,15 @@ static void rev_e_controls(void)
     param_set(CP(CP_HAND), 0); sim_hand(60, 0.5f);
     check(!c->has_hand && c->hand == 0.0f, "SYSTEM > HAND OFF: the sensor is ignored");
     param_set(CP(CP_HAND), 1); sim_hand(0, 0.3f);
+    param_set(CP(CP_LKNOB), 0); sim_lturn(2);
+    check(!c->has_lknob && c->lknob == 0, "SYSTEM > LEFT KNOB OFF: its turns are ignored");
+    SI.lknob = false; param_set(CP(CP_LKNOB), 2); sim_lturn(2);
+    check(c->has_lknob && c->lknob == 2, "LEFT KNOB ON, on a board that does not show itself as a rev E: it is taken as fitted");
+    param_set(CP(CP_LKNOB), 1); sim_lturn(2);
+    check(!c->has_lknob && c->lknob == 0, "AUTO on that board: no left knob");
+    SI = keep; SI.lk = 4; param_set(CP(CP_LKNOB), 2); sim_tick();
+    check(!c->has_lknob && c->lknob == 0, "a board with a joystick has no left knob, even with LEFT KNOB ON");
+    param_set(CP(CP_LKNOB), 1);
     SI = keep;
     sim_run(0.5f);
     check(!c->has_lknob && !c->has_hand && c->hand == 0.0f, "back on the board with a joystick: all of it gone again");
