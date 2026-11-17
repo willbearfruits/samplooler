@@ -49,6 +49,9 @@ typedef struct {
     float speed;               // the loop's speed the tilt asks for (1 = in time)
     float throw_, stutter;     // the roll: left into the echo, right the stutter (0..1)
     float bend, formant;       // the stick: semitones of pitch and of formant added now
+    bool  has_hand;            // rev E: the sensor is there
+    float hand;                // the hand over it, 0 (none, or far) .. 1 (at 4 cm)
+    int   hand_does;           // LOOP > HAND: 0 ECHO, 1 BIG THROAT, 2 BEND DOWN, 3 BEND UP
     int   beat_flash;          // 3 on a downbeat, 2 on another beat, counting down
     bool  rec;                 // REC is down
     float dry, lead, harm, choir, voc;   // the mix (0..1) as the sound sets it

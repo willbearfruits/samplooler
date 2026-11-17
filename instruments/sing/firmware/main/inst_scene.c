@@ -167,6 +167,22 @@ static void head(int cx, int cy, float open, bool lead, uint32_t f, int k)
     else oled_rect(cx - 1, cy + 1, 3, h > 3 ? 3 : h, true);
 }
 
+// rev E's hand over the sensor: a bar up the panel's right edge, as high as the hand is low, and what it does
+static void hand_mark(int x0, int w, bool label)
+{
+    if (!sui.has_hand || sui.hand < 0.02f) return;
+    static const char *const does[4] = { "ECHO", "THROAT", "BEND", "BEND" };
+    int h = 2 + (int)(clampf(sui.hand, 0.0f, 1.0f) * (float)(LANE_Y1 - LANE_Y0 - 9));
+    oled_rect(OLED_W - 3, LANE_Y0 + 7, 3, LANE_Y1 - LANE_Y0 - 6, false);
+    oled_rect(OLED_W - 2, LANE_Y1 - h + 1, 2, h, true);
+    if (label) {                                                    // (over the back row of singers, when there is one)
+        const char *t = does[sui.hand_does & 3];
+        int tw = oled_ftext_w(F_TINY, t, 1);
+        oled_rect(x0 + w / 2 - tw / 2 - 1, LANE_Y0, tw + 2, 7, false);
+        oled_ftext_c(F_TINY, x0 + w / 2, LANE_Y0, t, 1);
+    }
+}
+
 static void singers(const view_t *v, const voice_state_t *vs)
 {
     const int x0 = LANE_W + 3, w = OLED_W - x0;
@@ -181,6 +197,7 @@ static void singers(const view_t *v, const voice_state_t *vs)
             oled_rect(x, LANE_Y1 - h, bw > 1 ? bw - 1 : 1, h + 1, true);
         }
         oled_ftext_c(F_TINY, x0 + w / 2, LANE_Y0, "VOCODER", 1);
+        hand_mark(x0, w, false);
         return;
     }
     // the lead in front, the others in rows behind it, higher for a higher note
@@ -205,7 +222,9 @@ static void singers(const view_t *v, const voice_state_t *vs)
     // the stick's bend and throat as little arrows by the lead
     if (sui.bend > 0.5f) oled_line(lx + 7, ly - 2, lx + 7, ly - 6, true);
     else if (sui.bend < -0.5f) oled_line(lx + 7, ly + 2, lx + 7, ly + 6, true);
-    if (!shown && !vs->voiced && (v->frame / 25) % 4 == 0) oled_ftext_c(F_TINY, lx, LANE_Y0, "SING", 1);
+    bool hand_up = sui.has_hand && sui.hand >= 0.02f;
+    if (!hand_up && !shown && !vs->voiced && (v->frame / 25) % 4 == 0) oled_ftext_c(F_TINY, lx, LANE_Y0, "SING", 1);
+    hand_mark(x0, w, true);
 }
 
 // ---------------------------------------------------------------- the tape

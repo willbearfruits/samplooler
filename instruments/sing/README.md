@@ -27,6 +27,9 @@ not been played much yet (see Status).
 5. Roll it left to throw your voice into the echo; roll it right to stutter (a beat, then shorter slices the
    further you roll).
 6. The stick, if the board has one: left and right move the throat, up and down bend the pitch.
+7. On rev E (two knobs and a hand sensor, no stick): turn the left knob and more of you sing along, a choir of
+   your own voice. Hold a hand over the sensor and your voice is thrown into the echo; lift it and the echo rings
+   out. Push the left knob for REC.
 
 The screen shows the note you sing and how sharp or flat you are, your pitch as you sing it (dots) and as it
 comes out tuned (a line) over the notes it can land on, a head for every voice singing, the vocoder's bands,
@@ -63,7 +66,9 @@ Wi-Fi radio: no router, no pairing, a few milliseconds per packet.
 | tap REC, then hold REC | a new take in place of the old one |
 | tip forward / back | the loop faster / slower and backwards (LOOP > TILT: or the pitch, or the throat) |
 | roll left / right | echo throw / stutter |
-| stick | throat (left, right), pitch bend (up, down) |
+| stick (boards with a joystick) | throat (left, right), pitch bend (up, down) |
+| left knob (rev E) | the choir: one click is 5 % of CHOIR > CHOIR, the voice's own setting. Its push is REC |
+| a hand over the sensor (rev E) | the echo throw, more the lower the hand, as rolling left does. LOOP > HAND can make it BIG THROAT, BEND DOWN or BEND UP (the stick's moves; they change the tuned voice only) |
 
 ## Sounds
 
@@ -101,6 +106,8 @@ own (WAVs to listen to in `tools/dsp/out-*`).
 ## Status
 
 Runs on a board (2026-10-15): 25 to 35 % of the CPU with the vocoder off (about 20 % more with it on), no dropouts.
+Rev E's left knob and hand were added on 2026-11-17 and checked in the simulator only (15 checks of their own). No
+rev E board has run SING, and a face close to the mic may read as a hand: SYSTEM > HAND switches the sensor off.
 Not played much yet, and the link has not met a BAND on real radio yet. In the simulator: 71 checks of the whole
 instrument, 58 of the voice engine (pitch within half a cent from 75 to 1180 Hz, the hard tune lands within 7 ms), 49
 of the vocoder and effects.

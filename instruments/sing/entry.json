@@ -14,7 +14,7 @@
   "hardware_note": "Best with headphones or the line out: the board's speaker sits next to the mic.",
   "status": "board",
   "listed": false,
-  "status_note": "Runs on a board: 25-35 % CPU, no dropouts (2026-10-15). Not played much yet.",
+  "status_note": "Runs on a board: 25-35 % CPU, no dropouts (2026-10-15). Not played much yet. Rev E's left knob (the choir) and hand (the echo throw) are tested in the simulator only: no rev E board has run them.",
   "image": "images/sing-voices.gif",
   "more": [
     "images/sing-splash.gif",

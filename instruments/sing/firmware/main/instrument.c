@@ -7,6 +7,8 @@
 //                 FORMANT, or nothing
 //   the roll      left throws the voice into the echo, right stutters it (the Samplooler's roll)
 //   the stick     X the formant, Y the pitch (a bend), while it is pushed
+//   rev E         (no stick) the left knob: CHOIR > CHOIR, 5 % a detent; a hand over the sensor: LOOP > HAND, the echo
+//                 throw (as the roll to the left), or the stick's throat or bend
 //   MIDI notes    held notes are the chord: the vocoder plays them, CHORD harmonies and tuning use them
 //
 // The song: tempo, key, scale and chords, shared with a BAND (or any board on the link) both ways. The chord moves
@@ -48,6 +50,7 @@ enum {
     P_GATE, P_COMP, P_DEESS, P_GUARD, P_MONITOR,
     P_LSYNC, P_LSTART, P_LLVL, P_LKEEP, P_LTILT, P_LSPMODE, P_LROLL, P_LCLEAR,
     P_LINK, P_GROUP, P_RANGE, P_PEERS,
+    P_LHAND,                                                  // 2026-11-17: what a hand over rev E's sensor does (last: the CCs before it stay)
     P_N
 };
 enum { G_VOICE, G_HARM, G_CHOIR, G_VOC, G_FX, G_SONG, G_INPUT, G_LOOP, G_LINK, G_N };
@@ -84,6 +87,8 @@ static const char *const tilt_l[] = { "LOOP SPEED", "PITCH", "FORMANT", "OFF" };
 static const char *const spmode_l[] = { "KEEP PITCH", "OCTAVES", "TAPE" };
 static const char *const roll_l[] = { "ECHO+STUTTER", "OFF" };
 static const char *const off_on[] = { "OFF", "ON" };
+enum { HD_ECHO, HD_THROAT, HD_BEND_DOWN, HD_BEND_UP };
+static const char *const hand_l[] = { "ECHO", "BIG THROAT", "BEND DOWN", "BEND UP" };
 static const char *const range_l[] = { "NEAR", "ROOM", "FAR" };
 
 #define SYS PF_SYS
@@ -147,6 +152,7 @@ static const param_t params[P_N] = {
     [P_GROUP]   = { "GROUP", "ngrp", G_LINK, PK_NUM, SYS | PF_NOCC | PF_INT, 1, 8, 1, 1, "", NULL, "SAME GROUP: THEY SYNC" },
     [P_RANGE]   = { "RANGE", "npow", G_LINK, PK_ENUM, SYS | PF_NOCC, 0, 2, 1, 1, "", range_l, "HOW FAR THE RADIO REACHES" },
     [P_PEERS]   = { "WHO IS THERE", "nwho", G_LINK, PK_ACT, PF_NOCC, 0, 0, 0, 0, "", NULL, "THE BOARDS LINKED NOW" },
+    [P_LHAND]   = { "HAND", "qhnd", G_LOOP, PK_ENUM, SYS, 0, 3, 1, HD_ECHO, "", hand_l, "A HAND OVER THE SENSOR" },
 };
 #define P(i) pv[(i)]
 
@@ -459,6 +465,21 @@ static void controls(const ctl_t *c)
     if (a > 0.5f && roll) coach_done(LEARN_INST + 2);
     // the stick: X the throat, Y the pitch
     if (c->has_joy) { fmt += 7.0f * c->jx; bend += 12.0f * c->jy; }
+    // rev E (no stick). The left knob steps CHOIR > CHOIR, 5 % a detent: more of you, or fewer. A hand over the sensor
+    // does LOOP > HAND: it throws the voice into the echo as the roll to the left does (the larger of the two counts),
+    // or it is the stick's throat (bigger) or its bend, an octave at the bottom. c->hand glides and lets go by itself.
+    if (c->has_lknob && c->lknob) {
+        int was = (int)P(P_CHOIR), now = clampi(was + 5 * c->lknob, 0, 100);
+        if (now != was) param_set(P_CHOIR, (float)now);
+        char b[24]; snprintf(b, sizeof b, "CHOIR %d%%", now);
+        toast(b, 900);
+    }
+    float hand = c->has_hand ? c->hand : 0.0f;
+    int hd = (int)P(P_LHAND);
+    if (hd == HD_ECHO) { if (hand > sui.throw_) sui.throw_ = hand; }
+    else if (hd == HD_THROAT) fmt -= 7.0f * hand;
+    else bend += (hd == HD_BEND_UP ? 12.0f : -12.0f) * hand;
+    sui.has_hand = c->has_hand; sui.hand = hand; sui.hand_does = hd;
     bend_s += 0.25f * (bend - bend_s);
     fmt_s += 0.25f * (fmt - fmt_s);
     sui.bend = bend_s; sui.formant = fmt_s;
@@ -588,6 +609,8 @@ static const hint_t hints[] = {
     { "HOLD REC TO LOOP WHAT YOU SING", LEARN_REC },
     { "TILT: THE LOOP FASTER OR BACKWARDS", LEARN_INST + 1 },
     { "ROLL LEFT FOR ECHO, RIGHT TO STUTTER", LEARN_INST + 2 },
+    { "LEFT KNOB: MORE OF YOU, A CHOIR", LEARN_LKNOB },
+    { "A HAND OVER THE MIDDLE: ECHO", LEARN_HAND },
     { "PRESS THE KNOB FOR THE MENU", LEARN_MENU },
 };
 

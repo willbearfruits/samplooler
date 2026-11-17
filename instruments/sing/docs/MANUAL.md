@@ -80,11 +80,40 @@ MONITOR: how loud your live voice comes out; lower it when the board's own speak
 - LOOP KEEP below 100 % fades the older layers each time you add.
 - To redo the loop: tap REC to stop it, then hold REC. The new take replaces the old one. CLEAR LOOP erases it.
 - TILT: LOOP SPEED (the Samplooler), PITCH, FORMANT or OFF. ROLL: ECHO+STUTTER or OFF.
+- HAND (rev E): what a hand over the sensor does. See "Rev E" below.
 - SPEED MODE, for TILT: LOOP SPEED. KEEP PITCH (the default): the tilt changes how fast the loop goes, and
   backwards, but every note stays at the pitch you sang it, so the loop stays in key with a BAND. It is cut into
   64 ms grains to do that, which you can hear as a slight blur; held at a stop it smears the moment it stopped on.
   OCTAVES: tape speed, but only 2x, 1x, half speed, half speed backwards and backwards, with a short slide between
   them, so it moves by octaves and stays in key. TAPE: the Samplooler's own, the pitch goes with the speed.
+
+## Rev E
+
+Rev E of the board (the Vessel) has no joystick. It has a second knob on the left, whose push is REC, and a sensor
+that measures how high a hand is held over the board (from about 25 cm down to 4 cm). SING uses both since
+2026-11-17. This is tested in the simulator only: no rev E board has run it.
+
+- The left knob is the choir. One click is 5 % of CHOIR > CHOIR, from 0 to 100. It is the voice's own setting: a
+  voice that comes with a choir starts from its own value, and another voice brings its own back. With CHOIR TYPE
+  on UNISON (as CLEAN has it) the choir is copies of you on your note, a little apart in tune and time.
+- A hand over the sensor does LOOP > HAND.
+  - ECHO (the default): the voice is thrown into the echo, more the lower the hand, as rolling the box left does.
+    Whichever of the two is further counts. Lift the hand and what was thrown rings out. It works with ROLL: OFF.
+  - BIG THROAT: the stick's throat, up to 7 semitones bigger at the bottom.
+  - BEND DOWN, BEND UP: the stick's bend, an octave at the bottom, half an octave half way.
+  - The throat and the bend change the tuned voice, so they do nothing in a voice with TUNED at 0 (CLEAN).
+- The hand lets go by itself: take it away and the value falls back within a quarter of a second or so.
+- SYSTEM > HAND: OFF switches the sensor off. SYSTEM > LEFT KNOB: OFF does the same for the left knob.
+- The screen: a bar at the right edge rises as the hand comes down, with what it does over the singers. A turn of
+  the left knob shows CHOIR and its value.
+
+Not known before a board exists: the mic and the sensor look the same way, so a face close to the mic may read as
+a hand. With HAND on ECHO that would be an echo on everything sung close; with BEND it would be a voice out of
+tune. If it happens, switch the sensor off or sing from the side. The heights and ranges are first guesses.
+
+What a rev E cannot do that a board with a joystick can: the throat and the bend at the same time by hand (one of
+them can go on the hand, and either can go on the tilt with LOOP > TILT), and a bend that goes up and down from
+one control.
 
 ## LINK
 
@@ -194,6 +223,7 @@ note on and off as you sing. Every setting below is on its CC both ways; program
 | SPEED MODE | 78 | The pitch when tilted: KEEP PITCH, OCTAVES, TAPE. Kept when the voice changes |
 | ROLL | 79 | Left: echo  right: stutter: ECHO+STUTTER, OFF. Kept when the voice changes |
 | CLEAR LOOP |  | Press to erase it |
+| HAND | 85 | A hand over the sensor: ECHO, BIG THROAT, BEND DOWN, BEND UP. Kept when the voice changes |
 
 **LINK**
 

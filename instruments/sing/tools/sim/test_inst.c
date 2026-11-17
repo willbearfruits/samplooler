@@ -4,6 +4,7 @@
 #include "sim.h"
 #include "sing.h"
 #include "link.h"
+#include "oled.h"
 #include <math.h>
 #include <string.h>
 #include <time.h>
@@ -401,6 +402,156 @@ static void cost(void)
     run_action("qclr"); first_sound(); sim_run(0.5f);
 }
 
+// ---------------------------------------------------------------- rev E: the left knob (the choir), the hand (the echo)
+void front_midi(uint8_t st, uint8_t d1, uint8_t d2);
+static float pitch_now(float lo, float hi) { return m_pitch_at(sim_t - 0.4f, sim_t, lo, hi); }
+static float cents(float f, float ref) { return f > 0 && ref > 0 ? 1200.0f * log2f(f / ref) : 9999.0f; }
+static float dbr(float a, float b) { return 20.0f * log10f((a + 1e-9f) / (b + 1e-9f)); }
+// where the sound's weight sits: the mean frequency of the note's first eight harmonics, by amplitude
+static float centre(float f0)
+{
+    float num = 0, den = 0;
+    for (int k = 1; k <= 8; k++) { float a = sqrtf(m_goertzel(sim_t - 0.4f, sim_t, f0 * (float)k)); num += a * f0 * (float)k; den += a; }
+    return den > 0 ? num / den : 0;
+}
+// a short sung note with the hand at that height, then silence with the hand gone: how loud the 1.2 s after it are
+static float echo_tail(int mm)
+{
+    quiet(); SI.hand_mm = 0; sim_run(2.5f);
+    SI.hand_mm = mm; sim_run(0.5f);
+    sing_on(220.0f); sim_run(0.6f);
+    SI.mic = NULL; SI.mic_u = NULL; float t0 = sim_t;
+    sim_run(0.3f); SI.hand_mm = 0; sim_run(1.1f);
+    return m_rms(t0 + 0.2f, t0 + 1.4f);
+}
+static float choir_level(const voice_state_t *v) { float a = 0; for (int k = 0; k < v->nvoices && k < VOICE_EXTRA; k++) a += v->vlevel[k]; return a; }
+static int edge_lit(void) { int n = 0; for (int y = 17; y <= 47; y++) for (int x = OLED_W - 2; x < OLED_W; x++) n += oled_get(x, y) ? 1 : 0; return n; }
+
+static void rev_e(void)
+{
+    sim_in_t keep = SI;
+    uint32_t learned = meta.learned; float hints_on = pv[CP(CP_HINTS)];
+    const ctl_t *c = front_ctl();
+    voice_state_t vs;
+    pv[CP(CP_HINTS)] = 0;
+
+    section("sing: rev E, the board with the joystick first");
+    quiet(); front_midi(0xC0, 0, 0); sim_run(0.5f);                // CLEAN, as it comes
+    sing_on(220.0f); sim_run(1.5f);
+    float r_c = m_rms(sim_t - 0.8f, sim_t);
+    SI.lk = 3; sim_tick(); SI.hand_mm = 60; sim_run(0.8f);
+    check(!c->has_lknob && !c->has_hand && (int)get("cmix") == 0 && sui.throw_ == 0.0f && !sui.has_hand && edge_lit() == 0 && fabsf(dbr(m_rms(sim_t - 0.6f, sim_t), r_c)) < 0.5f,
+          "counts on the left knob's pins and something over the sensor's place do nothing there: CHOIR %d, no throw, the level %+.2f dB", (int)get("cmix"), (double)dbr(m_rms(sim_t - 0.6f, sim_t), r_c));
+    SI.hand_mm = 0; SI.lk = 0;
+    check(tag("qhnd") == INST.nparams - 1 && param_cc_number(tag("qhnd")) > 0 && param_cc_number(tag("qrol")) == param_cc_number(tag("qspm")) + 1,
+          "LOOP > HAND is the last setting, on CC %d: every other setting keeps its CC", param_cc_number(tag("qhnd")));
+    int nk = 0, nh = 0; for (int i = 0; i < INST.nhints; i++) { nk += INST.hints[i].learn == LEARN_LKNOB; nh += INST.hints[i].learn == LEARN_HAND; }
+    check(nk == 1 && nh == 1, "a hint for the left knob and one for the hand (the core shows them only on a board with the part)");
+
+    section("sing: rev E, the left knob is the choir");
+    sim_rev_e(); sim_run(1.0f);
+    voice_state(&vs);
+    float r0 = m_rms(sim_t - 0.6f, sim_t); int n0 = vs.nvoices;
+    check(c->has_lknob && c->has_hand && !c->has_joy && n0 == 0, "rev E: the left knob and the sensor, no joystick; CLEAN is one voice");
+    int right = 0;
+    for (int k = 1; k <= 4; k++) { sim_lturn(1); sim_run(0.3f); if ((int)get("cmix") == 5 * k) right++; }
+    sim_shot("rev_e_choir_toast");
+    sim_run(1.2f);
+    voice_state(&vs); int n20 = vs.nvoices; float r20 = m_rms(sim_t - 0.6f, sim_t), l20 = choir_level(&vs);
+    for (int k = 5; k <= 20; k++) { sim_lturn(1); sim_run(0.1f); if ((int)get("cmix") == 5 * k) right++; }
+    sim_run(1.5f);
+    voice_state(&vs); int n100 = vs.nvoices; float r100 = m_rms(sim_t - 0.6f, sim_t), l100 = choir_level(&vs), f100 = pitch_now(150.0f, 330.0f);
+    sim_shot("rev_e_choir_full");
+    // (a few copies a little out of tune can take as much from the level as they add: the copies' own levels are counted)
+    check(right == 20 && n20 > 0 && n100 > n20 && l20 > 0.0f && l100 > 2.0f * l20 && r100 > r0 && fabsf(cents(f100, 220.0f)) < 25.0f,
+          "each detent is 5 %% of CHOIR > CHOIR, up to 100: at 20 %% %d more voices (their levels together %.2f, the output %+.1f dB), at 100 %% %d (%.2f, %+.1f dB), still on the note (%+.0f cents)",
+          n20, (double)l20, (double)dbr(r20, r0), n100, (double)l100, (double)dbr(r100, r0), (double)cents(f100, 220.0f));
+    sim_lturn(3); sim_run(0.2f); int top = (int)get("cmix");
+    sim_lturn(-3); sim_run(0.2f); int three = (int)get("cmix");
+    for (int k = 0; k < 20; k++) { sim_lturn(-1); sim_run(0.05f); }
+    sim_lturn(-2); sim_run(2.0f);
+    voice_state(&vs);
+    float r_back = m_rms(sim_t - 0.6f, sim_t);
+    check(top == 100 && three == 85 && (int)get("cmix") == 0 && vs.nvoices == 0 && fabsf(dbr(r_back, r0)) < 1.0f,
+          "it stops at 100 and at 0; three detents on one tick are 15 %%; turned back down the choir is gone (%d voices, the level %+.2f dB)", vs.nvoices, (double)dbr(r_back, r0));
+    front_midi(0xC0, 3, 0); sim_run(0.5f); int own = (int)get("cmix");
+    sim_lturn(-2); sim_run(0.2f); int stepped = (int)get("cmix");
+    front_midi(0xC0, 0, 0); sim_run(0.5f);
+    check(own == 80 && stepped == 70 && (int)get("cmix") == 0, "it is the voice's own setting: the CHOIR voice comes with 80, two detents down are 70, and CLEAN comes back with 0");
+
+    section("sing: rev E, a hand throws the voice into the echo");
+    float t_none = echo_tail(0), t_half = echo_tail(145), t_down = echo_tail(40);
+    check(t_down > 2.0f * t_none && t_half > t_none && t_down > t_half,
+          "a note sung with the hand over the sensor rings on in the echo: the 1.2 s after it are %+.1f dB with the hand at 145 mm and %+.1f dB at 40 mm, against no hand",
+          (double)dbr(t_half, t_none), (double)dbr(t_down, t_none));
+    quiet(); sim_hand(40, 1.0f);
+    float th = sui.throw_; int lit = edge_lit();
+    sim_shot("rev_e_hand_echo");
+    sim_hand(0, 2.5f);
+    check(th > 0.95f && lit > 30 && sui.throw_ == 0.0f && edge_lit() == 0, "at 40 mm the throw is full (%.2f) and the bar at the screen's edge is up (%d dots); the hand gone, both are gone", (double)th, lit);
+    set("qrol", 1); float t_roll_off = echo_tail(40); set("qrol", 0);
+    param_set(CP(CP_HAND), 0); float t_off = echo_tail(40); param_set(CP(CP_HAND), 1); sim_run(0.3f);
+    check(t_roll_off > 2.0f * t_none && fabsf(dbr(t_off, t_none)) < 1.0f,
+          "ROLL: OFF leaves the hand its throw (%+.1f dB); SYSTEM > HAND OFF takes it away (%+.1f dB)", (double)dbr(t_roll_off, t_none), (double)dbr(t_off, t_none));
+    // with the roll: the larger of the two counts, and the roll alone is as it was
+    quiet(); sim_tilt(-45, 0); sim_run(1.0f); float roll_alone = sui.throw_;
+    sim_hand(145, 1.0f); float both = sui.throw_;
+    sim_tilt(0, 0); sim_hand(0, 2.5f);
+    check(roll_alone > 0.95f && both == roll_alone, "rolled left as well: the larger of the two (the roll %.2f, with a hand half way down %.2f)", (double)roll_alone, (double)both);
+
+    section("sing: rev E, HAND does the stick's throat or bend");
+    quiet(); set("vlvl", 100); set("vdry", 0); set("fech", 0); set("frev", 0);
+    sing_on(220.0f); sim_run(1.5f);
+    float f_a = pitch_now(80.0f, 520.0f), c_a = centre(f_a);
+    set("qhnd", 2);
+    sim_hand(145, 1.2f); float f_h = pitch_now(80.0f, 520.0f);
+    sim_hand(40, 1.2f); float f_d = pitch_now(80.0f, 520.0f);
+    sim_shot("rev_e_hand_bend");
+    sim_hand(0, 2.5f); float f_b = pitch_now(80.0f, 520.0f);
+    check(fabsf(cents(f_h, f_a) + 600.0f) < 25.0f && fabsf(cents(f_d, f_a) + 1200.0f) < 25.0f && fabsf(cents(f_b, f_a)) < 10.0f && sui.throw_ == 0.0f,
+          "BEND DOWN: half way down the tuned voice is %.0f cents down, at 40 mm %.0f (the stick's octave), the hand gone %+.0f; nothing is thrown", (double)cents(f_h, f_a), (double)cents(f_d, f_a), (double)cents(f_b, f_a));
+    set("qhnd", 3);
+    sim_hand(40, 1.2f); float f_u = pitch_now(80.0f, 900.0f);
+    sim_hand(0, 2.5f);
+    check(fabsf(cents(f_u, f_a) - 1200.0f) < 25.0f, "BEND UP: at 40 mm %.0f cents up", (double)cents(f_u, f_a));
+    set("qhnd", 1);
+    sim_hand(40, 1.2f); float f_t = pitch_now(80.0f, 520.0f), c_t = centre(f_a), fm = sui.formant;
+    sim_shot("rev_e_hand_throat");
+    sim_hand(0, 2.5f); float c_b = centre(f_a);
+    check(fabsf(fm + 7.0f) < 0.2f && fabsf(cents(f_t, f_a)) < 25.0f && c_t < 0.85f * c_a && fabsf(c_b / c_a - 1.0f) < 0.05f,
+          "BIG THROAT: at 40 mm the throat is %.1f semitones (the stick's 7), the note stays (%+.0f cents), the sound's weight falls from %.0f to %.0f Hz and comes back (%.0f)",
+          (double)fm, (double)cents(f_t, f_a), (double)c_a, (double)c_t, (double)c_b);
+    set("qhnd", 0);
+
+    // a clip for the page (out/sing-rev-e.gif and .wav, the same stretch): CLEAN, a little tune sung; the left knob
+    // brings the choir in; a hand comes down and the last notes ring on in the echo; the knob takes the choir out
+    {   quiet(); front_midi(0xC0, 0, 0); sim_run(1.0f);
+        static const float tune[8] = { 220.0f, 246.94f, 261.63f, 293.66f, 329.63f, 293.66f, 261.63f, 220.0f };
+        float t0 = sim_t; int note_i = 0;
+        sim_gif_begin("rev-e");
+        sing_on(tune[0]);
+        for (int i = 0; i < 1150; i++) {
+            ui_awake();
+            if (i % 60 == 0 && i < 720) { sg.f0 = tune[(note_i++) % 8]; }
+            if (i == 720) { SI.mic = NULL; SI.mic_u = NULL; }          // she stops: what is left is the echo
+            if (i >= 150 && i < 330 && i % 15 == 0) SI.lk = 1;           // twelve detents: CHOIR 60 %
+            if (i >= 480 && i < 700) SI.hand_mm = 240 - (i - 480) * 200 / 220;
+            if (i >= 700 && i < 800) SI.hand_mm = 40;
+            if (i >= 800 && i < 900) SI.hand_mm = 40 + (i - 800) * 2;
+            if (i == 900) SI.hand_mm = 0;
+            if (i >= 960 && i < 1080 && i % 10 == 0) SI.lk = -1;
+            sim_tick();
+        }
+        sim_gif_end();
+        sim_wav("-rev-e", t0, sim_t);
+    }
+
+    section("sing: back on the board with the joystick");
+    SI = keep; quiet(); meta.learned = learned; pv[CP(CP_HINTS)] = hints_on;
+    front_midi(0xC0, 0, 0); sim_run(3.0f);
+    check(!c->has_lknob && !c->has_hand && (int)get("cmix") == 0 && (int)get("qhnd") == 0 && sui.throw_ == 0.0f && sui.hand == 0.0f, "no left knob, no hand, CHOIR 0, nothing thrown");
+}
+
 void inst_tests(void)
 {
     voices();
@@ -408,4 +559,5 @@ void inst_tests(void)
     loop_alone();
     with_band();
     cost();
+    rev_e();
 }
