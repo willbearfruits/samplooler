@@ -13,6 +13,9 @@ Where the Samplooler is in November 2026, and what comes next. Nothing here has 
   hand sensor). The left knob moves the tape by hand, a hand over the sensor closes a filter, the menu is a list,
   a take starts at the first sound, and the screen draws 30 frames a second without holding up the controls.
   Tested on a PC only: `tools/check.sh`.
+- **The other five on the next board, not on a board yet.** HUFF, WRECK, MANTRA, BAND and PIXEL each use rev E's left
+  knob and hand sensor (their READMEs say how), on a shared core that tells the two boards apart. Each is tested in
+  its simulator only.
 - **Four more instruments on the list:** [HUFF](instruments/huff), [WRECK](instruments/wreck),
   [MANTRA](instruments/mantra) and [BAND](instruments/band). Each has run on a board. They install from the
   [page](https://willbearfruits.github.io/samplooler/#instruments) or the desktop app.
