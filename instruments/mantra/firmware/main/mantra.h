@@ -91,6 +91,15 @@ typedef struct {
     float jx, jy;              // the stick -1..1 (x: bend, y: vibrato up / the hum (mouth shut) down)
     bool  knocked; float knock; // a knock this tick, and how hard (0..1): the bowl
     bool  running;             // the score plays (REC is the looper's; the knob changes the sound)
+    // Rev E (the Vessel): no stick. A hand held over the sensor is a hand over his mouth (HANDS > HAND: HUM), or the
+    // stick's vibrato (VIBRATO); the left knob is the note: HANDS > NOTE, semitones, an octave either way, on every
+    // voice and the amps. All 0 / false on a board without the parts (rev C): nothing there changes.
+    bool  has_hand, has_lknob;
+    float hand;                // 0 no hand .. 1 fully down (from 25 cm down to about 6), as the core glides it
+    bool  hand_vib;            // HANDS > HAND is VIBRATO
+    int   note;                // the left knob's note now, semitones (0 without the knob)
+    float note_s;              // ... gliding to it as a sung note glides (what the pitch gets)
+    int   note_show;           // ticks left to show its number after a turn
 } hands_t;
 extern volatile hands_t hands;
 // The knob: the BLEND from the sound's chant (0) to Daisy Bell (1), smoothed over 0.2 s (the host). The score reads it:

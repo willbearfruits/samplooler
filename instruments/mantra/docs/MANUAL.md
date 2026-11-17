@@ -48,12 +48,52 @@ SOUND > SOUND in the menu. Each one is the chant at the knob's low end.
 | roll left and right | the pitch, up to an octave each way (HANDS > ROLL: or the overtone) |
 | turn it flat on the table | like a prayer wheel: the overtone walks up or down the harmonics (HANDS > YAW) |
 | pump it up and down | the breath: louder, more air, an accent on each stroke (HANDS > PUMP) |
-| stick left and right | bend |
-| stick up / down | vibrato / the mouth shut to a hum (and the amps dive an octave) |
+| stick left and right (boards with a joystick) | bend |
+| stick up / down (boards with a joystick) | vibrato / the mouth shut to a hum (and the amps dive an octave) |
+| left knob (rev E) | the note: a semitone a click, up to an octave up or down |
+| a hand over the sensor (rev E) | a hand over his mouth: the lower, the more it shuts to a hum (HANDS > HAND: or the vibrato) |
 | knock on the box | strike the singing bowl (and hit the amps' chord, when DRONE > KNOCK is HIT) |
 | turn the knob | from the chant to Daisy Bell |
-| hold REC | loop what it sings; hold again to add; tap to stop or play |
+| hold REC (rev E: push the left knob) | loop what it sings; hold again to add; tap to stop or play |
 | hold the knob | freeze the hands where they are |
+
+## Rev E (the Vessel)
+
+Rev E has no joystick. In its place it has a knob on the left, whose push is REC, and a sensor in the middle of the
+board that measures how high a hand is held over it. The same firmware runs on both boards and finds out by itself
+which one it is on. On a board with a joystick nothing here applies and nothing has changed.
+
+All of this is tested in the simulator only. No rev E board has run MANTRA yet, so the distances below are the
+sensor's numbers, not a player's experience.
+
+**The left knob is the note.** One click is one semitone, up or down, as far as an octave each way (12 clicks). It
+is added to what the roll does, and it moves every voice and the wall of amps together. It is in semitones, not in
+steps of the song's scale, because it shifts everything that sings at once, chords included: only a shift in
+semitones keeps them in tune with each other. A click slides to the new note the way one sung note slides into the
+next (VOICE 2 > GLIDE). The knob has no end stop of its own: at an octave it simply stops counting. It stays where
+you leave it, through a change of sound and a power cycle, because it is a setting: HANDS > NOTE. A rail down the
+left edge of the screen shows it: the bead is in the middle at 0, at the top an octave up, at the bottom an octave
+down, with the number beside it. It does not change the song's key, so other boards on the link are not moved.
+
+**A hand over the sensor is a hand over his mouth.** The sensor sees a hand from 25 cm down. The lower the hand,
+the more the mouth shuts into a hum; from about 6 cm down he hums with the mouth shut. It is the same hum as the
+stick pulled down: every voice hums, the mic's effect too, and the wall of amps sinks, a full octave when the hand
+is down. The first few centimetres do little and most of the change comes in the lower half, so a hand that only
+passes over does not shut him up. Take the hand away and the mouth opens again in about half a second. On the screen
+a hand comes down from the upper right and lies over his mouth.
+
+HANDS > HAND chooses what the hand does: HUM, or VIBRATO. VIBRATO is the stick pushed up: the lower the hand, the
+more the note wavers, up to 0.6 semitones each way on top of the sound's own vibrato. Nothing hums and the amps
+stay where they are. SYSTEM > HAND: OFF ignores the sensor. SYSTEM > LEFT KNOB: OFF ignores the knob: the note
+goes back to the key's, and HANDS > NOTE keeps its value for when the knob is on again.
+
+What a rev E cannot do that a board with a joystick can:
+
+- A smooth bend. The stick bends up to two semitones either way and springs back. The knob moves in whole
+  semitones and stays. The roll still bends smoothly, except in KHOOMEI and SYGYT, where it moves the overtone.
+- The hum and the vibrato without a visit to the menu. The stick gives one or the other by which way it is pushed.
+  The hand gives the one HANDS > HAND is set to.
+- A hum with both hands on the box. The hand has to be held over it.
 
 ## The mic
 
@@ -72,7 +112,8 @@ KARGYRAA a deep sub, DAISY a light clean guitar).
 The chord follows the song's chords and changes on bar lines: DRONE > CHANGE says every bar, 2, 4 or 8 bars, or
 never. 4 BARS is the pace of WRECK's DRONE zone, so linked boards move together there; set it to EVERY BAR for its
 faster zones. The first chord swells in over SWELL; a new one slides in. Pumping the box opens the gain; a knock
-hits the chord again (KNOCK: HIT); POUND hits it on bar lines by itself; the stick down sinks everything an octave.
+hits the chord again (KNOCK: HIT); POUND hits it on bar lines by itself; the stick down sinks everything an octave
+(on rev E: a hand over the sensor, with HANDS > HAND at HUM; the left knob's note moves the amps with the voices).
 GAIN, TONE, MIDS, SUB, FEEDBACK (at 50 it matches the chord's own 12th; from 85 up it sings over it), HUM, ORGAN,
 TUNING (E STD down to DROP G) and SCALE (the song's notes, or a darker scale) are the amp's. MOD is a wah or a tremolo
 on the song's beat.
@@ -188,6 +229,8 @@ The MIDI CC of a setting is in its table (the DRONE's are CC 68 to 85, in the sl
 | PUMP | 102 | Pumping it up and down: BREATH, OFF |
 | KNOCKS | 103 | A knock strikes the bowl: OFF, ON |
 | KNOCK SENSE | 104 | More: softer knocks count (0..100 %) |
+| NOTE |  | The left knob: up or down (-12..12 st) |
+| HAND |  | A hand over the sensor: HUM, VIBRATO |
 
 **MIC**
 

@@ -6,6 +6,9 @@
 //   yaw           the box turned flat on the table, like a prayer wheel: the overtone walks up the harmonics
 //   pumping       the box pumped up and down: the breath (louder, more air), each stroke an accent
 //   the stick     left and right bend, up the vibrato, down shuts the mouth to a hum
+//   rev E         (the Vessel: no stick) a hand held over the sensor is a hand over his mouth: the lower, the more it
+//                 shuts to the stick's hum (HANDS > HAND: or the stick's vibrato); the left knob is the note: HANDS >
+//                 NOTE, a semitone a detent, an octave either way, on the voices and the amps. Simulator only so far
 //   a knock       strikes the singing bowl (and hits the amps' chord, when the sound says so)
 //   the mic       through the same mouth (MIC > EFFECT), or the voice follows your hum (HUM ALONG)
 //
@@ -44,6 +47,7 @@ enum {
     H_VOICES, H_BOWL, H_DRONE,
     H_TEMPO, H_KEY, H_SCALE, H_PROG, H_HOLD, H_BARS,
     H_LINK, H_GROUP, H_RANGE_L, H_PEERS,
+    H_NOTE, H_HAND,                                    // 2026-11-17, rev E: the left knob's note, what the hand does (last: the CCs stay)
     H_N
 };
 #define HB (M_N * MOD_PARAMS_MAX)
@@ -75,6 +79,8 @@ static const char *const prog_l[NPROGS] = { "HOLD", "I V vi IV", "vi IV I V", "I
 static const char *const chord_l[] = { "I", "II", "III", "IV", "V", "VI", "VII" };
 static const char *const bars_l[] = { "1 BAR", "2 BARS", "HALF BAR" };
 static const char *const range_l[] = { "NEAR", "ROOM", "FAR" };
+static const char *const hand_l[] = { "HUM", "VIBRATO" };
+#define HAND_FULL  1.1f        // the hand is fully down a little before the sensor's 4 cm (at about 6 cm)
 
 #define SYS PF_SYS
 static const param_t host_params[H_N] = {
@@ -106,6 +112,8 @@ static const param_t host_params[H_N] = {
     [H_GROUP]   = { "GROUP", "ngrp", G_LINK, PK_NUM, SYS | PF_NOCC | PF_INT, 1, 8, 1, 1, "", NULL, "SAME GROUP: THEY SYNC" },
     [H_RANGE_L] = { "RANGE", "npow", G_LINK, PK_ENUM, SYS | PF_NOCC, 0, 2, 1, 1, "", range_l, "HOW FAR THE RADIO REACHES" },
     [H_PEERS]   = { "WHO IS THERE", "nwho", G_LINK, PK_ACT, PF_NOCC, 0, 0, 0, 0, "", NULL, "THE BOARDS LINKED NOW" },
+    [H_NOTE]    = { "NOTE", "hnot", G_HANDS, PK_NUM, PF_INT | PF_SIGNED | SYS, -12, 12, 1, 0, "st", NULL, "THE LEFT KNOB: UP OR DOWN" },
+    [H_HAND]    = { "HAND", "hhnd", G_HANDS, PK_ENUM, SYS, 0, 1, 1, 0, "", hand_l, "A HAND OVER THE SENSOR" },
 };
 static UI_RAM param_t table[NPARAMS];
 static UI_RAM char placeholder_tag[M_N * MOD_PARAMS_MAX][5];
@@ -322,6 +330,7 @@ static void audio(const float *in, float *out, int n)
 
 // ---------------------------------------------------------------- the hands
 static float pump_lp = 1.0f, pump_env, knock_prev = 1.0f, knock_ref;
+static int   glide_p = -1;                                         // VOICE 2 > GLIDE's place in the table
 static int   pump_quiet_ms, knock_quiet_ms, knock_count, pump_count;
 int mn_knocks(void) { return knock_count; }                       // for tools/sim
 int mn_pumps(void) { return pump_count; }
@@ -358,6 +367,26 @@ static void read_hands(const ctl_t *c)
     else if (H(H_PUMP) < 1.0f && dev > 0.25f) { hands.pumped = true; pump_quiet_ms = 180; pump_count++; }
     // the stick
     hands.jx = c->has_joy ? c->jx : 0.0f; hands.jy = c->has_joy ? c->jy : 0.0f;
+    // rev E: the hand over the sensor (the core glides it), and the left knob: each detent a semitone of HANDS > NOTE,
+    // stopping an octave either way. The note then glides as a sung note does (VOICE 2 > GLIDE: the voices' own law,
+    // a third of it as the time constant, 25 ms at least), so a step slides and a jump from the menu or MIDI does too.
+    // Without the parts all of this is 0: a board with a stick is not touched
+    hands.has_hand = c->has_hand; hands.has_lknob = c->has_lknob;
+    hands.hand = c->has_hand ? clampf(c->hand * HAND_FULL, 0.0f, 1.0f) : 0.0f;
+    hands.hand_vib = (int)H(H_HAND) == 1;
+    if (c->has_lknob && c->lknob) {
+        int was = (int)H(H_NOTE), now = clampi(was + c->lknob, (int)host_params[H_NOTE].min, (int)host_params[H_NOTE].max);
+        if (now != was) param_set(HB + H_NOTE, (float)now);
+        hands.note_show = 150;
+    } else if (hands.note_show > 0) hands.note_show--;
+    int note = c->has_lknob ? (int)H(H_NOTE) : 0;
+    if (note != hands.note) { hands.note = note; if (c->has_lknob) hands.note_show = 150; }
+    if (hands.note_s != (float)note) {
+        if (glide_p < 0) glide_p = param_by_tag("vgld");
+        float tau = fmaxf(glide_p >= 0 ? pv[glide_p] * 0.00035f : 0.0f, 0.025f);
+        float ns = hands.note_s + (1.0f - expf(-c->dt / tau)) * ((float)note - hands.note_s);
+        hands.note_s = fabsf((float)note - ns) < 0.002f ? (float)note : ns;
+    }
     // a knock: a sharp jolt in the 1 kHz accelerometer stream, well over what the hands do
     hands.knocked = false;
     if (knock_quiet_ms > 0) knock_quiet_ms -= 10;
@@ -390,18 +419,28 @@ static void controls(const ctl_t *c)
 {
     memset(&mc, 0, sizeof mc);
     mc.jaw = hands.jaw;
-    mc.hum = hands.jy < -0.2f ? clampf((-hands.jy - 0.2f) / 0.6f, 0.0f, 1.0f) : 0.0f;
-    mc.vib_depth = hands.jy > 0.2f ? 0.6f * clampf((hands.jy - 0.2f) / 0.6f, 0.0f, 1.0f) : 0.0f;
+    // the stick down shuts the mouth to a hum, up is the vibrato; on rev E the hand over the sensor is one of the two
+    // (HANDS > HAND), by its height, down the same path: whichever asks for more. The hum takes the hand's travel
+    // squared: measured in tools/sim, the vowel is all but gone by a hum of 0.5, so a straight line would spend the
+    // lower half of the hand's way on nothing; the vibrato takes it as it is, as the stick's
+    float stick_hum = hands.jy < -0.2f ? clampf((-hands.jy - 0.2f) / 0.6f, 0.0f, 1.0f) : 0.0f;   // (not the score's M)
+    float stick_vib = hands.jy > 0.2f ? clampf((hands.jy - 0.2f) / 0.6f, 0.0f, 1.0f) : 0.0f;
+    float hand = hands.hand;
+    float hum = fmaxf(stick_hum, hands.hand_vib ? 0.0f : hand * hand), vib = fmaxf(stick_vib, hands.hand_vib ? hand : 0.0f);
+    mc.hum = hum;
+    mc.vib_depth = 0.6f * vib;
     mc.vib_rate = 5.5f;
     float range = H(H_RANGE);
-    mc.bend = hands.jx * 2.0f + ((int)H(H_ROLL) == 0 ? hands.roll * range : 0.0f) + ((int)H(H_YAW) == 1 ? hands.yaw * 12.0f : 0.0f);
+    mc.bend = hands.jx * 2.0f + ((int)H(H_ROLL) == 0 ? hands.roll * range : 0.0f) + ((int)H(H_YAW) == 1 ? hands.yaw * 12.0f : 0.0f)
+            + hands.note_s;                                        // (the left knob's note: 0 without the knob)
     mc.breath = 0.15f + 0.5f * hands.pump;
     mc.level = 0.8f + 0.2f * hands.pump;
     mc.send = 0.6f;
     sc_tick(c, &mc);
     mv_set(&mc);
-    float stick_hum = hands.jy < -0.2f ? clampf((-hands.jy - 0.2f) / 0.6f, 0.0f, 1.0f) : 0.0f;   // (not the score's M)
-    dr_ctl_t dc = { .swell = hands.pump, .bend = hands.jx * 2.0f, .dive = stick_hum, .hit = hands.knocked, .hit_s = hands.knock,
+    // the amps: the stick's bend and the knob's note move them with the voices; the stick's hum, or the hand's, is
+    // their dive (never the score's own M)
+    dr_ctl_t dc = { .swell = hands.pump, .bend = hands.jx * 2.0f + hands.note_s, .dive = hum, .hit = hands.knocked, .hit_s = hands.knock,
                     .running = hands.running, .level = H(H_DRONE) * 0.01f, .send = 0.5f };
     dr_set(&dc);
     mfx = (mv_fx_t){ H(H_EFFECT) * 0.01f, mc.jaw, mc.hum, mc.tract, mc.sub, mc.overtone, mc.sharp };
@@ -495,6 +534,8 @@ static void action(int p)
 static const hint_t hints[] = {
     { "TURN THE KNOB: FROM THE CHANT TO DAISY", LEARN_TURN },
     { "TILT IT: THE MOUTH OPENS AND CLOSES", LEARN_TILT },
+    { "A HAND OVER THE MIDDLE: HE HUMS", LEARN_HAND },
+    { "LEFT KNOB: THE NOTE, UP OR DOWN", LEARN_LKNOB },
     { "TURN IT FLAT ON THE TABLE, LIKE A WHEEL", LEARN_INST + 1 },
     { "PUMP IT UP AND DOWN: THE BREATH", LEARN_INST + 2 },
     { "KNOCK ON THE BOX: THE BOWL, THE AMPS", LEARN_INST + 0 },

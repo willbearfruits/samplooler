@@ -729,6 +729,9 @@ static void c_effect(void)
     free(sung); sung = NULL; sung_n = 0;
 }
 
+// for the other test files (test_reve.c): F1 and F2 of a stretch of sound, measured as the vowels are here
+void tv_formants(const float *x, int n, double *f12) { formants(x, n, f12); }
+
 void test_mod_voice(void)
 {
     for (int i = 0; i < mod_voice.nparams; i++) keep_pv[i] = pv[mod_base[M_VOICE] + i];

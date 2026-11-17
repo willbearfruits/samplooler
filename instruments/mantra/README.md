@@ -9,6 +9,10 @@ go through the same mouth.
 
 Firmware for the Samplooler Stack (ESP32-S3).
 
+Rev E of the board (the Vessel) has no joystick. It has a second knob on the left and a sensor that measures how
+high a hand is held over the board. Since 2026-11-17 MANTRA uses both: the left knob is the note, the hand is a
+hand over the Buddha's mouth. This is tested in the simulator only. No rev E board has run it.
+
 ## Playing
 
 1. Switch it on: the Buddha chants OM.
@@ -31,9 +35,14 @@ Firmware for the Samplooler Stack (ESP32-S3).
 | roll | the pitch |
 | turn it flat | the overtone |
 | pump it | the breath |
-| stick | bend, vibrato, hum |
+| stick (boards with a joystick) | bend, vibrato, hum |
+| left knob (rev E) | the note: one click is one semitone, up to an octave up or down, on top of the roll. It moves the amps too. It is HANDS > NOTE, and it stays where you leave it |
+| a hand over the sensor (rev E) | a hand over his mouth: the lower the hand, the more the mouth shuts into a hum. Fully down (about 6 cm) he hums with the mouth shut, and the amps sink an octave. HANDS > HAND can make it the vibrato instead |
 | knock | the singing bowl (and the amps' chord) |
-| hold REC / tap REC | loop / stop and play |
+| hold REC / tap REC (rev E: push the left knob) | loop / stop and play |
+
+Rev E's two controls are tested in the simulator only. They have run on no board. What a rev E cannot do that a
+board with a joystick can is listed in the manual ("Rev E").
 
 "Daisy Bell" (Harry Dacre, 1892) is in the public domain. The singing engine is MANTRA's own; it does not use
 SAM or any other speech program's code. Inspired by the IBM 7094 performance of 1961 and by the Delay Lama plugin.
@@ -56,3 +65,6 @@ Built 2026-10-17 and 18 and ran on a board: chanting OM it used about a third of
 was added on the 18th and has only been heard in the simulator (160 checks); it is WRECK's amp, which runs on a
 board. A speech recogniser understands about half of the Daisy chorus at a brisk tempo, fewer words at the slow
 default with the waltz under it.
+
+Rev E's left knob and hand were added on 2026-11-17 and checked in the simulator only (29 checks of their own). No
+rev E board has run MANTRA.

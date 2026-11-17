@@ -1,5 +1,6 @@
 // MANTRA's own checks: the host's (it sings, the hands, the knock, the sounds, a pretend BAND on the link, the cost),
-// then each module's (test_voice.c: test_mod_voice(); test_score.c: test_mod_score(); test_drone.c: test_mod_drone()).
+// then each module's (test_voice.c: test_mod_voice(); test_score.c: test_mod_score(); test_drone.c: test_mod_drone()),
+// then rev E's left knob and hand (test_reve.c: test_rev_e()).
 #include "sim.h"
 #include "mantra.h"
 #include "link.h"
@@ -11,6 +12,7 @@ const char *const inst_click_skip[] = { "nlnk", "ngrp", "npow", NULL };
 __attribute__((weak)) void test_mod_voice(void) { }
 __attribute__((weak)) void test_mod_score(void) { }
 __attribute__((weak)) void test_mod_drone(void) { }
+__attribute__((weak)) void test_rev_e(void) { }                  // test_reve.c: rev E's left knob and hand
 void front_midi(uint8_t st, uint8_t d1, uint8_t d2);
 void mn_prof(float *us, int n);
 int  mn_knocks(void);
@@ -144,4 +146,5 @@ void inst_tests(void)
     section("drone"); quiet(); front_midi(0xC0, 0, 0); sim_run(0.5f); test_mod_drone();
     blend_sweep();
     cost();
+    test_rev_e();                                                // last: what comes before sounds as it did
 }

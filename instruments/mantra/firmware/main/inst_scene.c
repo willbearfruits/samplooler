@@ -11,6 +11,9 @@
 //   the bowl     at his left, it ripples when struck
 //   the amps     with the drone up, a wall of cabinets behind him (two rows across the back), their cones pumping
 //                with the amps' level, sparks over the wall while the feedback sings
+//   rev E        a hand held over the sensor comes down from the upper right, on its arm, and lies over his mouth when
+//                it is fully down (HAND: VIBRATO: it stays beside his head and shakes); the left knob's note is a bead
+//                on a rail down the left edge, the middle 0, an octave to each end, its number beside it
 #include "mantra.h"
 #include "ui.h"
 #include "front.h"
@@ -217,14 +220,54 @@ static void amp_wall(const dr_view_t *d, uint32_t f, bool throat)
     }
 }
 
+// ---------------------------------------------------------------- rev E: the hand, the note
+// The player's hand, seen from its back, fingers to the left, on a forearm that comes in from the upper right (the
+// header band hides where it begins). (x, y): the middle of the hand.
+static void hand_over(int x, int y)
+{
+    for (int k = -2; k <= 2; k++) oled_line(x + 5, y + k, x + 5 + 40, y + k - 40, false);   // the forearm: dark, two edges
+    oled_line(x + 5, y - 3, x + 5 + 40, y - 3 - 40, true);
+    oled_line(x + 6, y + 3, x + 6 + 40, y + 3 - 40, true);
+    oled_rrect(x - 6, y - 4, 13, 9, 2, false);                     // the hand: dark, outlined, as his face is
+    oled_rframe(x - 5, y - 3, 11, 7, 2);
+    oled_line(x - 4, y - 1, x, y - 1, true); oled_line(x - 4, y + 1, x, y + 1, true);   // the fingers
+    oled_rect(x + 1, y - 5, 3, 2, true);                           // the thumb, standing up
+}
+// The left knob's note: a rail down the left edge from an octave up to an octave down, a tick at 0 and at each end,
+// a bead where the note is (it glides with the pitch), the number beside it while it is not 0 or was just turned.
+// The rows the core covers (a hint, the menu) are left to it: the rail is drawn shorter above them.
+static void note_rail(int note, float pos, bool number, int cover)
+{
+    int y0 = 28, y1 = 61 - (cover > 0 ? cover : 0);
+    if (y1 > 61) y1 = 61;
+    if (y1 - y0 < 12) return;
+    int half = (y1 - y0) / 2, mid = y0 + half;
+    y1 = mid + half;
+    oled_rect(0, y0 - 3, 7, y1 - y0 + 6, false);
+    for (int y = y0; y <= y1; y += 2) oled_pixel(3, y, true);
+    oled_rect(2, y0, 3, 1, true); oled_rect(2, y1, 3, 1, true); oled_rect(1, mid, 5, 1, true);
+    int y = mid - (int)lroundf(clampf(pos, -12.0f, 12.0f) * (float)half / 12.0f);
+    oled_disc(3, y, 2, true);
+    if (number) {
+        char b[8]; snprintf(b, sizeof b, "%+d", note);
+        if (!note) snprintf(b, sizeof b, "0");
+        int w = oled_ftext_w(F_TINY, b, 1), ty = clampi(y - 2, y0 - 2, y1 - 3);
+        oled_rect(7, ty - 1, w + 3, 7, false);
+        oled_ftext_ex(F_TINY, 9, ty, b, 1);
+    }
+}
+
 // ---------------------------------------------------------------- the whole frame
 static uint32_t frame_n, last_hits;
 static float glow_s, mouth_s, round_s, breath_s;
 static int last_word = -1;
+static int cover_was;
+int mn_cover(void) { return cover_was; }                          // for tools/sim: rows the core covered last frame
 
 void scene_draw(const view_t *v)
 {
     frame_n++;
+    cover_was = v->cover;
     mv_view_t mvv; mv_view(&mvv);
     sc_view_t scv; sc_view(&scv);
     dr_view_t drv; dr_view(&drv);
@@ -250,15 +293,23 @@ void scene_draw(const view_t *v)
         for (int k = 0; k < scv.monks - 1 && k < 4; k++) if (!(k == 2 && bowl_out)) monk(cx + off[k], 62, mvv.level[k + 1], k);
     }
     buddha(cx, top, mouth_s, round_s, breath_s, glow_s);
+    if (hands.has_hand && hands.hand > 0.02f) {                   // rev E: the hand over the sensor, over his mouth
+        float h = hands.hand;
+        int mx = cx, my = top + 16;                               // his mouth (and chin)
+        if (hands.hand_vib) {                                     // the vibrato: beside his head, shaking with it
+            int sh = (int)lroundf(2.0f * h * sinf(v->t * 6.2831853f * 5.5f));
+            hand_over(mx + 34 - (int)lroundf(16.0f * h), my - 22 + (int)lroundf(14.0f * h) + sh);
+        } else hand_over(mx + 30 - (int)lroundf(30.0f * h), my - 22 + (int)lroundf(22.0f * h));   // out from under the band
+    }
     if (throat) ladder(108, 20, 60, mvv.harmonic ? mvv.harmonic : scv.harmonic, mvv.whistle, frame_n);
     if (wordsy) words(&scv);
     if (has_word(scv.line, "BICYCLE") && bike_x <= -40.0f) bike_x = (float)OLED_W + 2.0f;   // he sings it: it sets off
     if (bike_x > -20.0f) { bike_x -= 1.6f; bicycle((int)bike_x, 60, frame_n); }            // and rides all the way across
     else if (!has_word(scv.line, "BICYCLE")) bike_x = -40.0f;
     if (bowl_out) bowl(throat ? 14 : 14, 54, scv.bowl, frame_n);
+    if (hands.has_lknob) note_rail(hands.note, hands.note_s, hands.note != 0 || hands.note_show > 0, v->cover);   // rev E
     oled_rect(0, 0, OLED_W, 16, false);
     ui_head(NULL, false);
-    (void)v;
 }
 
 // ---------------------------------------------------------------- the splash: he appears, the halo opens

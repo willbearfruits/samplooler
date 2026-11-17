@@ -31,6 +31,14 @@ commercial program. The 8-bit voice is the engine's own mode.
   The host passes `dr_ctl_t` (breath, bend, the stick's dive, knocks, MIX > DRONE) and the scene draws the wall of
   amps from `dr_view`. `host_degree_at(frame)` (the host's) gives it the chord exact on a bar line.
 - `inst_fx.c` — SING's input stage and FX bus, unchanged but for its include.
+- Rev E (the Vessel, 2026-11-17; simulator only, no board has run it): `read_hands` in `instrument.c` fills the rev E
+  part of `hands_t`. The left knob steps HANDS > NOTE (`hnot`, semitones, -12..12, PF_SYS), which glides
+  (`hands.note_s`, a third of VOICE 2 > GLIDE as the time constant) into `mc.bend` and the amps' bend. The hand
+  (`hands.hand`, the core's value x 1.1) goes down the stick's paths in `controls()`: HANDS > HAND (`hhnd`) HUM: its
+  square is `mc.hum` and the amps' dive; VIBRATO: it is `mc.vib_depth` / 0.6. Both are 0 without the parts, and the
+  joystick board's sound is the same sample for sample (compare `out/mantra.wav` of `run.sh inst` before and after
+  a change, up to where `test_rev_e` begins). The scene draws `hand_over` and `note_rail`. `tools/sim/test_reve.c`
+  has the checks (run last by `test_inst.c`).
 
 ## Rules
 
