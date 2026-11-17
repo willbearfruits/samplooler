@@ -49,11 +49,22 @@ typedef struct {
     float    lean_x, lean_y;   // degrees, smoothed: right edge down > 0, bottom edge down > 0
     const vec3_t *burst;       // INST.burst: the 1 kHz accelerometer samples since the last tick, oldest first
     int      nburst;
+    const vec3_t *gburst;      // INST.burst_gyro: the gyro (°/s) at each of those samples; NULL otherwise (or frozen)
     // The joystick (Stack boards and the kit; found at boot, absent on the Mini). x right, y up, -1..1,
     // dead zone applied. 0, 0 without one.
     bool     has_joy;
     float    jx, jy;
-    bool     menu_open;        // the menu has the knob; motion, joystick and REC still come through
+    // Rev E (the Vessel) has no joystick. In its place: the left knob (its push is REC) and, in the middle of the
+    // board, a sensor that measures how high a hand is held over it. Both are the instrument's, in play and in the
+    // menu. lknob: detents this tick, signed. hand: 0 no hand .. 1 fully down (4 cm), from 25 cm; it glides, and
+    // is 0 again a quarter of a second after the hand has gone. hand_mm: the reading while a hand is seen, else 0.
+    // Without the parts, or with SYSTEM > HAND OFF / LEFT KNOB OFF: has_lknob / has_hand false and the rest 0.
+    bool     has_lknob;
+    int      lknob;
+    bool     has_hand, hand_seen;
+    float    hand;
+    int      hand_mm;
+    bool     menu_open;        // the menu has the knob; motion, joystick, the left knob, the hand and REC still come through
     // The knob, only while the instrument holds it (knob_grab(true)): in play the core then leaves it alone
     // (no sound change, no menu, no motion hold) and hands it over here.
     int      knob;             // detents turned this tick, signed
@@ -100,7 +111,8 @@ typedef struct { const char *name; const char *set; } preset_t;
 
 // The coach shows each hint at the bottom of the play screen while the player is idle, until the player
 // has done what it says once (learn), then never again (SYSTEM > HINTS brings them back).
-enum { LEARN_TURN, LEARN_MENU, LEARN_REC, LEARN_HOLD, LEARN_JOY, LEARN_TILT, LEARN_INST = 8 };   // 8..31: yours
+enum { LEARN_TURN, LEARN_MENU, LEARN_REC, LEARN_HOLD, LEARN_JOY, LEARN_TILT, LEARN_LKNOB, LEARN_HAND, LEARN_INST = 8 };   // 8..31: yours
+// (a LEARN_JOY hint shows only with a joystick, LEARN_LKNOB only with the left knob, LEARN_HAND only with the sensor)
 typedef struct { const char *text; uint8_t learn; } hint_t;   // text: two lines of 112 px in F_SMALL at most
 void coach_done(int learn);                            // the player did it (UI task)
 
@@ -120,8 +132,10 @@ typedef struct {
     const param_t *params;     int nparams;
     const char *const *groups; int ngroups;    // menu pages of your params, in order
     const preset_t *presets;   int npresets;   // factory sounds, the first is the default
+    const char *sound_word;    // what this instrument's sounds are called in the menu ("SONG"); NULL: "SOUND"
     const hint_t *hints;       int nhints;
     bool  burst;               // wants the 1 kHz accelerometer stream (ctl.burst)
+    bool  burst_gyro;          // with burst: the gyro at 1 kHz too (ctl.gburst)
     bool  looper;              // the core looper records what audio() plays: REC is its (hold = record/add, tap = stop/play)
     bool  rec_button_off;      // SYSTEM > REC BUTTON starts OFF: the REC pin is ignored, BOOT and MIDI (CC 64) record
     const char *knob;          // tag of the param the knob turns in play (until the player edits another in the menu);

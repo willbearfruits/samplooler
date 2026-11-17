@@ -11,11 +11,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NPEER 3
+#define NPEER LINK_PEERS_MAX                     // pretend boards: as many as a board can hear
 typedef struct { link_state_t *st; uint8_t mac[6]; double off, ppm, epoch; bool on; } speer_t;
 static speer_t P[NPEER];
 static int npeer, cur = -1;
 double sim_link_loss;                            // 0..1: share of packets lost on the way
+int    sim_link_rssi = -45;                      // dBm every packet arrives with (a distance, for the tests)
 static uint32_t lseed = 0x51ed;
 static double lrnd(void) { lseed ^= lseed << 13; lseed ^= lseed >> 17; lseed ^= lseed << 5; return (double)(lseed % 1000000u) / 1e6; }
 
@@ -106,7 +107,7 @@ void sim_tick_hook(void)
         if (air[i].t <= t + 10000.0) {
             int k = air[i].to;
             sim_peer_use(k);
-            link_rx(air[i].from, air[i].b, air[i].n, (int64_t)clk(k, air[i].t), -45);
+            link_rx(air[i].from, air[i].b, air[i].n, (int64_t)clk(k, air[i].t), sim_link_rssi);
             air[i] = air[--nair];
         } else i++;
     }

@@ -275,6 +275,7 @@ static void loop_alone(void)
         sim_run(2.0f * L2);
         float worst = 0, typ = 0;
         int i0 = (int)(a0 * AUDIO_SR), i1 = (int)(sim_t * AUDIO_SR);
+        if (i1 > sim_n) i1 = sim_n;                               // (sim_t is a float: six minutes in it rounds a sample past what was written)
         for (int i = i0 + 1; i < i1; i++) { float d = fabsf(sim_out[i] - sim_out[i - 1]); if (d > worst) worst = d; typ += d; }
         typ /= (float)(i1 - i0);
         check(worst < 12.0f * typ + 0.02f, "a click at the press and at the release stays out of the loop (worst step %.3f, typical %.4f)", (double)worst, (double)typ);

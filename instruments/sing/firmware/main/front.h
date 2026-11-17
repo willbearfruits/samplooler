@@ -20,8 +20,14 @@ typedef struct {
     bool     imu_ok;           // there is an IMU
     vec3_t   acc_raw, gyro_raw;            // in the IMU's own axes
     const vec3_t *burst_raw;   int nburst; // ditto, 1 kHz (instruments with INST.burst)
+    const vec3_t *gburst_raw;              // the gyro at the same instants (INST.burst_gyro), or NULL
     bool     joy_ok;           // a joystick was found
     float    jx, jy;
+    bool     lknob_ok;         // rev E: the left knob is there
+    int      lknob;            // its detents since the last tick
+    bool     tof_ok;           // rev E: the hand's sensor answers
+    bool     tof_fresh;        // tof_mm and tof_status are a new reading (every 25 ms or so)
+    int      tof_mm, tof_status;   // millimetres; status 0 is a good reading
     float    dt;
     uint32_t frames;
 } front_in_t;
@@ -52,8 +58,20 @@ bool front_dirty(void);                          // params or meta changed since
 void front_saved(void);
 bool front_quiet(void);                          // the output has been near silent for 0.3 s: a good moment to write flash
 bool front_busy(void);                           // splash or tilt setup on screen (the shell holds off saving)
+const ctl_t *front_ctl(void);                    // what the instrument was handed on the last tick (for tools/sim)
 int  front_menu_level(void);                     // 0 closed, 1 pages, 2 items, 3 editing (for tools/sim)
 int  front_screen(void);                         // 0 splash, 1 play, 2 tilt setup, 3 about; 4 the screensaver (for tools/sim)
+
+// The motion stream (tools/motion_rec.py records it, tools/sim/take.c replays it). SysEx in F0 7D 4D 01 F7 ('M' 1)
+// starts it, F0 7D 4D 00 F7 stops it; off at boot. While it is on, an instrument with INST.burst sends one message a
+// tick: F0 7D 6D ('m'), seq (7 bits, wrapping), ctl.frames (5 x 7 bits, most significant first), flags (1 REC down,
+// 2 the knob down, 4 gyro present), n, then n samples of ax ay az gx gy gz in screen axes, each a signed 14-bit value
+// as two 7-bit bytes (high first): accel in 1/1024 g (+-8 g), gyro in 1/4 deg/s (+-2000), then F7. 12 + 12 n bytes.
+// A message that cannot go out at once is dropped (the sequence shows the gap); 2 s of nothing going out stops it.
+#define MOTION_MAX 64                            // samples in one message (the device reads 20 at most a tick)
+int  front_motion_packet(uint8_t *m, uint8_t seq, uint32_t frames, uint8_t flags,
+                         const vec3_t *acc, const vec3_t *gyro, int n);   // the message into m (12 + 12 n bytes); its length
+bool front_motion_on(void);                      // the stream is on (for tools/sim)
 
 // Asked of the platform (shell.c on the device, tools/sim on the host). UI task.
 void plat_midi3(uint8_t status, uint8_t d1, uint8_t d2);
@@ -66,5 +84,6 @@ int  plat_load_user(int k, uint8_t *b, int cap);        // bytes read, 0 if none
 void plat_factory_reset(void);                          // erase the saved params and user sounds
 int  plat_about(char lines[][32], int max);             // status lines for ABOUT: version, CPU, memory, uptime
 bool plat_sysex(const uint8_t *m, int n);               // a whole SysEx message out on USB MIDI; false: not sent
+bool plat_sysex_try(const uint8_t *m, int n);           // the same, but never waits: false (dropped) if the way out is busy or full
 const char *plat_version(void);                         // the firmware's version ("0.2.0")
 const char *plat_serial(void);                          // the USB serial ("SG-727600D0"), "" without USB

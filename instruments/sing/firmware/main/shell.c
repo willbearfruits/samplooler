@@ -17,6 +17,7 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
+#include "tof.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
 #include "esp_task_wdt.h"
@@ -39,7 +40,7 @@
 #include "settings.h"
 
 static const char *TAG = "shell";
-static bool has_imu, has_joy;
+static bool has_imu, has_joy, has_tof, rev_e, has_lknob;
 
 // ---------------------------------------------------------------- the platform, for the instrument and front.c
 void *app_alloc(size_t n)
@@ -89,6 +90,7 @@ int  plat_about(char l[][32], int max)
                          (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
     if (n < max) snprintf(l[n++], 32, "UP %d:%02d:%02d  ID %02X%02X%02X%02X", (int)(up / 3600), (int)(up / 60 % 60), (int)(up % 60), mac[2], mac[3], mac[4], mac[5]);
     if (n < max) snprintf(l[n++], 32, "TILT %s  STICK %s  USB %s", has_imu ? "YES" : "NO", has_joy ? "YES" : "NO", usb_connected() ? "ON" : "OFF");
+    if (n < max) snprintf(l[n++], 32, "LEFT KNOB %s  HAND %s", has_lknob ? "YES" : "NO", has_tof ? "YES" : "NO");
     return n;
 }
 
@@ -197,7 +199,12 @@ void app_main(void)
     bool from_flash = settings_load(!safe) > 0;          // the tilt and the sound list are kept even in safe mode
     i2c_master_bus_handle_t bus = i2c_start();
     has_imu = imu_init(bus);
-    if (has_imu && INST.burst) imu_burst(true);
+    // Rev E: the hand's sensor, and the GY-87's barometer at 0x77, which no rev C carries: with either one this is a
+    // rev E, and the two pins a joystick would use are its left knob (SYSTEM > LEFT KNOB ON for a rev E that shows neither).
+    has_tof = tof_init(bus);
+    rev_e = has_tof || i2c_master_probe(bus, 0x77, 20) == ESP_OK;
+    ESP_LOGI(TAG, "hand sensor %s, board %s", has_tof ? "found" : "not found", rev_e ? "rev E" : "rev C or the Mini (no barometer at 0x77)");
+    if (has_imu && INST.burst) { imu_burst_gyro(INST.burst_gyro); imu_burst(true); }
     oled_init(bus);
     input_init();
     led_init();
@@ -213,8 +220,8 @@ void app_main(void)
 
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
     input_ev_t in = { 0 };
-    static imu_vec_t raw_burst[64];
-    static vec3_t burst[64];
+    static imu_vec_t raw_burst[64], raw_gburst[64];
+    static vec3_t burst[64], gburst[64];
     int tick = 0, rec_n = 0, dirty_ms = 0;
     bool rec = false;
     TickType_t wake = xTaskGetTickCount();
@@ -234,6 +241,11 @@ void app_main(void)
         usb_midi_poll(front_midi);
         input_poll(&in);
         has_joy = in.has_joy;
+        has_lknob = !in.has_joy && rev_e;                     // not by its counts: a rev C's stick that failed its test would count too
+        int tof_mm = 0, tof_st = 255;
+        bool tof_fresh = tof_poll(&tof_mm, &tof_st);          // a step of its bring-up, or a reading; it is looked for again if it went
+        has_tof = tof_present();
+        if (has_tof) rev_e = true;
         // REC down since power-on counts for nothing until it has been up 0.1 s (a stuck button or a short on its pin);
         // BOOT is REC meanwhile
         static int rec_up_ms;
@@ -249,13 +261,15 @@ void app_main(void)
         if (has_imu) imu_read(&ra, &rg);
         int nb = 0;
         if (INST.burst && has_imu) {
-            nb = imu_burst_read(raw_burst, 64);
+            nb = imu_burst_read2(raw_burst, INST.burst_gyro ? raw_gburst : NULL, 64);
             for (int i = 0; i < nb; i++) burst[i] = (vec3_t){ raw_burst[i].x, raw_burst[i].y, raw_burst[i].z };
+            if (INST.burst_gyro) for (int i = 0; i < nb; i++) gburst[i] = (vec3_t){ raw_gburst[i].x, raw_gburst[i].y, raw_gburst[i].z };
         }
         front_in_t fi = {
             .enc = in.enc, .tap = in.tap, .pressed = in.pressed, .held_ms = in.held_ms, .rec = rec,
             .imu_ok = has_imu, .acc_raw = { ra.x, ra.y, ra.z }, .gyro_raw = { rg.x, rg.y, rg.z },
-            .burst_raw = burst, .nburst = nb, .joy_ok = in.has_joy, .jx = in.jx, .jy = in.jy,
+            .burst_raw = burst, .nburst = nb, .gburst_raw = INST.burst_gyro ? gburst : NULL, .joy_ok = in.has_joy, .jx = in.jx, .jy = in.jy,
+            .lknob_ok = has_lknob, .lknob = in.lknob, .tof_ok = has_tof, .tof_fresh = tof_fresh, .tof_mm = tof_mm, .tof_status = tof_st,
             .dt = dt, .frames = audio_frames(),
         };
         front_tick(&fi);

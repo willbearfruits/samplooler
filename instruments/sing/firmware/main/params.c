@@ -11,6 +11,7 @@ static UI_RAM float snap_vals[PARAMS_MAX];
 
 static const char *const on_off[] = { "OFF", "ON" };
 static const char *const joy_l[] = { "OFF", "AUTO" };
+static const char *const lk_l[] = { "OFF", "AUTO", "ON" };
 static const char *const turn_l[] = { "AS BUILT", "90 RIGHT", "UPSIDE DN", "90 LEFT" };
 static const char *const led_l[] = { "OFF", "LOW", "HIGH" };
 static const char *const saver_l[] = { "OFF", "1 MIN", "3 MIN", "10 MIN" };
@@ -34,6 +35,8 @@ static const param_t core_params[CP_N] = {
     [CP_LED]        = { "LED", "led ", GROUP_SYSTEM, PK_ENUM, SYS, 0, 2, 1, 1, "", led_l, "THE BOARD'S COLOUR LIGHT" },
     [CP_HINTS]      = { "HINTS", "hint", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 1, "", on_off, "ON: THE TIPS COME BACK" },
     [CP_SAVER]      = { "SAVER", "svr ", GROUP_SYSTEM, PK_ENUM, SYS, 0, 3, 1, 2, "", saver_l, "DARK WHEN LEFT ALONE" },
+    [CP_HAND]       = { "HAND", "hand", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 1, "", on_off, "OFF: THE SENSOR IS IGNORED" },
+    [CP_LKNOB]      = { "LEFT KNOB", "lknb", GROUP_SYSTEM, PK_ENUM, SYS, 0, 2, 1, 1, "", lk_l, "AUTO: ON A REV E BOARD" },
     [CP_ABOUT]      = { "ABOUT", "abut", GROUP_SYSTEM, PK_ACT, SYS, 0, 0, 0, 0, "", NULL, "VERSION, CPU, MEMORY" },
     [CP_RESET]      = { "RESET ALL", "rset", GROUP_SYSTEM, PK_ENUM, SYS, 0, 1, 1, 0, "", reset_l, "TURN TO YES, THEN PRESS" },
 };
