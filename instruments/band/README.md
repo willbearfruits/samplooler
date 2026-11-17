@@ -8,6 +8,10 @@ same chords. Next to a [SING](../sing) the two boards play in time: same tempo, 
 Firmware for the Samplooler's ESP32-S3 boards (the Stack, the Mini, the breadboard kit). It grew out of
 an older instrument, JAM. It runs on a board but has not been played much yet (see Status).
 
+Rev E of the board (the Vessel) has no stick. It has a second knob on the left and a sensor that measures how high
+a hand is held over it. On BAND the left knob is the live layer's level and the hand plays the live layer (see
+"On a rev E" below). This is tested in the simulator only. No rev E board has run it.
+
 ![The splash](images/band-splash.gif) ![Drawing a beat](images/band-drums-grid.gif)
 
 Each layer: [all six](images/band-together.gif), [drums](images/band-drums.gif), [bass](images/band-bass-follow.gif),
@@ -31,7 +35,7 @@ Each layer: [all six](images/band-together.gif), [drums](images/band-drums.gif),
    to mute or unmute it. To redo it: tap REC, then hold REC; the new take replaces the old one.
 6. Turn the knob past HOWL for the mixer: a fader, a meter and a mute for each layer. Stick left and right picks a
    layer, up and down sets its level; tap REC mutes it, hold REC 1 s erases its loop (2 s: every loop). Without a
-   stick, hold the knob there to work it with the knob.
+   stick, hold the knob there to work it with the knob. On a rev E the left knob sets the picked layer's level.
 
 The header: the six layers (the live one lit, a line under each one that loops or plays by itself), the chord,
 the four beats of the bar, the link, the level; the row under it is the loop's playhead.
@@ -64,7 +68,33 @@ no router, no pairing, a few milliseconds per packet.
 | tap REC, then hold REC | a new take in place of the old one |
 | the mixer, or LOOPS (menu) | erase one layer's loop, or all |
 | tilt, stick, mic | the live layer's |
+| left knob (rev E) | the live layer's level in the mix, 5 % a click; in the mixer, the picked layer's. Its push is REC |
+| a hand over the sensor (rev E) | the live layer's: the lower the hand, the more (the table below) |
 | REC held from power-on, 3 s, then let go | factory reset |
+
+## On a rev E
+
+The left knob is the same fader as in the mixer and in MIX in the menu. While it turns, the header shows the
+layer's name and its level. It works in the menu, in the grid and in the bass line too.
+
+A hand over the sensor counts from 25 cm down to 4 cm. The header shows what it does and how low it is.
+
+| Layer | The hand | The stick's move it takes |
+| - | - | - |
+| DRUMS | rolls the last drum: eighths from 23 cm, sixteenths from 17 cm, thirty-seconds from 10 cm | up |
+| BASS | opens the filter, up to two octaves at 4 cm | right |
+| LEAD | bends the note down, up to two semitones at 4 cm | down |
+| KEYS | turns MOTION up (tremolo, the organ's rotor), to full at 4 cm | right |
+| BREATH | adds vibrato, up to half a semitone each way at 4 cm | up |
+| HOWL | adds gain, as much at 4 cm as tipping the box 17 degrees more | up |
+
+On DRUMS with KNOCKS on, the roll starts after the hand has stayed 0.25 s, so a hand that comes down to knock
+does not roll. In the mixer, the grid and the bass line the hand does nothing. SYSTEM > HAND: OFF switches the
+sensor off.
+
+A rev E cannot do the stick's other moves: the drums' repeat and filter, the bass's octave and accent, the lead's
+filter and octave, the keys' pedal, short notes and grit, the breath's bend, the howl's spotlight by hand. The
+manual lists what still reaches each of them.
 
 ## Sounds
 
@@ -94,4 +124,7 @@ cd firmware && idf.py build
 
 Runs on a board (2026-10-15): about 45 % of the CPU idle, about 55 % with the grid, the bass, the keys and the lead
 all playing (peaks near 80 %), no dropouts. Not played much yet, and the link has not met a SING on real radio yet.
-285 checks in the simulator. The log (`python3 tools/sl_midi.py log`) shows each layer's cost.
+366 checks in the simulator. The log (`python3 tools/sl_midi.py log`) shows each layer's cost.
+
+Rev E's left knob and hand were added on 2026-11-17. They are tested in the simulator only: no rev E board has run
+BAND, and the hand's heights, the 0.25 s wait before a roll and how it feels next to knocking are untried.

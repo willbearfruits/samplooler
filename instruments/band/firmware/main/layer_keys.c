@@ -5,7 +5,8 @@
 //   KNOCK   a knock on the box plays the chord; how hard is how loud
 // In both, leaning towards the bottom edge lifts the voicing an inversion at a time (the top edge lowers it) and
 // leaning right opens the tone (left darkens it). The stick: up is the sustain pedal, down plays short (the
-// dampers down), right turns the MOTION up (tremolo, the organ's rotor spinning up), left adds grit.
+// dampers down), right turns the MOTION up (tremolo, the organ's rotor spinning up), left adds grit. A board
+// without a stick (rev E): a hand held over the sensor is the stick pushed right, the MOTION up to full.
 // REC: hold = record (or add) what it plays to its loop on the song's sixteenths (the first loop on any layer
 // sets the song's loop through host_first_loop); tap = mute / unmute. A recorded hit keeps its rhythm, touch and
 // inversion, not its notes: it plays whatever chord the song has when it comes round. Loop hits come first;
@@ -845,7 +846,10 @@ COLD static void tick(const ctl_t *c, bool live)
             short_stick = c->jy < -0.5f;
             stick_motion = c->jx > 0.15f ? (c->jx - 0.15f) * 1.2f : 0.0f;
             stick_drive = c->jx < -0.15f ? (-c->jx - 0.15f) * 0.9f : 0.0f;
-        } else { pedal_stick = short_stick = 0; stick_motion = stick_drive = 0; }
+        } else {                                             // rev E: a hand over the sensor is the stick pushed right
+            pedal_stick = short_stick = 0; stick_drive = 0;
+            stick_motion = c->has_hand ? c->hand : 0.0f;
+        }
         // COMP: the keys player joins after a second here with the menu closed
         if (mode == M_COMP && !c->menu_open && live_ms >= 1000 && !muted) comp_on = 1;
         // REC: hold = record (or add), tap = mute; held while muted = a new take (the old steps go at the press, and come
@@ -1067,5 +1071,5 @@ COLD static void icon(int x, int y, bool lit)
 const layer_t layer_keys = {
     .name = "KEYS", .letter = 'k', .pages = pages, .npages = 2, .params = params, .nparams = K_N,
     .events = true, .init = init, .audio = audio, .tick = tick, .draw = draw, .icon = icon,
-    .changed = changed, .clear = clear, .midi_in = midi_in, .state = state, .playing = playing,
+    .changed = changed, .clear = clear, .midi_in = midi_in, .state = state, .playing = playing, .hand = "MOTION",
 };

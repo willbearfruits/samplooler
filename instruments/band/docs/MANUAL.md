@@ -13,7 +13,8 @@ BAND is six instruments in one box, played one at a time and looped or left play
 
 ## The knob picks the layer
 
-Turn the knob: the next layer is live. Its scene slides in, and the mic, the tilt, the stick and REC are its.
+Turn the knob: the next layer is live. Its scene slides in, and the mic, the tilt, the stick and REC are its
+(on a rev E, which has no stick: the left knob and a hand over the sensor; see "On a rev E" below).
 The others keep playing their loops, and the ones that play by themselves (the grid, the bass's FOLLOW, the keys'
 COMP, the lead's ARP, once each has been live for a second) keep playing. The header shows the six layers (the
 live one lit), a line under each one that loops (solid: playing, dotted: muted, a blinking bar: recording; a dot:
@@ -35,6 +36,7 @@ tonal kit four notes of the chord) by eight steps:
 | (knocks) | not heard while the grid is open: pressing the knob jolts the box |
 | REC held 1 s, 2 s | clear the row, the whole grid |
 | stick | up and down rows, left and right steps; its click is REC |
+| left knob (rev E) | the drums' level; its push is REC. A hand over the sensor does nothing here |
 
 Outside the grid, a tap on REC with DRUMS live stops what the drums play (the grid and the knocked loop); the next
 tap brings back what was stopped. DRUMS > KNOCKS: OFF and knocks on the box play nothing (the grid alone; the knocked
@@ -57,6 +59,7 @@ the third and fifth lighter), so the line follows the chords. The rows scroll wi
 | REC tap | stop / start the bass |
 | REC held 1 s | clear the line |
 | stick | up and down the note, left and right the step |
+| left knob (rev E) | the bass's level; its push is REC. A hand over the sensor does nothing here |
 
 LINE loads a ready line: ROOT EIGHTHS, OCTAVE POP, WALKING, ROOT-FIFTH, FUNK, ONE DROP, ACID SLIDE (these have
 accents and slides too); writing makes it MINE. LINE STEP: 1/16 (the 16 steps are a bar) or 1/8 (two bars). After a
@@ -97,6 +100,10 @@ dotted: muted; a dot: it plays by itself). No layer is live here: the mic and th
 | hold REC 2 s | erase every loop, and free the tempo |
 | hold the knob | the knob works the mixer: turn picks, press and turn sets the level, tap mutes, hold gives it back |
 | turn the knob | back to the layers |
+| left knob (rev E) | the picked layer's level, with the other knob held or not; its push is REC (tap: mute) |
+
+A rev E has no stick: hold the right knob to pick a layer with it, and set the level with the left one. A hand over
+the sensor does nothing in the mixer.
 
 The levels and mutes are MIX in the menu: they are saved with a sound.
 
@@ -151,9 +158,66 @@ Your own: change anything, then SOUND > SAVE AS (eight user sounds, the grid wit
 | hold REC | record the live layer's loop, or add to it; stopped (tapped) first: a new take in its place |
 | tap REC | mute / unmute the live layer's loop |
 | tilt, stick, mic | the live layer's (see each layer below) |
+| left knob (rev E) | the live layer's level in the mix; in the mixer, the picked layer's. Its push is REC |
+| a hand over the sensor (rev E) | the live layer's: the lower the hand, the more (see "On a rev E") |
 | REC held from power-on, 3 s, then let go | factory reset |
 
+## On a rev E
+
+Rev E of the board (the Vessel) has no stick. It has a second knob on the left, whose push is REC, and a sensor in
+the middle of the board that measures how high a hand is held over it. The same firmware runs on both boards and
+finds out which one it is on. Everything in this section is tested in the simulator only: no rev E has been built
+yet, so none of it has run on a board.
+
+**The left knob** is the live layer's level: the same fader as in the mixer and in MIX in the menu. One click is
+5 %, from 0 to 100. While it turns, the header shows the layer's icon, its name and its level, for a little over a
+second. Turned up on a muted layer it unmutes it, as the mixer does. The level glides, so a click of the knob is
+not heard as a step. It does the same with the menu open, in the grid and in the bass line. In the mixer it sets
+the picked layer's level.
+
+**A hand over the sensor** is the live layer's. It counts from 25 cm (nothing) down to 4 cm (all of it), and on
+each layer it takes one of the stick's moves:
+
+| Layer | The hand | At 20 cm, 12 cm, 4 cm | The stick's move |
+| - | - | - | - |
+| DRUMS | rolls the last drum knocked (the kick if none was), in time with the song | eighths, sixteenths, thirty-seconds (it starts at 23 cm and changes at 17 cm and 10 cm) | up |
+| BASS | opens the filter above BASS TONE > CUTOFF | 0.5, 1.2 and 2 octaves | right |
+| LEAD | bends the note down | 0.5, 1.2 and 2 semitones | down |
+| KEYS | adds to KEYS SOUND > MOTION, up to 100 % (tremolo, the organ's rotor, the pad's chorus) | +24, +62 and +100 | right |
+| BREATH | adds vibrato to BREATH > VIBRATO | 12, 31 and 50 cents each way | up |
+| HOWL | adds gain, as tipping the box does | as 4, 11 and 17 degrees more tilt | up |
+
+While the hand is there the header shows HAND, what it does on this layer, and a bar for how low it is. When the
+hand leaves, the sound glides back, most of the way in a quarter of a second; the drums' roll stops within a tenth.
+
+- DRUMS: with KNOCKS on, the roll starts only after the hand has stayed 0.25 s. A hand that comes down to knock on
+  the box passes over the sensor too, and must not roll. With KNOCKS off it starts at once. A roll is recorded only
+  while REC is held, as the stick's is.
+- LEAD: the bend glides in the sound (about 20 ms), so the sensor's steps are not heard.
+- In the mixer, in the grid and in the bass line the hand does nothing.
+- Leave a layer with the hand still over the sensor and that layer lets go of it; the new layer takes it.
+- SYSTEM > HAND: OFF switches the sensor off. SYSTEM > LEFT KNOB: OFF does the same for the knob.
+
+What the stick does and a rev E does not:
+
+| | Not on a rev E | Still there |
+| - | - | - |
+| DRUMS | the repeat (stick down), the filter (left and right) | |
+| BASS | an octave up (stick up), the accent (down), closing the filter (left) | BASS > OCTAVE and BASS TONE > CUTOFF in the menu |
+| LEAD | the filter (left and right), an octave up (up) | leaning opens and closes the filter (not in ARP); LEAD > OCTAVE |
+| KEYS | the pedal (up), short notes (down), grit (left) | KEYS > PEDAL and KEYS SOUND > DRIVE in the menu |
+| BREATH | the bend (left and right) | a pitch bend over MIDI |
+| HOWL | the spotlight by stick, less gain (stick down) | leaning picks the spotlight, tipping back lowers the gain |
+| the mixer | picking a layer without holding the knob | hold the knob, then turn |
+| the grid, the line | moving with the stick while the knob sets | the knob does both |
+
+Not known until a board exists: how the heights feel, whether 0.25 s is the right wait on DRUMS, and whether an arm
+reaching for a knob counts as a hand.
+
 ## The layers
+
+On a rev E, read "a hand over the sensor" for one of the stick's moves on each layer: the table in "On a rev E"
+says which.
 
 **DRUMS.** The grid (above), and knocks: the face, the left and right sides, the top and bottom edges are five
 drums (the KIT picks them), and each knock rings the kit's body (wood, marimba, bells, glass, tabla, steel pan, drum

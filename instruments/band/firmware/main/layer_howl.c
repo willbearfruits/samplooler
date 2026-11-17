@@ -10,7 +10,8 @@
 // A room loop (SIZE) with a frequency shifter (SHIFT) makes howls that climb or fall.
 //
 // Live: tip the bottom edge down for gain, lean (or the stick's x) to pick the band in the spotlight, the
-// stick's y swells. Not live: the layer keeps the last gain and spotlight; it fades out over 50 ms and then
+// stick's y swells; on a board without a stick (rev E) a hand held over the sensor swells, as the stick pushed up.
+// Not live: the layer keeps the last gain and spotlight (not the hand's part); it fades out over 50 ms and then
 // costs nothing, unless FREEZE is on: then the mic is cut and the inner loop holds the howl under the other
 // layers (it still follows the chord). The host records the dry output into HOWL's track.
 #include "band.h"
@@ -284,6 +285,7 @@ static int   chord_sig = -1;
 static char  chord_name[16];
 static int   sounding = -1, last_cc = -1, cc_ms;
 static float ratio_s, u_gain = 0.3f, u_thresh;
+static float hand_u, u_rest;                // rev E: what the hand adds to the gain, and the gain without it
 
 // The chord's notes as candidates around the octave, then the window of BANDS consecutive candidates that
 // moves the bands least: notes the chords share stay put, the others take the nearest step.
@@ -339,10 +341,14 @@ static void tick(const ctl_t *c, bool live)
         } else want = (float)(nb_now - 1) * 0.5f;
         if (c->has_joy) { u += 0.35f * c->jy; if (fabsf(c->jx) > 0.15f) want = (c->jx * 0.5f + 0.5f) * (float)(nb_now - 1); }
         if (fabsf(want - (float)spot) > 0.6f) spot = (int)lroundf(want);
-        u_gain = clampf(u + (P(P_GAIN) - 50.0f) * 0.01f, 0.0f, 1.0f);
+        // rev E: a hand over the sensor is the stick pushed up (more gain); the gain without it is kept for when
+        // the layer is left with the hand still there
+        hand_u = !c->has_joy && c->has_hand ? 0.35f * c->hand : 0.0f;
+        u_rest = clampf(u + (P(P_GAIN) - 50.0f) * 0.01f, 0.0f, 1.0f);
+        u_gain = clampf(u + hand_u + (P(P_GAIN) - 50.0f) * 0.01f, 0.0f, 1.0f);
         static float ax, ay;
         if (fabsf(c->lean_x - ax) > 4.0f || fabsf(c->lean_y - ay) > 4.0f) { ax = c->lean_x; ay = c->lean_y; ui_awake(); }
-    }
+    } else if (hand_u > 0.0f) { u_gain = u_rest; hand_u = 0.0f; }   // the hand lets go; the tilt's gain stays
     spot = clampi(spot, 0, nb_now - 1);
     spot_vis += 0.25f * ((float)spot - spot_vis);
     for (int b = 0; b < NB; b++) {
@@ -580,5 +586,5 @@ static void icon(int x, int y, bool lit)
 const layer_t layer_howl = {
     .name = "HOWL", .letter = 'w', .pages = pages, .npages = 2, .params = params, .nparams = P_N,
     .events = false, .init = init, .audio = audio, .tick = tick, .draw = draw, .icon = icon,
-    .changed = changed, .clear = clear,
+    .changed = changed, .clear = clear, .hand = "GAIN",
 };

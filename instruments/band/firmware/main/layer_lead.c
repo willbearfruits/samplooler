@@ -8,7 +8,9 @@
 //          and two riffs) at RATE; tipping the bottom edge down widens it by octaves (up: an octave lower),
 //          leaning sideways thins it out (left) or fills it in (right). Once it has played a second while live it
 //          keeps going when another layer is live (the band's keyboard player); tap REC mutes it
-// The stick: X = the filter, up = an octave up, down = bends the note down (two semitones at the bottom).
+// The stick: X = the filter, up = an octave up, down = bends the note down (two semitones at the bottom). A board
+// without a stick (rev E): a hand held over the sensor is that bend, two semitones with the hand down; it glides
+// per block (the stick's is taken as it comes, 100 times a second).
 // In HUM and TILT the sideways lean opens and closes the filter.
 // REC: hold = record (or add) what it plays to its loop, on twelfths of a beat (sixteenths and triplets; a sung
 // or knocked note lands on the nearest sixteenth); tap = mute / unmute. Loop notes come first; ARP fills the steps
@@ -105,6 +107,7 @@ static volatile int a_live, a_mode;
 static volatile int knock_note = 60;     // the note a knock plays now
 static volatile int oct_add;             // the stick held up: +12
 static volatile float stick_x, bend_st, lean_flt;   // the stick's filter, the stick's bend (semitones), the lean's filter
+static volatile float hand_bend;         // rev E: the hand's bend (semitones down), smoothed in the audio (lctl_t.hb)
 static volatile float arp_dens;          // -1 (thin) .. 1 (fill)
 static volatile int   arp_oct;           // octaves the lean adds to ARP's range (-1 = an octave lower)
 static volatile int model_req = S_SAW;
@@ -234,7 +237,7 @@ static IRAM_ATTR __attribute__((noinline)) int arp_step(uint32_t k, int *vel, in
 
 // ---------------------------------------------------------------- audio
 typedef struct { int at, note, base, vel, gate, flags, src; } trig_t;
-typedef struct { float cut, res, drv, fx, ea, col; } lctl_t;
+typedef struct { float cut, res, drv, fx, ea, col, hb; } lctl_t;
 static lctl_t c0, c1;
 static int    nblk = AUDIO_BLOCK;
 static float  sus_lvl, dk, fk, rel_k, att_k, gk, blk_pk, vib_depth;
@@ -285,6 +288,7 @@ static IRAM_ATTR __attribute__((noinline)) LEAN_CODE void render(float *dry, flo
     float fx = at_(c0.fx, c1.fx, a), dfx = (at_(c0.fx, c1.fx, b) - fx) * inv;
     float col = at_(c0.col, c1.col, a), dcol = (at_(c0.col, c1.col, b) - col) * inv;
     float ea = eaA, dea = (eaB - eaA) * inv;
+    float hbA = at_(c0.hb, c1.hb, a), dhb = (at_(c0.hb, c1.hb, b) - hbA) * inv;   // the hand's bend (0 on a board with a stick)
     const float duck_step = 1.0f / (0.008f * (float)AUDIO_SR);
     const float vib_inc = 5.4f / (float)AUDIO_SR, vib_on = 0.22f * (float)AUDIO_SR, vib_ramp = 1.0f / (0.45f * (float)AUDIO_SR);
     const float swell_inc = S->fswell > 0 ? 1.0f / (S->fswell * (float)AUDIO_SR) : 1.0f;
@@ -314,6 +318,7 @@ static IRAM_ATTR __attribute__((noinline)) LEAN_CODE void render(float *dry, flo
             float ramp = V.held > (int)vib_on ? fminf(1.0f, ((float)V.held - vib_on) * vib_ramp) : 0.0f;
             V.held += 8;
             float p = V.pitch + V.bend + V.fall - bend_st + vib_depth * ramp * sin_turns(V.vib_ph);
+            p -= hbA + dhb * (float)i;
             dt = midi_to_hz(p) * (1.0f / (float)AUDIO_SR);
             if (dt > 0.45f) dt = 0.45f;
             if (V.model == S_SUPER) for (int k = 0; k < 5; k++) sdt[k] = dt * (1.0f + super_sp[k] * (0.15f + 0.85f * col));
@@ -531,6 +536,8 @@ static IRAM_ATTR LEAN_CODE void audio(const float *mic, float *dry, float *send,
     c1.fx  += kb * (P(LD_FX) * 0.01f - c1.fx);
     c1.ea  += kb * (P(LD_ENV) * 0.01f - c1.ea);
     c1.col += kb * (P(LD_COLOR) * 0.01f - c1.col);
+    c1.hb  += kb * (hand_bend - c1.hb);
+    if (c1.hb < 1e-5f && hand_bend == 0.0f) c1.hb = 0.0f;
     if (c0.cut <= 0) c0 = c1;                                   // the very first block
     const snd_t *S = &snds[V.model];
     sus_lvl = S->sus;
@@ -800,7 +807,7 @@ static void tick(const ctl_t *c, bool live)
             stick_x = c->jx;
             oct_add = c->jy > 0.6f ? 12 : 0;
             bend_st = c->jy < -0.25f ? clampf((-c->jy - 0.25f) / 0.7f, 0.0f, 1.0f) * 2.0f : 0.0f;
-        }
+        } else if (c->has_hand) hand_bend = 2.0f * c->hand;       // rev E: the hand bends the note down
         // ARP: the player joins after a second here with the menu closed
         if (mode == M_ARP && !c->menu_open && live_ms >= 1000 && !muted) arp_on = 1;
         if (mode != M_ARP) arp_on = 0;
@@ -833,7 +840,7 @@ static void tick(const ctl_t *c, bool live)
             }
         }
     } else {
-        if (was_live) { hum_stop(); bend_st = 0; oct_add = 0; stick_x = 0; lean_flt = 0; }
+        if (was_live) { hum_stop(); bend_st = 0; oct_add = 0; stick_x = 0; lean_flt = 0; hand_bend = 0; }
         if (rec_on) { rec_on = false; if (rec_first && npend) first_loop_done(c->frames); }
         live_ms = 0;
     }
@@ -1062,5 +1069,5 @@ static void icon(int x, int y, bool lit)
 const layer_t layer_lead = {
     .name = "LEAD", .letter = 'l', .pages = pages, .npages = 2, .params = params, .nparams = LD_N,
     .events = true, .init = init, .audio = audio, .tick = tick, .draw = draw, .icon = icon,
-    .changed = changed, .clear = clear, .midi_in = midi_in, .state = state, .playing = playing,
+    .changed = changed, .clear = clear, .midi_in = midi_in, .state = state, .playing = playing, .hand = "BEND",
 };

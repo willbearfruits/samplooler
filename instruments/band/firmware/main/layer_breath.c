@@ -1,5 +1,6 @@
 // BREATH: HUFF as a layer. Blow at the mic while it is live and a physical model plays; tilting walks a
-// ladder of notes in the SONG's key and scale (bottom edge down = higher); the joystick bends. The host
+// ladder of notes in the SONG's key and scale (bottom edge down = higher); the joystick bends (up: vibrato; on a
+// board without a stick, rev E, a hand held over the sensor is that vibrato, deeper the lower it is). The host
 // records the dry sound into BREATH's audio track (events = false) and runs the shared echo and reverb (we
 // send into them). Six models on three engines, ported from ../huff (see its CLAUDE.md for the
 // measurements):
@@ -84,6 +85,7 @@ static const model_t models[M_N] = {
 // ---------------------------------------------------------------- UI -> audio, audio -> UI
 static volatile float a_midi = 72.0f, a_midi_h = 79.0f;  // notes, MIDI, before bends
 static volatile float a_bend, a_vib;                    // semitones
+static float hand_vib;                                  // rev E: the part of a_vib a hand over the sensor adds
 static volatile int   a_harm_on, a_mute, a_hold;
 static volatile float a_cc_breath;
 static volatile int   a_onset;                          // a new note while blowing: a small chiff
@@ -446,6 +448,7 @@ static void tick(const ctl_t *c, bool live)
     over_was = v_over;
     if (cc_breath_t > 0) { cc_breath_t -= 0.01f; if (cc_breath_t <= 0) a_cc_breath = 0; }
     if (!live) {                                                    // keep the note; let MIDI go quiet
+        if (hand_vib > 0.0f) { a_vib = fmaxf(0.0f, a_vib - hand_vib); hand_vib = 0.0f; }   // the hand lets go
         if (sounding >= 0 && !a_hold) { host_midi_note(L_BREATH, sounding, 0); sounding = -1; }
         nheld = 0;
         return;
@@ -471,7 +474,8 @@ static void tick(const ctl_t *c, bool live)
     float depth = P(H_VIB) * 0.01f * vib_env;
     if (c->has_imu) depth += clampf((fabsf(c->lean_x) - 10.0f) / 30.0f, 0.0f, 1.0f);
     if (c->has_joy && c->jy > 0) depth += c->jy;
-    a_vib = 0.5f * depth;
+    hand_vib = !c->has_joy && c->has_hand ? 0.5f * c->hand : 0.0f;   // rev E: a hand over the sensor is the stick pushed up
+    a_vib = 0.5f * depth + hand_vib;
     // MIDI out: the note with the breath as velocity, the breath as CC 2, the bend
     int note = (int)lroundf(m) + models[(int)P(H_MODEL)].shift + (v_over ? ((int)P(H_MODEL) == M_CLARINET ? 19 : 12) : 0);
     if (b > 0.06f && sounding != note) {
@@ -642,5 +646,5 @@ static void clear(void) { }
 const layer_t layer_breath = {
     .name = "BREATH", .letter = 'h', .pages = pages, .npages = 2, .params = params, .nparams = H_N,
     .events = false, .init = init, .audio = audio, .tick = tick, .draw = draw, .icon = icon,
-    .changed = changed, .clear = clear, .midi_in = midi_in,
+    .changed = changed, .clear = clear, .midi_in = midi_in, .hand = "VIBRATO",
 };

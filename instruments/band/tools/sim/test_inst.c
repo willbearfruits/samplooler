@@ -23,6 +23,7 @@ __attribute__((weak)) void excite_drums(void) { }
 __attribute__((weak)) void excite_bass(void) { }
 __attribute__((weak)) void excite_breath(void) { }
 __attribute__((weak)) void excite_howl(void) { }
+void test_rev_e(void);
 bool sim_menu_param(int p);
 void sim_menu_close(void);
 int  mixer_cursor(void);
@@ -426,4 +427,5 @@ void inst_tests(void)
     section("howl"); fresh(); test_layer_howl();
     fresh();
     host_cost();
+    test_rev_e();                                                 // test_reve.c: the left knob and the hand, on a rev E
 }

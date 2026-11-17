@@ -14,6 +14,9 @@
 //                 song and a small reverb (a four-line feedback delay network). The knob turned past HOWL shows them
 //                 as six faders (MIX): no layer is live there; the stick, REC and the knob (held) set the levels and
 //                 mutes and erase loops
+//   rev E         a board without a stick has a left knob and a sensor for a hand held over it. The left knob is the
+//                 live layer's fader (the MIX page's level; in the mixer, the picked strip's). The hand is the live
+//                 layer's (band.h: each layer puts it on one of its stick moves). The header shows both
 //   the screen    the header band: the layer bar (six icons, the live one lit, each one's loop under it), the chord,
 //                 the beat, the link, the meter; the loop's playhead on row 15; a slide between layers' scenes
 #include "band.h"
@@ -620,6 +623,11 @@ static int  rec_ms, rec_layer;
 static uint32_t first_press;
 static int  beat_flash;
 static uint32_t last_beat = 0xFFFFFFFFu;
+// rev E: the left knob and the hand, for the header
+#define LK_SHOW_MS 1200
+static int   lk_ms;                        // the left knob was turned: the live layer's name and level, this long
+static float hand_v;                       // the hand as the live layer has it now: 0 away .. 1 fully down
+static void mixer_level(int l, int d);
 
 static int layer_state(int l)
 {
@@ -707,13 +715,22 @@ static void tick(const ctl_t *c)
         slide_from = prev_live; slide_dir = live > prev_live ? 1 : -1; slide_t = 0;
         if (rec_was && prev_live < L_N && !layers[prev_live]->events) { ctl_t r = *c; track_rec(&r, false, prev_live); }
         rec_layer = -1; confirmed = false; rec_was = c->rec;       // REC still held from there is not a press here
+        lk_ms = 0;
         if (prev_live == L_MIX) mixer_leave();
         if (live == L_MIX) mixer_enter();
         prev_live = live;
     }
+    // rev E: the left knob is the live layer's fader, the same value the mixer and the MIX page set (in the mixer:
+    // the picked strip's). The level glides in audio() as any change of it does
+    if (c->has_lknob && c->lknob) {
+        mixer_level(live == L_MIX ? mx_cur : live, c->lknob);
+        if (live != L_MIX) lk_ms = LK_SHOW_MS;
+    } else if (lk_ms > 0) lk_ms -= 10;
+    hand_v = live != L_MIX && c->has_hand && !c->has_joy && layers[live]->hand ? c->hand : 0.0f;
     ctl_t idle = *c;
     idle.rec = idle.rec_press = idle.rec_release = false; idle.rec_ms = 0;
     idle.has_imu = false; idle.has_joy = false; idle.jx = idle.jy = 0; idle.nburst = 0;
+    idle.has_hand = idle.hand_seen = false; idle.hand = 0; idle.hand_mm = 0; idle.lknob = 0;
     idle.lean_x = idle.lean_y = 0; idle.gyro = (vec3_t){ 0, 0, 0 }; idle.gyro_mag = 0;
     idle.knob = 0; idle.knob_tap = idle.knob_hold = idle.knob_down = idle.knob_turned = false;
     for (int l = 0; l < L_N; l++) {
@@ -812,11 +829,12 @@ static void midi_in(uint8_t st, uint8_t d1, uint8_t d2)
 // Six strips: each layer's level and mute (the MIX page's settings), its meter, and its loop. With the stick: left and
 // right pick a strip, up and down set its level. REC: a tap mutes the strip, held 1 s erases its loop, 2 s every loop.
 // The knob held takes the knob: turn = pick a strip, press and turn = its level, tap = mute, hold = done.
+// On a board with a left knob (rev E, no stick) that knob sets the picked strip's level, held or not (tick()).
 #define MX_W   21                          // a strip's width: six fill the screen
 #define MX_TOP 29                          // the fader's travel, rows
 #define MX_BOT 51
 static int   mx_rec_stage, mx_jx_ms, mx_jy_ms, mx_hint_ms, mx_rec_ms, mx_hint_n;
-static bool  mx_grab, mx_seen, mx_seen_grab, mx_joy;
+static bool  mx_grab, mx_seen, mx_seen_grab, mx_joy, mx_lk;
 static float mx_show[L_N], mx_pk[L_N], mx_peak[L_N], mx_flash[L_N], mx_cx = -1;
 static UI_RAM parts_t mx_parts;
 static uint32_t mx_seed = 0x5eed1u;
@@ -861,8 +879,8 @@ static void mixer_erase(int l)
 
 static void mixer_tick(const ctl_t *c)
 {
-    mx_joy = c->has_joy;
-    bool touched = false;
+    mx_joy = c->has_joy; mx_lk = c->has_lknob;
+    bool touched = c->has_lknob && c->lknob;                      // (rev E's left knob: the strip's level, set in tick())
     if (mx_grab) {
         if (c->knob_hold) { mx_grab = false; knob_grab(false); }
         else {
@@ -954,14 +972,21 @@ static void mixer_draw(const view_t *v)
     if (mx_hint_ms > 0) {
         static const char *const free_l[] = { "HOLD THE KNOB TO MIX", "TAP REC: MUTE", "HOLD REC: ERASE ITS LOOP", "STICK: PICK AND LEVEL" };
         static const char *const grab_l[] = { "TURN: PICK A LAYER", "PRESS AND TURN: LEVEL", "TAP: MUTE", "HOLD THE KNOB: DONE" };
-        int n = mx_grab || mx_joy ? 4 : 3;
+        // rev E, two knobs: the right one picks (held first), the left one sets the level
+        static const char *const free_e[] = { "LEFT KNOB: ITS LEVEL", "HOLD THE KNOB TO PICK", "TAP REC: MUTE", "HOLD REC: ERASE ITS LOOP" };
+        static const char *const grab_e[] = { "TURN: PICK A LAYER", "LEFT KNOB: ITS LEVEL", "TAP: MUTE", "HOLD THE KNOB: DONE" };
+        int n = mx_grab || mx_joy || mx_lk ? 4 : 3;
         int k = ((6000 - mx_hint_ms) / 1500) % n;
-        ui_box(40, mx_grab ? grab_l[k] : free_l[k]);
+        ui_box(40, mx_lk ? (mx_grab ? grab_e[k] : free_e[k]) : mx_grab ? grab_l[k] : free_l[k]);
     }
 }
 int  mixer_cursor(void) { return mx_cur; }                       // for tools/sim
 bool mixer_grabbed(void) { return mx_grab; }
 int  host_layer_state(int l) { return layer_state(l); }
+float host_layer_gain(int l) { return lvl_s[l].y * mute_s[l].y; }   // the layer's fader as the mix has it now
+float host_hand(void) { return hand_v; }                        // the hand as the live layer has it
+bool  host_knob_shown(void) { return lk_ms > 0; }               // the left knob's level is in the header
+void  mixer_first_visit(void) { mx_seen = mx_seen_grab = false; }   // its first lines come up again
 
 // ---------------------------------------------------------------- drawing: the header band and the slide
 static void chord_name(char *b, int n)
@@ -974,6 +999,21 @@ static void chord_name(char *b, int n)
 
 static void link_glyph(int x, int y, const view_t *v);
 
+// Rev E, in the layer bar's place (the header's left 78 columns): the live layer's icon lit, a line of text and
+// under it a bar filled by v (0..1). The left knob's turn shows the layer's name and level for a moment; a hand over
+// the sensor shows what it does on this layer and how far down it is, for as long as it is there.
+static void header_show(int l, const char *text, float v)
+{
+    const int x0 = 17, w = 60;
+    layers[l]->icon(1, 3, true);
+    oled_invert(0, 2, 14, 11);
+    oled_ftext(F_SMALL, x0, 3, text);
+    int f = (int)(clampf(v, 0.0f, 1.0f) * (float)w + 0.5f);
+    oled_hline_pat(x0, 12, w + 1, 0x55, true);                   // the track, the part filled, a cap at its end
+    oled_rect(x0, 11, f, 2, true);
+    oled_rect(x0 + f, 10, 1, 4, true);
+}
+
 static void header(const view_t *v)
 {
     int live = (int)H(H_LAYER);
@@ -983,6 +1023,16 @@ static void header(const view_t *v)
         if (H(H_MUTE_D + mx_cur) >= 1.0f) snprintf(b, sizeof b, "%s OFF", layer_names[mx_cur]);
         else snprintf(b, sizeof b, "%s %d", layer_names[mx_cur], (int)H(H_LVL_D + mx_cur));
         oled_ftext(F_SMALL, x, 5, b);
+    } else if (lk_ms > 0) {                                      // the left knob: this layer's fader
+        char b[20];
+        bool mute = H(H_MUTE_D + live) >= 1.0f;
+        if (mute) snprintf(b, sizeof b, "%s OFF", layer_names[live]);
+        else snprintf(b, sizeof b, "%s %d", layer_names[live], (int)H(H_LVL_D + live));
+        header_show(live, b, mute ? 0.0f : H(H_LVL_D + live) * 0.01f);
+    } else if (hand_v > 0.01f) {                                 // the hand: what it does here, and how far down it is
+        char b[20];
+        snprintf(b, sizeof b, "HAND: %s", layers[live]->hand);
+        header_show(live, b, hand_v);
     } else
     for (int l = 0; l < L_N; l++) {                              // the layer bar: six icons, the live one lit
         int x = 1 + l * 13;
@@ -1310,6 +1360,8 @@ static const hint_t hints[] = {
     { "LOOPS ARE WHOLE BARS, ON THE BEAT", LEARN_REC },
     { "TAP REC TO MUTE ITS LOOP", LEARN_INST + 1 },
     { "TURN PAST HOWL FOR THE MIXER", LEARN_INST + 10 },
+    { "THE LEFT KNOB IS THIS LAYER'S LEVEL", LEARN_LKNOB },
+    { "HOLD A HAND OVER THE BOARD, UP AND DOWN", LEARN_HAND },
     { "MUTED, HOLD REC FOR A NEW TAKE", LEARN_INST + 11 },
     { "PRESS THE KNOB FOR THE MENU", LEARN_MENU },
 };

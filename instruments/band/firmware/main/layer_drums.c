@@ -6,6 +6,8 @@
 // its length; hold REC to add, tap to mute the drums' loop. GRID, SWING and MUTATE act at playback and never
 // change what was recorded. The stick: up rolls the last drum, down repeats the last slice of the drums,
 // left/right a filter on them. Tilt tunes; leaning mutates. The kicks of the loop go to song.kicks for the bass.
+// A board without a stick (rev E): a hand held over the sensor is the stick pushed up, the roll, in eighths,
+// sixteenths and thirty-seconds as the hand comes down (hand_roll below).
 //
 // The GRID: four drums (the kit's face, left, right and top: kick, snare, hat, tom on most kits) by eight steps,
 // drawn with the knob. Hold the knob while DRUMS is live (or DRUMS > EDIT GRID) and the scene becomes the grid:
@@ -968,6 +970,24 @@ static void editor_tick(const ctl_t *c)
 typedef struct { uint8_t side, vel, src; } impact_t;
 static impact_t impacts[16];
 static int nimpacts, roll_div, stut_div;
+
+// Rev E: a hand held over the sensor rolls the last drum, as the stick pushed up does: 1/8 from 23 cm, 1/16 from
+// 17 cm, 1/32 from 10 cm (ctl.hand over 0.08, 0.40, 0.72, each let go 0.05 lower so a hand on an edge does not
+// flutter). With KNOCKS on the hand has to stay HAND_DWELL_MS first: a hand that comes down to knock on the box passes
+// over the sensor too, and must not roll. It stops as soon as the sensor loses the hand (75 ms), not when the
+// core's value has glided back to 0. Not measured on a board: no rev E exists yet.
+#define HAND_DWELL_MS 250
+static int hand_ms, hand_zone;
+static int hand_roll(const ctl_t *c)
+{
+    static const float up[3] = { 0.08f, 0.40f, 0.72f };
+    static const uint8_t div[4] = { 0, 2, 4, 8 };
+    if (!c->has_hand || !c->hand_seen) { hand_ms = 0; hand_zone = 0; return 0; }
+    if (hand_ms < (P(DP_KNOCK) >= 1.0f ? HAND_DWELL_MS : 0)) { hand_ms += 10; return 0; }
+    while (hand_zone < 3 && c->hand > up[hand_zone]) hand_zone++;
+    while (hand_zone > 0 && c->hand < up[hand_zone - 1] - 0.05f) hand_zone--;
+    return div[hand_zone];
+}
 static float flash[NSIDE];
 #define TRACE 128
 static uint8_t trace[TRACE];
@@ -1000,6 +1020,7 @@ static void d_tick(const ctl_t *c, bool live)
         float mu = P(DP_MUTATE) * 0.01f + (c->has_imu ? clampf((fabsf(c->lean_x) - 15.0f) / 30.0f, 0.0f, 1.0f) * 0.6f : 0.0f);
         mutate_now = clampf(mu, 0.0f, 1.0f);
         roll_hz = 0; stutter_s = 0; filter_now = 0; roll_div = stut_div = 0;
+        hand_ms = 0; hand_zone = 0;
         if (rec_pending) { rec_pending = false; nprov = 0; }
         editor_tick(c);
     } else if (live) {
@@ -1012,6 +1033,7 @@ static void d_tick(const ctl_t *c, bool live)
         float jy = c->has_joy ? c->jy : 0.0f, beat = 60.0f / song.bpm;
         roll_div = jy > 0.3f ? (jy > 0.9f ? 8 : jy > 0.6f ? 4 : 2) : 0;
         stut_div = jy < -0.3f ? (jy < -0.9f ? 8 : jy < -0.6f ? 4 : 2) : 0;
+        if (!c->has_joy) roll_div = hand_roll(c);                    // rev E: the hand rolls
         roll_side = last_side; roll_vel = clampi((int)((float)last_vel * 0.85f), 20, 127);
         roll_hz = roll_div ? (float)roll_div / beat : 0.0f;
         stutter_s = stut_div ? beat / (float)stut_div : 0.0f;
@@ -1032,6 +1054,7 @@ static void d_tick(const ctl_t *c, bool live)
     } else {
         // not live: it keeps its tune and mutate, the stick lets go, a recording in progress is closed
         roll_hz = 0; stutter_s = 0; filter_now = 0; roll_div = stut_div = 0;
+        hand_ms = 0; hand_zone = 0;
         if (rec_pending) { rec_pending = false; nprov = 0; }
         if (lstate == LS_REC || lstate == LS_DUB) { ctl_t r = *c; r.rec = false; r.rec_release = true; rec_logic(&r); }
     }
@@ -1438,5 +1461,5 @@ const layer_t layer_drums = {
     .name = "DRUMS", .letter = 'd', .pages = pages, .npages = 2, .params = params, .nparams = DP_N,
     .events = true, .init = d_init, .audio = d_audio, .tick = d_tick, .draw = d_draw, .icon = d_icon,
     .changed = d_changed, .clear = d_clear, .midi_in = d_midi_in, .action = d_action, .state = d_state,
-    .hold = d_hold, .playing = d_playing,
+    .hold = d_hold, .playing = d_playing, .hand = "ROLL",
 };

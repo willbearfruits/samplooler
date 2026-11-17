@@ -102,6 +102,10 @@ typedef struct {
     void (*audio)(const float *mic, float *dry, float *send, int n, bool live);
     // UI task, 100 Hz, every layer. The live layer gets the real controls. A layer that is not live gets
     // ctl with rec, tilt, spin, stick and knob neutral and has_imu / has_joy false: it keeps what they last set.
+    // A board without a stick (rev E) has a sensor that measures a hand held over it instead: the live layer gets
+    // has_hand and hand (0 away .. 1 fully down, gliding) and puts it on the stick move named in `hand` below, deeper
+    // the lower the hand; a layer that is not live gets has_hand false and lets go of what the hand set. The left
+    // knob of that board is the host's (the live layer's level in the mix): a layer never sees it.
     void (*tick)(const ctl_t *c, bool live);
     void (*draw)(const view_t *v);   // its scene while live: rows 16..63 (the host draws the header band, rows 0..15)
     void (*icon)(int x, int y, bool lit);   // 12x9 for the layer bar (lit: drawn white on black by the host)
@@ -116,6 +120,7 @@ typedef struct {
     // false or NULL: the core holds the motion as usual. While a layer holds the knob it stays live.
     bool (*hold)(void);
     bool (*playing)(void);       // it plays in time by itself now (the grid, FOLLOW, COMP, ARP): the tempo is heard. May be NULL
+    const char *hand;            // what a hand over the sensor does on it, one word for the header ("ROLL"). NULL: nothing
 } layer_t;
 enum { LOOP_NONE, LOOP_ON, LOOP_OFF, LOOP_REC };   // nothing recorded; plays; recorded but muted; recording now
 extern const layer_t layer_drums, layer_bass, layer_lead, layer_keys, layer_breath, layer_howl;

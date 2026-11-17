@@ -17,7 +17,8 @@
 // it). Hold: done. REC tapped: the bass stops / plays; held 1 s: the line is cleared. The stick: up / down the
 // note, left / right the steps.
 // In every mode leaning picks the chord for the whole jam (song.degree, on a ladder: iii ii IV I V vi vii).
-// The stick: X = the filter, up = an octave up, down = accent (more envelope and drive).
+// The stick: X = the filter, up = an octave up, down = accent (more envelope and drive). A board without a stick
+// (rev E): a hand held over the sensor is the stick pushed right, the filter opening, two octaves with the hand down.
 // REC: hold = record (or add) what it plays to its loop on the song's sixteenths (the first loop on any layer
 // sets the song's loop through host_first_loop); tap = mute / unmute (the loop, FOLLOW and the line). Muted, a
 // hold is a new take: the old loop goes and the new one is heard as it is made. Loop notes come first; FOLLOW
@@ -127,6 +128,7 @@ static volatile int a_live, a_mode;      // the UI's view of live and the mode, 
 static volatile int knock_note = 40;     // the note a knock plays now
 static volatile int oct_add;             // the stick held up: +12
 static volatile float stick_x, accent_amt;
+static bool hand_set;                    // rev E: the hand has the filter (stick_x): let go of it when the layer is left
 static volatile int model_req;           // the sound to switch to (ducked)
 // audio -> UI
 static volatile float v_level, v_pitch, v_mic_env, v_thr;
@@ -987,6 +989,7 @@ static void tick(const ctl_t *c, bool live)
             oct_add = c->jy > 0.6f ? 12 : 0;
             accent_amt = c->jy < -0.3f ? clampf((-c->jy - 0.3f) / 0.6f, 0, 1) : 0;
         } else if (ed_on) { stick_x = 0; oct_add = 0; accent_amt = 0; }
+        else if (c->has_hand) { stick_x = c->hand; hand_set = true; }   // rev E: the hand opens the filter
         // FOLLOW and the line: they go on under other layers after a second here with the menu closed
         if (mode == M_FOLLOW && !c->menu_open && live_ms >= 1000 && !muted) follow_on = 1;
         if (mode != M_FOLLOW) follow_on = 0;
@@ -1063,6 +1066,7 @@ static void tick(const ctl_t *c, bool live)
         }
     } else {
         if (was_live && hum_note >= 0) { cmd_t cm = { C_OFF, 0, 0, 0 }; bcmdq_push(&cmds, &cm); hum_note = -1; }
+        if (hand_set) { stick_x = 0; hand_set = false; }      // (what the stick set stays, as it always did)
         hum_voiced = 0;
         if (rec_on) { rec_on = false; if (rec_first && npend) first_loop_done(c->frames); }
         live_ms = 0;
@@ -1366,5 +1370,5 @@ const layer_t layer_bass = {
     .name = "BASS", .letter = 'b', .pages = pages, .npages = 2, .params = params, .nparams = B_N,
     .events = true, .init = init, .audio = audio, .tick = tick, .draw = draw, .icon = icon,
     .changed = changed, .clear = clear, .midi_in = midi_in, .action = action, .state = state,
-    .hold = b_hold, .playing = b_playing,
+    .hold = b_hold, .playing = b_playing, .hand = "CUTOFF",
 };
