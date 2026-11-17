@@ -11,12 +11,12 @@
     "wifi"
   ],
   "status": "board",
-  "status_note": "Flashed on a rev C Stack on 2026-11-10: it starts, plays and keeps up (13 % CPU on the AMIGA console). Not played much yet; the other consoles' load and the link have not been measured on a board.",
+  "status_note": "Flashed on a rev C Stack on 2026-11-10: it starts, plays and keeps up (13 % CPU on the AMIGA console). Not played much yet; the other consoles' load and the link have not been measured on a board. Rev E's left knob (the cursor in the editor, the tempo in play) and hand (the breakdown) are tested in the simulator only: no rev E board has run them.",
   "listed": false,
   "image": "images/pixel-play.gif",
   "more": [
     "images/pixel-write.gif"
   ],
   "added": "2026-11-10",
-  "hardware_note": "Writing is easiest with the joystick; without one the knob moves the cursor."
+  "hardware_note": "Writing is easiest with the joystick (rev C) or the two knobs of rev E; with neither, the one knob moves the cursor."
 }

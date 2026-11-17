@@ -5,6 +5,8 @@
 //                 menu; hold: the editor (inst_edit.c), hold again to leave it
 //   REC           tap: play the song from the start, tap again to stop (in the editor: the bar under the cursor)
 //   the stick     a push mutes or brings back a part: up LEAD, right CHORDS, down BASS, left DRUMS
+//   rev E         no stick. The left knob is the tempo, a BPM a detent. A hand over the sensor is the breakdown: as it
+//                 comes down the LEAD goes, then the CHORDS, then the BASS, and they are back when it leaves
 //   the tilt      the far edge tipped down: the cartridge tilts and the tune glitches; rolled left or right:
 //                 everything bends
 //
@@ -232,7 +234,7 @@ enum { CMD_NONE, CMD_STOP, CMD_SONG, CMD_PATTERN };
 static volatile uint32_t cmd_seq;
 static volatile uint8_t  cmd_kind, cmd_arg;
 volatile px_pos_t px_pos = { .tps = 6, .tick_hz = 60, .bpm = 150, .console = CON_NES };
-volatile uint8_t  px_mute;
+volatile uint8_t  px_mute, px_hand_mute;
 static volatile int8_t  live_note[PART_N] = { -1, -1, -1, -1 };
 static volatile uint8_t live_drums;
 static volatile float   hand_bend, hand_glitch;
@@ -314,7 +316,7 @@ static IRAM_ATTR void do_tick(int32_t gstep, int tick, int tps, float tick_hz)
     c.level[PART_CHORDS] = pv[P_CLVL] * 0.01f; c.level[PART_LEAD] = pv[P_LLVL] * 0.01f;
     c.sound[PART_DRUMS] = (uint8_t)pv[P_DKIT]; c.sound[PART_BASS] = (uint8_t)pv[P_BSND];
     c.sound[PART_CHORDS] = (uint8_t)pv[P_CSND]; c.sound[PART_LEAD] = (uint8_t)pv[P_LSND];
-    c.mute = px_mute;
+    c.mute = (uint8_t)(px_mute | px_hand_mute);
     c.len_bass = (uint8_t)pv[P_BLEN]; c.len_lead = (uint8_t)pv[P_LLEN];
     c.arp = (uint8_t)pv[P_CARP]; c.shape = (uint8_t)pv[P_CSHP]; c.rhythm = (uint8_t)pv[P_CRHY];
     c.vibrato = (uint8_t)pv[P_LVIB]; c.echo = (uint8_t)pv[P_LECH]; c.slide = (uint8_t)pv[P_LSLD];
@@ -472,6 +474,42 @@ static void hands(const ctl_t *c)
     } else stick_dir = 0;
 }
 
+// Rev E, the left knob in play: the tempo, a BPM a detent, through the TEMPO setting (so it is the song's, it is on
+// MIDI and it goes to the link as a turn in the menu does). When another board's tempo plays, the knob starts from
+// that one, so a detent is still one BPM; while a loop somewhere keeps the tempo it does nothing but say so.
+static void tempo_knob(const ctl_t *c)
+{
+    if (!c->has_lknob || !c->lknob || edit_active()) return;
+    if (link_flags_any() & LINKF_LOOP) { toast("A LOOP HAS THE TEMPO", 1200); return; }
+    float from = pv[P_TEMPO];
+    if (fabsf(song.bpm - from) > 0.5f) from = floorf(song.bpm + 0.5f);
+    float to = clampf(from + (float)c->lknob, params[P_TEMPO].min, params[P_TEMPO].max);
+    if (to != pv[P_TEMPO]) param_set(P_TEMPO, to);
+    else if (link_up) tempo_set_here(true);                       // the setting is there already, the session is not
+    char b[16]; snprintf(b, sizeof b, "%d BPM", (int)pv[P_TEMPO]);
+    toast(b, 800);
+}
+
+// Rev E, a hand over the sensor in play: the breakdown. Coming down it takes the parts out in order: the LEAD, then
+// the CHORDS, then the BASS; the DRUMS stay. They are the stick's mutes (the player sees the same bits), but held:
+// px_hand_mute is what the hand holds out now and px_mute is never touched, so what was muted before the hand came
+// is what is muted when it has gone. Heights are mm over the sensor, as ctl.hand has them (0 at 250 mm, 1 at 40 mm).
+// A part goes when the hand passes its DOWN height and comes back 2 cm higher, at its UP height: a hand that
+// trembles at a border flips nothing. ctl.hand glides back to 0 when the hand leaves, so the parts return in turn.
+#define HAND_AT(mm) ((250.0f - (float)(mm)) / 210.0f)
+static const float hand_down[3] = { HAND_AT(190), HAND_AT(140), HAND_AT(90) };
+static const float hand_up[3]   = { HAND_AT(210), HAND_AT(160), HAND_AT(110) };
+static int hand_zone;                                             // how many parts the hand holds out, 0..3
+static void breakdown(const ctl_t *c)
+{
+    static const uint8_t held[4] = { 0, 1u << PART_LEAD, (1u << PART_LEAD) | (1u << PART_CHORDS),
+                                     (1u << PART_LEAD) | (1u << PART_CHORDS) | (1u << PART_BASS) };
+    float h = c->has_hand && !edit_active() ? c->hand : 0.0f;    // (every part sounds while you write)
+    while (hand_zone < 3 && h >= hand_down[hand_zone]) hand_zone++;
+    while (hand_zone > 0 && h < hand_up[hand_zone - 1]) hand_zone--;
+    px_hand_mute = held[hand_zone];
+}
+
 // REC: a tap starts the song, or stops it. A REC that is down when PIXEL starts counts for nothing until it has been
 // up 0.1 s (a board here has had its REC pin stuck low). In the editor REC is the editor's.
 static void rec_logic(const ctl_t *c)
@@ -509,6 +547,8 @@ static void tick(const ctl_t *c)
     static int label_con = -1;
     if (px_pos.console != label_con && px_pos.console < CON_N) { label_con = px_pos.console; sound_labels(label_con); }
     hands(c);
+    tempo_knob(c);
+    breakdown(c);
     rec_logic(c);
     aud_tick();
     edit_tick(c);
@@ -606,6 +646,8 @@ static const hint_t hints[] = {
     { "TURN THE KNOB: EIGHT CHIPS PLAY IT", LEARN_TURN },
     { "HOLD THE KNOB TO WRITE NOTES", LEARN_INST + 1 },
     { "PUSH THE STICK TO MUTE A PART", LEARN_JOY },
+    { "LEFT KNOB: THE TEMPO, UP OR DOWN", LEARN_LKNOB },        // (these two only on a rev E, the stick's only with one)
+    { "A HAND OVER THE MIDDLE MUTES PARTS", LEARN_HAND },
     { "TIP IT AWAY FROM YOU: IT GLITCHES", LEARN_TILT },
     { "PRESS THE KNOB: THE MENU, THE SONGS", LEARN_MENU },
 };

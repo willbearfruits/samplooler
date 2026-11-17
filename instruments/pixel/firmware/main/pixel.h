@@ -256,7 +256,9 @@ typedef struct {
     uint32_t bars;             // bars played since the last start
 } px_pos_t;
 extern volatile px_pos_t px_pos;
-extern volatile uint8_t  px_mute;                // bit per part
+extern volatile uint8_t  px_mute;                // bit per part: muted until it is brought back (the stick's pushes)
+extern volatile uint8_t  px_hand_mute;           // bit per part: held out by a hand over the sensor (rev E), while it is there
+static inline uint8_t px_muted(void) { return (uint8_t)(px_mute | px_hand_mute); }   // the parts that do not play now
 void px_play_song(int slot);                     // start the song at that slot (already playing: from the next bar line)
 void px_play_pattern(int pat);                   // loop one pattern
 void px_stop(void);

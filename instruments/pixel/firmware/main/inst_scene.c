@@ -132,7 +132,7 @@ void scene_draw(const view_t *v)
         last_step = st;
         if (run) {
             uint8_t d = px_song.pat[px_pos.pattern & 15].drums[px_pos.step];
-            if ((px_mute >> PART_DRUMS) & 1) d = 0;
+            if ((px_muted() >> PART_DRUMS) & 1) d = 0;
             if (d & DR_KICK) { shake = 2; parts_burst(&parts, RUN_X + 4, GROUND, 4, 26, 0.3f, PART_DOT, &seed); }
             if (d & DR_SNARE) parts_burst(&parts, VOX_X - 14, 30, 7, 46, 0.32f, PART_SPARK, &seed);
             if (d & DR_HAT) star_t[rng_next(&seed) % 6] = 3;
@@ -155,13 +155,13 @@ void scene_draw(const view_t *v)
             if (x < -STEP_W || x > VOX_X - 4) continue;
             int w = x + STEP_W > VOX_X - 3 ? VOX_X - 3 - x : STEP_W;
             uint8_t c = p->lead[s];
-            if ((c & NC_ROW) && !((px_mute >> PART_LEAD) & 1)) {
+            if ((c & NC_ROW) && !((px_muted() >> PART_LEAD) & 1)) {
                 int y = plat_y((c & NC_ROW) - 1);
                 platform(x, y, (c & NC_TIE) ? w : w - 1, (c & NC_ACCENT) && !(c & NC_TIE));
                 if (a == 0) { target_y = (float)(y - 9); on_note = true; cam += 0.08f * ((float)((c & NC_ROW) - 1) - cam); }
             }
             c = p->bass[s];
-            if ((c & NC_ROW) && !((px_mute >> PART_BASS) & 1)) {
+            if ((c & NC_ROW) && !((px_muted() >> PART_BASS) & 1)) {
                 int h = 2 + ((c & NC_ROW) - 1) % 4;
                 oled_rect(x, GROUND - h, (c & NC_TIE) ? w : w - 1, h, true);
             }
@@ -207,7 +207,7 @@ void scene_draw(const view_t *v)
     static const uint8_t lamp_part[4] = { PART_LEAD, PART_CHORDS, PART_BASS, PART_DRUMS };
     for (int i = 0; i < 4; i++) {
         int x = VOX_X + 1 + i * 7, y = 56;
-        bool muted = (px_mute >> lamp_part[i]) & 1;
+        bool muted = (px_muted() >> lamp_part[i]) & 1;
         oled_rect(x, y, 6, 7, false);
         if (muted) { oled_hline_pat(x, y + 3, 6, 0x15, true); continue; }
         oled_ftext_ex(F_TINY, x + 1, y + 1, lamp[i], 0);

@@ -4,7 +4,7 @@ PIXEL is a chiptune machine. A song is four parts written on a grid of sixteenth
 LEAD. Bars are chained into a song. One of eight old sound chips plays it, and the knob changes which.
 
 It has run on a board (a rev C Stack, 2026-11-10) but has not been played much: most of what is here was checked in
-the simulator.
+the simulator. What it does with rev E's left knob and hand sensor ("Rev E" below) has run on no board at all.
 
 ## Playing
 
@@ -16,6 +16,8 @@ the simulator.
 | press the knob twice | the knob turns the volume, until it rests 3 s or you press it again |
 | hold the knob | the editor (below); hold again to come back |
 | stick up / right / down / left | mute or bring back the LEAD / CHORDS / BASS / DRUMS |
+| left knob (rev E) | the tempo, one BPM a click, from 60 to 240 |
+| a hand over the sensor (rev E) | the breakdown: as the hand comes down the LEAD drops out, then the CHORDS, then the BASS; they come back when it rises or leaves |
 | tip the far edge down | the cartridge slips: the tune glitches, more the further you tip |
 | roll left / right | everything bends down / up (HANDS > BEND sets how far) |
 
@@ -26,7 +28,7 @@ lamps for the parts: L, C, B, D. Along the bottom of the header are the bar's si
 
 A new console starts on the next driver tick after a 3 ms fade, so the knob can be turned while the song plays.
 
-BOOT is a second REC button on every board.
+BOOT is a second REC button on every board. On rev E the left knob's push is REC.
 
 ## Writing
 
@@ -34,9 +36,13 @@ Hold the knob. One bar is on the screen, sixteen steps across, with a mark every
 stick's up and down moves between them: SONG, LEAD, CHORDS, BASS, DRUMS. The header shows the row, the pattern's
 letter, which bar of the song this is, and what is under the cursor.
 
+On rev E the knob in this table is the right knob. The left knob does the stick's left and right, and the row is
+changed by holding the right knob down and turning the left one ("Rev E" below).
+
 | | LEAD, BASS | CHORDS | DRUMS | SONG |
 | - | - | - | - | - |
 | stick left / right | the cursor along the steps, on into the next bar | the same | the same | from bar to bar |
+| left knob (rev E) | the same, one step a click | the same | the same | the same |
 | turn the knob | the note higher or lower; an empty step gets a note | which chord, I to VII; OFF below I | which drum is in hand | which pattern, A to P, the bar plays |
 | press the knob | nothing, a note, an accented note, nothing | put the chord, or take it away | nothing, a hit, an accented step, nothing | the bar once more, after itself |
 | press and turn | the note longer or shorter | the chord's kind: plain, seventh, sus, fifth | | right: a pattern of its own for this bar. Left: the bar leaves the song |
@@ -66,8 +72,42 @@ DRUMS, a bass line on BASS, a tune on LEAD, another chord on CHORDS. The bass an
 put the chords first. Throw again until you like it, then change it by hand. COPY, PASTE and CLEAR move or empty a
 whole bar.
 
-Without a stick the knob walks the cursor step by step and on into the next row, and press and turn changes what a
-turn would have.
+Without a stick and without a left knob (the Mini) the knob walks the cursor step by step and on into the next row,
+and press and turn changes what a turn would have.
+
+## Rev E (the Vessel)
+
+Rev E has no joystick. It has a second knob on the left, whose push is REC, and a sensor in the middle of the board
+that measures how high a hand is held over it. The same firmware runs on both boards and finds out by itself which
+one it is on. Nothing changes on a board with a joystick.
+
+All of this is tested in the simulator only. No rev E board has run it. The numbers below are the simulator's, and
+how the hand feels is not known yet.
+
+| | |
+| - | - |
+| left knob, in play | The tempo. One click is one BPM. It stops at 60 and at 240. It steps TUNE > TEMPO itself, so the tempo is saved with the song, shows as an edit, and goes out on CC 22. The screen shows the BPM for a moment |
+| left knob, with other boards | The new tempo is the whole flock's, as when TEMPO is changed in the menu. If another board's tempo is playing, the knob starts from that tempo, not from the song's own. While a board keeps a loop the knob changes nothing and the screen says A LOOP HAS THE TEMPO |
+| a hand, in play | The breakdown. The hand is read from 25 cm down to 4 cm. Coming down, the LEAD drops out at 19 cm, the CHORDS at 14 cm and the BASS at 9 cm. The DRUMS always play. Going up, each part comes back 2 cm higher than it went: the BASS at 11 cm, the CHORDS at 16, the LEAD at 21. So a hand that shakes a little at a border does not switch a part in and out |
+| a hand taken away | The parts come back in turn, the BASS first. All are back after about half a second |
+| left knob, in the editor | The cursor along the steps, one step a click, and on into the next bar at the bar's ends, as the stick's left and right. On the SONG row it goes from bar to bar |
+| right knob, in the editor | Everything the knob does on a board with a stick: the note, the chord, the drum, the pattern; press; press and turn |
+| the row, in the editor | Hold the right knob down and turn the left one: one click is one row, to the right is down the screen. Once the left knob has turned, that press puts no note and does not leave the editor, however long it lasts. Start turning within half a second: the right knob held 0.6 s by itself still leaves the editor |
+| a hand, in the editor | Nothing |
+
+A part dropped by the hand is muted the way the stick mutes it: it stops at the next step, and its lamp on the screen
+goes out. The hand only holds parts out. It never changes what was muted before it came, and nothing stays muted
+when it has gone. SYSTEM > HAND OFF ignores the sensor. SYSTEM > LEFT KNOB OFF ignores the left knob: the right knob
+then walks the cursor as on a board without a stick.
+
+To leave the editor, hold the right knob without touching the left one, as on any board.
+
+What a rev E cannot do that a board with a joystick can:
+
+- Mute one part by itself and leave it muted. The hand takes the parts in one order (LEAD, CHORDS, BASS) and only
+  while it is there. The DRUMS cannot be muted. The slow way round is each part's LEVEL in the menu (LEAD > LEVEL
+  and so on, also on MIDI): 0 is silence. LEVEL is saved with the song.
+- HANDS > STICK does nothing there.
 
 ## Songs
 

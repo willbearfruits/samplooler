@@ -3,17 +3,29 @@
 A chiptune machine. You write four parts on a grid: drums, bass, chords and a lead. You chain the bars into a song.
 The knob picks which of eight old sound chips plays it, from a one-bit beeper to the Mega Drive's FM.
 
-Firmware for the Samplooler Stack (ESP32-S3). It needs the joystick to write comfortably; without one the knob does
-the stick's work.
+Firmware for the Samplooler boards (ESP32-S3). Writing is comfortable with the joystick of rev C, or with the two
+knobs of rev E (the Vessel): the left one moves the cursor, the right one writes. On a board with neither, the one
+knob does both jobs.
+
+Rev E has no joystick. It has a second knob on the left and a sensor that measures how high a hand is held over the
+board. PIXEL uses both since 2026-11-17. This is tested in the simulator only: it has run on no rev E board.
 
 ## Playing
 
 1. Switch it on and tap REC. The first song plays. Tap REC again to stop.
 2. Turn the knob. The same song plays on another chip: BEEPER, ATARI, AY, NES, GAME BOY, C64, AMIGA, MEGA.
 3. Push the stick to mute a part: up the lead, right the chords, down the bass, left the drums. Push again to bring
-   it back.
+   it back. On rev E, hold a hand over the middle of the board instead: as it comes down the lead drops out, then
+   the chords, then the bass. The drums stay. Take the hand away and they are back.
 4. Tip the far edge down and the cartridge slips: the tune glitches. Roll the box left or right and everything bends.
 5. Press the knob for the menu. SONG has seven songs and EMPTY, a blank one to write in.
+6. On rev E the left knob is the tempo: one click is one BPM, from 60 to 240.
+
+| rev E | |
+| - | - |
+| left knob | the tempo, one BPM a click, 60 to 240. It is TUNE > TEMPO, so it is saved with the song. The screen shows the BPM for a moment |
+| a hand over the sensor | the breakdown. Under 19 cm the lead is out, under 14 cm the chords too, under 9 cm the bass too. The drums play on. Each part comes back 2 cm higher than it went (21, 16, 11 cm). When the hand leaves, all are back after about half a second |
+| push the left knob | REC |
 
 ## Writing
 
@@ -24,11 +36,16 @@ Hold the knob again to go back.
 | - | - |
 | stick left / right | the cursor along the steps, and on into the next bar |
 | stick up / down | the row |
+| left knob (rev E) | the cursor along the steps, one step a click, and on into the next bar |
+| hold the right knob down and turn the left one (rev E) | the row, one a click |
 | turn the knob | the note higher or lower (an empty step gets a note); the chord; which drum; which pattern |
 | press the knob | nothing, a note, an accented note, nothing. On a note's tail: the note ends there |
 | press and turn | the note longer or shorter; the chord's kind (plain, seventh, sus, fifth) |
 | tap REC | play this bar round and round; on the SONG row, the song from here. Tap again to stop |
 | hold REC a second | empty this row's part in this bar |
+
+On rev E "the knob" in this table is the right knob, and REC is the left knob's push. A hand over the sensor does
+nothing while you write.
 
 A note's tail can glide: put the cursor on the tail and turn. The note slides to that pitch from there.
 
@@ -92,6 +109,10 @@ It runs on a board: flashed on a rev C Stack on 2026-11-10, it starts, plays and
 AMIGA console, no dropped audio after the start). It has not been played much yet. The load of the other seven
 consoles, long sessions and the link with a second board have only been checked in the simulator.
 [docs/MANUAL.md](docs/MANUAL.md) has every setting.
+
+Rev E's left knob and hand are tested in the simulator only. They have run on no board: no rev E has been built
+yet. The heights at which the parts drop out are untried on a real hand. What a rev E cannot do that a board with a
+joystick can is in the manual ("Rev E").
 
 The two classical songs are Grieg's "In the Hall of the Mountain King" and Mozart's "Rondo alla Turca", set by hand.
 The other five were written for PIXEL.

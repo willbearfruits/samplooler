@@ -16,7 +16,9 @@
 // Without a stick (a board that has none): turning walks the cursor step by step and on into the next row; press
 // and turn is then the pitch, the chord, the drum or the pattern.
 //
-// On rev E the left encoder takes the stick's place (ed_in below is where it will come in).
+// On rev E (no stick, two knobs) the left knob is the stick's left and right: the cursor along the steps, a step a
+// detent, and on into the next bar. The right knob writes, as on a board with a stick. The row: hold the right knob
+// down and turn the left one (that press is then neither a press nor a hold). A hand over the sensor does nothing here.
 #include "pixel.h"
 #include "ui.h"
 #include "params.h"
@@ -37,7 +39,10 @@ static px_pattern_t clip;
 static bool    clip_ok;
 static int     idle_ms, rec_ms, play_asked = -1, drag_used, blink;
 static bool    rec_was, rec_cleared, rec_ready;
-static int     learned;                              // bit 0 moved, 1 turned, 2 pressed (the editor's own little coach)
+static int     learned;                              // bit 0 moved, 1 turned, 2 pressed (the editor's own little coach),
+                                                     // 3 changed the row with the two knobs (rev E)
+static bool    two_knobs;                            // the board has the left knob and no stick (rev E)
+static bool    row_press;                            // rev E: the left knob was turned during this press of the right one
 
 // what the hands did this tick, whichever controls the board has
 typedef struct { int dx, dy, turn, drag; bool tap, play; } ed_in_t;
@@ -279,13 +284,20 @@ void edit_tick(const ctl_t *c)
 {
     static rep_t rx, ry;
     if (!open_) return;
-    if (c->knob_hold) { edit_hold(); return; }                   // held again: back to playing
+    bool stick = c->has_joy;
+    two_knobs = !stick && c->has_lknob;
+    int along = 0, rows = 0;
+    if (two_knobs && c->lknob) { if (c->knob_down) { rows = c->lknob; row_press = true; } else along = c->lknob; }
+    if (c->knob_hold && !row_press) { edit_hold(); return; }     // held again: back to playing
     ui_awake();
     ed_in_t in = { 0 };
-    bool stick = c->has_joy;
     if (stick) {
         in.dx = axis(c->jx, &rx, 320, 90);
         in.dy = -axis(c->jy, &ry, 420, 260);                     // up on the stick is up on the screen
+        if (c->knob_down && c->knob_turned) in.drag = c->knob; else in.turn = c->knob;
+    } else if (two_knobs) {                                      // rev E: the left knob moves, the right one writes
+        in.dx = along; in.dy = rows;                             // (a turn to the right is a row down the screen)
+        if (rows) learned |= 8;
         if (c->knob_down && c->knob_turned) in.drag = c->knob; else in.turn = c->knob;
     } else {                                                     // no stick: the knob walks, pressed it changes
         if (c->knob_down && c->knob_turned) in.turn = c->knob;
@@ -298,8 +310,8 @@ void edit_tick(const ctl_t *c)
             learned |= 1; idle_ms = 0;
         }
     }
-    in.tap = c->knob_tap;
-    if (!c->knob_down) drag_used = 0;
+    in.tap = c->knob_tap && !row_press;                          // (the press that held the knob for a row puts nothing)
+    if (!c->knob_down) { drag_used = 0; row_press = false; }
     // REC: a tap plays or stops; a second held empties the row's part in this bar
     if (!c->rec && !rec_was) rec_ready = true;                   // it has been up since the editor opened
     if (rec_ready) {
@@ -319,7 +331,8 @@ void edit_tick(const ctl_t *c)
     rec_was = c->rec;
 
     if (in.dy) { row = clampi(row + in.dy, 0, ROW_N - 1); learned |= 1; idle_ms = 0; if (row == ROW_DRUMS && !px_pos.running) px_audition_drums((uint8_t)(1u << drum)); }
-    if (in.dx) { move_step(in.dx); learned |= 1; idle_ms = 0; }
+    for (int k = in.dx < 0 ? -in.dx : in.dx; k > 0; k--) move_step(in.dx < 0 ? -1 : 1);   // (the stick: one; a knob may give more)
+    if (in.dx) { learned |= 1; idle_ms = 0; }
     if (in.turn) { value(in.turn); learned |= 2; coach_done(LEARN_INST + 8); }
     if (in.drag) { drag(in.drag); idle_ms = 0; }
     if (in.tap) { press(); learned |= 4; coach_done(LEARN_INST + 9); }
@@ -591,8 +604,9 @@ void edit_draw(const view_t *v)
     // the editor's own coach: one line at the bottom until each thing has been done once
     const char *hint = NULL;
     if (idle_ms > 2500) {
-        if (!(learned & 1)) hint = "STICK: MOVE.  UP, DOWN: THE PART";
-        else if (!(learned & 2)) hint = row == ROW_DRUMS ? "TURN: PICK A DRUM" : "TURN THE KNOB: THE NOTE";
+        if (!(learned & 1)) hint = two_knobs ? "LEFT KNOB: ALONG THE STEPS" : "STICK: MOVE.  UP, DOWN: THE PART";
+        else if (two_knobs && !(learned & 8)) hint = "HOLD RIGHT, TURN LEFT: PART";
+        else if (!(learned & 2)) hint = row == ROW_DRUMS ? "TURN: PICK A DRUM" : two_knobs ? "RIGHT KNOB: THE NOTE" : "TURN THE KNOB: THE NOTE";
         else if (!(learned & 4)) hint = "PRESS: PUT IT, PRESS AGAIN: ACCENT";
     }
     if (hint) { oled_rect(0, 57, OLED_W, 7, false); oled_ftext_c(F_TINY, 64, 58, hint, 1); }
