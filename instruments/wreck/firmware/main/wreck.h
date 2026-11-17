@@ -124,6 +124,8 @@ typedef struct {
     float dive;                // 0..1 stick down: the break and the amp pitched down, up to an octave
     float crush;               // 0..1 stick left: bits and rate (FX)
     float drive;               // 0..1 stick right: drive (FX), and the amp's gain
+                               // (rev E has no stick: its left knob is the crush and the drive, a hand over its
+                               // sensor the roll, or what WRECK > HAND says; the same four values either way)
     bool  running;             // false: stopped (REC tapped; the FX brake has run): BEAT and AMP make no new notes
 } perf_t;
 extern volatile perf_t perf;
@@ -167,6 +169,19 @@ float host_out_env(void);                       // the whole output's envelope (
 int   host_degree_at(uint32_t frame);           // the chord (a scale degree) at a frame: exact on a bar line, where
                                                 // song.degree may lag a tick. UI or audio task
 const char *host_zone_name(int z);              // "BREAKCORE" ...
+// Rev E's two parts, for the screen (the host fills it every tick; UI task). On a board with a stick: all 0.
+enum { HAND_ROLL, HAND_DIVE, HAND_CRUSH, HAND_DRIVE, HAND_N };   // WRECK > HAND
+#define LK_FULL 12             // the left knob's detents from the middle to full, either way
+typedef struct {
+    bool  lknob;               // there is a left knob
+    int   lk;                  // where it is: -LK_FULL (full crush) .. 0 (neither) .. LK_FULL (full drive)
+    int   lk_ms;               // how long ago it last turned, ms (the scene names it for a moment)
+    bool  hand;                // there is a sensor, and SYSTEM > HAND is on
+    bool  hand_seen;           // a hand is over it now
+    int   hand_mode;           // HAND_*
+    float hand_v;              // what the hand is worth now, 0..1 (0: away, or the grid is open)
+} wr_reve_t;
+const wr_reve_t *wr_reve(void);
 void  scene_draw(const view_t *v);              // inst_scene.c: the whole frame
 bool  scene_splash(int f);
 void  scene_saver(uint32_t f);

@@ -8,6 +8,9 @@
 //   the amp      (towards DRONE) a stack of two cabinets sliding in from the right, its cones pumping with the amp,
 //                smoke rising off it; the waveform is left as a slow line along the floor
 //   the grid     BEAT's own drawing while the knob holds it
+//   rev E        the left knob as a small gauge at the top of the scene (its middle marked, filled towards CRUSH on
+//                the left or DRIVE on the right; just turned, its word and number take the break's name's place); a
+//                hand over the sensor as a bar that comes down on the break, named after what it does
 #include "wreck.h"
 #include "ui.h"
 #include "front.h"
@@ -178,6 +181,32 @@ static void amp_scene(const view_t *v, int x0, float fade)
     }
 }
 
+// ---------------------------------------------------------------- rev E: the left knob, the hand
+#define LKG_W (2 * LK_FULL + 1)                    // the gauge: a pixel a detent, the middle one in the middle
+static void lknob_gauge(int rx, const wr_reve_t *e)                  // its right edge at rx, rows 17..23
+{
+    int x0 = rx - LKG_W, cx = x0 + LK_FULL, mx = cx + e->lk;
+    oled_rect(x0 - 2, 16, LKG_W + 4, 9, false);
+    oled_hline_pat(x0, 20, LKG_W, 0x55, true);
+    oled_line(x0, 19, x0, 21, true); oled_line(x0 + LKG_W - 1, 19, x0 + LKG_W - 1, 21, true);
+    oled_pixel(cx, 17, true); oled_pixel(cx, 23, true);            // the middle: neither
+    if (e->lk) oled_rect(e->lk < 0 ? mx : cx, 19, abs(e->lk) + 1, 3, true);
+    oled_rect(mx - 1, 18, 3, 5, true);
+}
+static const char *const hand_word[HAND_N] = { "ROLL", "DIVE", "CRUSH", "DRIVE" };
+static void hand_bar(int x_right, const wr_reve_t *e)                // from row 27 (far) down to the break's middle line
+{
+    if (!e->hand || (!e->hand_seen && e->hand_v <= 0.0f)) return;
+    int y = 27 + (int)(e->hand_v * (float)(WAVE_Y - 27) + 0.5f);
+    oled_rect(0, y - 2, x_right, 5, false);                         // it parts the break: a dark band, the bar in it
+    oled_hline_pat(0, y, x_right, 0xFF, true);
+    int w = oled_pill_w(F_TINY, hand_word[e->hand_mode]);
+    int px = (x_right - w) / 2;
+    if (px < 0) px = 0;
+    oled_rect(px - 2, y - 5, w + 4, 11, false);
+    oled_pill(F_TINY, px, y - 4, hand_word[e->hand_mode], true);
+}
+
 // ---------------------------------------------------------------- the whole frame
 void scene_draw(const view_t *v)
 {
@@ -191,11 +220,21 @@ void scene_draw(const view_t *v)
         if (amp_x > OLED_W - 1) amp_x = OLED_W - 1;
         break_scene(v, &bv, fade > 0.0f ? amp_x - 2 : OLED_W, fade);
         if (fade > 0.0f) amp_scene(v, amp_x, fade);
+        const wr_reve_t *e = wr_reve();                              // (a board with a stick: nothing of it is drawn)
+        int x_right = fade > 0.0f ? amp_x - 2 : OLED_W;
+        hand_bar(x_right, e);
         // the break's name and the machine's tempo, small, top left of the scene
         grid_t g; wr_grid_get(&g);
         char b[32];
         float bpm = song.bpm * (g.feel_q >= 0 ? (float)(1 << g.feel_q) : 1.0f / (float)(1 << -g.feel_q));
         snprintf(b, sizeof b, "%s %d", kit_break()->name ? kit_break()->name : "", (int)(bpm + 0.5f));
+        if (e->lknob) {
+            lknob_gauge(x_right - 1, e);
+            if (e->lk_ms < 1200) {                                    // just turned: what it is on, and how far
+                if (e->lk) snprintf(b, sizeof b, "%s %d", e->lk < 0 ? "CRUSH" : "DRIVE", abs(e->lk));
+                else snprintf(b, sizeof b, "MIDDLE");
+            }
+        }
         oled_ftext(F_TINY, 1, 18, b);
         if (kit_rendering()) {                                        // a built-in break being printed: a bar fills
             int pc = kit_rendering();

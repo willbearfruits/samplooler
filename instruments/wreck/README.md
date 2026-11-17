@@ -13,6 +13,8 @@ Firmware for the Samplooler Stack (ESP32-S3).
 2. Turn the knob. Four zones: BREAKCORE (x2 the tempo), HARDCORE (x1), SLUDGE (x1/2), DRONE (x1/4).
 3. Tip it forward for more chaos, back to drag the tape. Roll left to reverse, right to stutter.
 4. The stick: up a roll, down a dive, left crush, right drive. Knock on the box for a fill.
+   A rev E board (the Vessel) has no stick. Its left knob is the crush and the drive, and a hand held over the
+   sensor is the roll (see Controls).
 5. Hold the knob to chop the break yourself on a 16-step grid.
 6. Hold BOOT to sample a break (the mic, the computer over USB, or WRECK itself); a take is 8 seconds at most.
    Tap BOOT to stop and start. BOOT stands in for REC because SYSTEM > REC BUTTON starts OFF on WRECK; turn it on
@@ -35,9 +37,15 @@ over USB (the board is a USB sound card), and hold REC.
 | tip forward / back | chaos / drag the tape |
 | roll left / right | reverse / stutter |
 | stick | up roll, down dive, left crush, right drive |
+| left knob (rev E) | left of the middle crush, right of the middle drive. 12 clicks to full. It stays where you leave it; the screen shows where it is. It starts in the middle |
+| a hand over the sensor (rev E) | a roll, faster the lower the hand (from 25 cm down to 4 cm). Take the hand away and it stops |
+| WRECK > HAND (rev E) | what the hand does: ROLL, DIVE, CRUSH or DRIVE |
 | knock | a fill |
 | hold REC (BOOT) | sample a break |
 | tap REC (BOOT) | stop / start |
+
+On a rev E the left knob's push is the REC button. It starts OFF like every REC pin on WRECK: use BOOT, or turn on
+SYSTEM > REC BUTTON.
 
 ## Sounds
 
@@ -61,3 +69,6 @@ cd firmware && idf.py build
 Built 2026-10-16. An earlier build ran on a board from the 17th. The production sweep of the 18th has run only in
 the simulator so far (164 checks, among them a long run in each zone with sounds, takes and the tempo changing). In the simulator it needs less than half of what SING and BAND need at their busiest, so it should fit.
 A new built-in break takes a few seconds to print on the board.
+
+Rev E's left knob and hand were added on 2026-11-16. They are tested in the simulator only: no rev E board has run
+WRECK yet, and the hand's range and feel are untried.

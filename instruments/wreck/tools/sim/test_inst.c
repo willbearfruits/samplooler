@@ -16,6 +16,7 @@ __attribute__((weak)) void test_mod_kit(void) { }
 __attribute__((weak)) void test_mod_beat(void) { }
 __attribute__((weak)) void test_mod_amp(void) { }
 __attribute__((weak)) void test_mod_fx(void) { }
+void test_rev_e(void);
 bool sim_menu_param(int p);
 void sim_menu_close(void);
 void wr_prof(float *us, int n);
@@ -348,4 +349,5 @@ void inst_tests(void)
     sweep();
     soak();
     cost();
+    test_rev_e();                                                 // test_reve.c: the left knob and the hand, on a rev E
 }

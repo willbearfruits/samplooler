@@ -35,6 +35,8 @@ STEPS picks which steps the two ends use (x2-x1/4, x1-x1/4, x2-x1/2, or STAY x1)
 | stick up | a roll on the slice playing, faster and rising the further |
 | stick down | dive: the break and the amp drop, down to an octave |
 | stick left / right | crush / drive |
+| left knob (rev E) | crush to the left of the middle, drive to the right |
+| a hand over the sensor (rev E) | a roll, faster and rising the lower the hand; or what WRECK > HAND says |
 | knock on the box | a fill (longer when harder); towards DRONE a chord hit |
 | hold REC (0.3 s or more) | sample a new break (below) |
 | tap REC | stop (the tape brakes to a halt, STOP in the header); tap again to start (it spins up) |
@@ -44,8 +46,39 @@ the joystick's click) does nothing until you turn it on. BOOT is a REC button on
 a sustain pedal (MIDI CC 64) and MIDI note 60. A REC that is already down when WRECK starts counts for nothing until
 it has been let go.
 
-SYSTEM has the core's settings: volume, speaker, mic gain, tilt setup, motion, the joystick, the REC button, MIDI
-channel and CC out, the LED, hints, the screen saver, ABOUT and RESET ALL.
+SYSTEM has the core's settings: volume, speaker, mic gain, tilt setup, motion, the joystick, the hand's sensor
+(rev E), the REC button, MIDI channel and CC out, the LED, hints, the screen saver, ABOUT and RESET ALL.
+
+## Rev E (the Vessel): the left knob and the hand
+
+A rev E board has no stick. It has a second knob, on the left, and a sensor in the middle of the board that measures
+how high a hand is held over it. The same firmware runs on both boards and finds out by itself which one it is on.
+On a board with a stick nothing here applies, and WRECK > HAND does nothing.
+
+**The left knob** is the stick's left and right. It has a middle: left of it is the crush, right of it the drive.
+Each click is a twelfth, so twelve clicks from the middle give as much as the stick pushed all the way. Turning
+further does nothing. It stays where you leave it. It is in the middle when WRECK is switched on, and the position
+is not saved. The gauge at the top of the scene shows it: a mark on the middle, filled to the left for crush and to
+the right for drive. Just after a turn the break's name gives way to CRUSH or DRIVE with the number of clicks, or
+MIDDLE. The left knob works the same while the menu or the step grid is open.
+
+**The hand** is the stick's up: the roll. The sensor sees a hand from 25 cm down; at 4 cm it is worth as much as
+the stick pushed all the way. The roll starts at about 22 cm with 2 hits a step and goes to 4, 8, 16 and 32 as the
+hand comes down (near 18, 14, 10 and 6 cm), rising in pitch as the stick's roll does. Take the hand away and the
+roll is gone in about a fifth of a second. A bar on the screen comes down on the break with the hand and says what
+the hand does.
+
+WRECK > HAND picks what the hand does instead: ROLL, DIVE (the break and the amp drop, an octave at 4 cm), CRUSH
+or DRIVE. With CRUSH or DRIVE, the hand and the left knob work on the same effect and the larger of the two counts.
+There is one hand, so the roll and the dive cannot be played at once as the stick cannot either. While the step grid
+is open the hand does nothing.
+
+Anything within 25 cm over the sensor counts as a hand. SYSTEM > HAND: OFF switches the sensor off.
+
+The left knob's push is the REC button of a rev E. It starts OFF like every REC pin on WRECK (above).
+
+All of this has been tested in the simulator only. No rev E board has run WRECK yet, so the hand's range, how
+steady it holds and how the knob feels are untried.
 
 ## The breaks
 
@@ -87,6 +120,8 @@ snare, R ride ...) and its trick. Opening it sets BEAT > PATTERN to MINE; AUTO g
 | REC tap | stop / run the grid (stopped, you hear each slice as you pick it) |
 | REC held 1 s | back to the break's own order |
 | stick | left and right the step, up and down the trick |
+
+On a rev E the knob does all of it; the left knob stays the crush and the drive.
 
 The grid is saved with a sound.
 
@@ -142,6 +177,7 @@ it (MINOR, PHRYGIAN) without changing the flock's.
 | CHANGE |  | How a new tempo comes in: TAPE STOP, CUT |
 | KNOCKS |  | A knock is a fill: OFF, ON |
 | KNOCK SENSE |  | More: softer knocks count (0..100 %) |
+| HAND |  | What a hand over it does: ROLL, DIVE, CRUSH, DRIVE |
 
 ### BEAT
 
@@ -307,6 +343,7 @@ four zones, the song's beat (four dots, the bar's first bigger), the link (two b
 board is linked and in time; a blinking dot while it looks for one) and the level. Along its bottom edge, the pattern's steps
 and the one playing. The scene is the break's waveform with its slices at the breakcore end (the slice playing lit
 and jolted by the edits), the amp stack in smoke at the doom end; the break's name and the machine's tempo top left.
+On a rev E: the left knob's gauge at the top of the scene, and a bar that comes down on the break with the hand.
 
 The LED runs from hot pink at BREAKCORE to a dim red at DRONE, brighter on the beat; red while sampling; nearly off
 when stopped. SYSTEM > LED sets how bright it is.
@@ -317,7 +354,7 @@ On the channel set in SYSTEM > MIDI CH, both ways. In: the settings on the CCs i
 number have no CC: the WRECK, SAMPLE, MIX, SONG and LINK pages, so the axis is the knob's only); a program change
 picks a sound in the list's order (the ten, then any saved with SAVE AS); CC 64 (a sustain pedal) and note 60 are
 REC; note 64 holds and frees the motion. Out: a CC when a setting is changed on the device, a program change on a sound change,
-and with SYSTEM > MIDI CC OUT on the lean (CC 12, 13) and the stick (CC 14, 15).
+and with SYSTEM > MIDI CC OUT on the lean (CC 12, 13), the stick (CC 14, 15) and on a rev E the hand (CC 16).
 
 ## When something is wrong
 
@@ -326,6 +363,8 @@ and with SYSTEM > MIDI CC OUT on the lean (CC 12, 13) and the stick (CC 14, 15).
 - The take ends before you let go: a take is 8 seconds at most. Let go of REC before it counts again.
 - NOTHING HEARD: NO BREAK: the sound was under KIT 2 > GATE, or the source is not the one playing (SAMPLE FROM).
 - Knocks are missed, or it fills by itself when you carry it: WRECK > KNOCK SENSE, or KNOCKS: OFF.
+- A rev E rolls (or dives, crushes, drives) by itself: something is within 25 cm over the sensor. SYSTEM > HAND: OFF.
+- A rev E sounds crushed or driven after a sound change: the left knob is not in the middle. The gauge shows it.
 - Sampling from USB is silent: the computer must play to the board's sound card (WRECK in the sound settings).
 - The tempo will not change: a loop on a linked board keeps it (A LOOP KEEPS THE TEMPO). SONG > TEMPO follows the flock.
 - Back to new: SYSTEM > RESET ALL (the REC-at-power-on reset of the core needs REC BUTTON on).

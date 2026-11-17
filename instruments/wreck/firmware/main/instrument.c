@@ -8,6 +8,9 @@
 //   the tilt      forward: chaos (more edits); back: the tape drags slower, flat again it catches up
 //   the roll      left: reverse and smear; right: the stutter
 //   the stick     up: a rising roll; down: the dive (an octave down); left: crush; right: drive
+//   rev E         has no stick. The left knob: left of its middle the crush, right of it the drive (it stays where
+//                 it is left). A hand over the sensor: the roll, more the lower (WRECK > HAND: or the dive, the
+//                 crush, the drive). Its left knob's push is REC, which starts OFF here like every REC pin
 //   a knock       a fill (BEAT), a chord hit (AMP, towards DRONE)
 //
 // The axis's zones set the FEEL: the machine runs at the song's tempo x2, x1, x1/2, x1/4 (TEMPO STEPS), always on
@@ -56,6 +59,7 @@ enum {
     H_DRUMS, H_AMP,
     H_TEMPO, H_KEY, H_SCALE, H_PROG, H_HOLD, H_BARS,
     H_LINK, H_GROUP, H_RANGE, H_PEERS,
+    H_HAND,                    // (added last: no other setting's number moves)
     H_N
 };
 #define HB (M_N * MOD_PARAMS_MAX)
@@ -90,6 +94,7 @@ static const char *const prog_l[NPROGS] = { "HOLD", "I V vi IV", "vi IV I V", "I
 static const char *const chord_l[] = { "I", "II", "III", "IV", "V", "VI", "VII" };
 static const char *const bars_l[] = { "1 BAR", "2 BARS", "HALF BAR" };
 static const char *const range_l[] = { "NEAR", "ROOM", "FAR" };
+static const char *const hand_l[HAND_N] = { "ROLL", "DIVE", "CRUSH", "DRIVE" };
 
 #define SYS PF_SYS
 static const param_t host_params[H_N] = {
@@ -112,6 +117,7 @@ static const param_t host_params[H_N] = {
     [H_GROUP]  = { "GROUP", "ngrp", G_LINK, PK_NUM, SYS | PF_NOCC | PF_INT, 1, 8, 1, 1, "", NULL, "SAME GROUP: THEY SYNC" },
     [H_RANGE]  = { "RANGE", "npow", G_LINK, PK_ENUM, SYS | PF_NOCC, 0, 2, 1, 1, "", range_l, "HOW FAR THE RADIO REACHES" },
     [H_PEERS]  = { "WHO IS THERE", "nwho", G_LINK, PK_ACT, PF_NOCC, 0, 0, 0, 0, "", NULL, "THE BOARDS LINKED NOW" },
+    [H_HAND]   = { "HAND", "xhnd", G_WRECK, PK_ENUM, SYS, 0, HAND_N - 1, 1, HAND_ROLL, "", hand_l, "WHAT A HAND OVER IT DOES" },
 };
 static UI_RAM param_t table[NPARAMS];
 static UI_RAM char placeholder_tag[M_N * MOD_PARAMS_MAX][5];
@@ -357,6 +363,40 @@ static float lean_amount(float deg, float dead, float full)
     float a = fabsf(deg);
     return a < dead ? 0.0f : clampf((a - dead) / (full - dead), 0.0f, 1.0f);
 }
+// Rev E (the Vessel) has no stick; its two parts stand in for it, through the same four values (perf).
+// The left knob is one position that stays where it is left (the middle at power-on): left of the middle the crush,
+// right of it the drive, LK_FULL detents to as much as the stick pushed all the way. A detent is spread over 30 ms.
+// The hand is the stick's up, the roll (or what WRECK > HAND says): c->hand, 0 at 25 cm to 1 at 4 cm, as far as the
+// stick pushed that far. Two things on its way here: a little slack (HAND_SLACK of the range each way, 4 mm), so a
+// hand trembling at one of the roll's borders does not flip the roll's speed; and once the hand has gone it lets go
+// in HAND_GONE, a straight line (the core's own value takes most of a second to fall under the roll's threshold).
+// While the grid is open the hand is left out, as the stick is; the knob's position stays as it is.
+#define HAND_SLACK 0.02f
+#define HAND_GONE  0.15f
+static wr_reve_t reve;
+static float lk_v, hd_b, hd_was;
+const wr_reve_t *wr_reve(void) { return &reve; }
+static void rev_e(const ctl_t *c, float *crush, float *drive, float *hand)
+{
+    reve.lknob = c->has_lknob; reve.hand = c->has_hand; reve.hand_mode = clampi((int)H(H_HAND), 0, HAND_N - 1);
+    if (!c->has_lknob) reve.lk = 0;
+    else if (c->lknob) { reve.lk = clampi(reve.lk + c->lknob, -LK_FULL, LK_FULL); reve.lk_ms = 0; ui_awake(); }
+    if (reve.lk_ms < 60000) reve.lk_ms += 10;
+    lk_v += clampf((float)reve.lk / (float)LK_FULL - lk_v, -c->dt / 0.36f, c->dt / 0.36f);
+    *crush = lk_v < 0.0f ? -lk_v : 0.0f;
+    *drive = lk_v > 0.0f ? lk_v : 0.0f;
+    float h = c->has_hand ? c->hand : 0.0f, t = 0.0f;
+    if (h > hd_b + HAND_SLACK) hd_b = h - HAND_SLACK;
+    else if (h < hd_b - HAND_SLACK) hd_b = h + HAND_SLACK;
+    bool on = c->has_hand && c->hand_seen && !beat_editing();
+    if (on) t = clampf((hd_b - HAND_SLACK) / (1.0f - 2.0f * HAND_SLACK), 0.0f, 1.0f);
+    reve.hand_v += clampf(t - reve.hand_v, on ? -0.2f : -c->dt / HAND_GONE, 0.2f);
+    reve.hand_seen = c->has_hand && c->hand_seen;
+    if (fabsf(h - hd_was) > 0.01f) ui_awake();                   // a hand playing keeps the screen on; one left there does not
+    hd_was = h;
+    *hand = reve.hand_v;
+}
+
 static void hands(const ctl_t *c)
 {
     float ly = c->has_imu ? c->lean_y : 0.0f, lx = c->has_imu ? c->lean_x : 0.0f;
@@ -366,10 +406,13 @@ static void hands(const ctl_t *c)
     perf.stutter = lx > 0.0f ? lean_amount(lx, 15.0f, 45.0f) : 0.0f;
     bool stick = c->has_joy && !beat_editing();                  // while the grid is open the stick is the grid's
     float jx = stick ? c->jx : 0.0f, jy = stick ? c->jy : 0.0f;
-    perf.roll = jy > 0.0f ? jy : 0.0f;
-    perf.dive = jy < 0.0f ? -jy : 0.0f;
-    perf.crush = jx < 0.0f ? -jx : 0.0f;
-    perf.drive = jx > 0.0f ? jx : 0.0f;
+    float kc, kd, hv;                                             // rev E's left knob and hand: 0 on a board without them
+    rev_e(c, &kc, &kd, &hv);
+    int hm = reve.hand_mode;
+    perf.roll = fmaxf(jy > 0.0f ? jy : 0.0f, hm == HAND_ROLL ? hv : 0.0f);
+    perf.dive = fmaxf(jy < 0.0f ? -jy : 0.0f, hm == HAND_DIVE ? hv : 0.0f);
+    perf.crush = fmaxf(jx < 0.0f ? -jx : 0.0f, fmaxf(kc, hm == HAND_CRUSH ? hv : 0.0f));   // hand and knob: the larger
+    perf.drive = fmaxf(jx > 0.0f ? jx : 0.0f, fmaxf(kd, hm == HAND_DRIVE ? hv : 0.0f));
     if (perf.chaos > 0.3f || perf.drag > 0.3f) coach_done(LEARN_TILT);
     if (c->has_joy && (fabsf(jx) > 0.5f || fabsf(jy) > 0.5f)) coach_done(LEARN_JOY);
 }
@@ -587,6 +630,8 @@ static const hint_t hints[] = {
     { "HOLD BOOT TO SAMPLE A NEW BREAK", LEARN_INST + 3 },
     { "TAP BOOT TO STOP, TAP AGAIN TO GO", LEARN_INST + 2 },
     { "STICK UP: A ROLL. DOWN: A DIVE", LEARN_JOY },
+    { "LEFT KNOB: CRUSH LEFT, DRIVE RIGHT", LEARN_LKNOB },          // (these two only on a rev E, the stick's only with one)
+    { "A HAND OVER IT ROLLS: LOWER, FASTER", LEARN_HAND },
     { "PRESS THE KNOB FOR THE MENU", LEARN_MENU },
 };
 
