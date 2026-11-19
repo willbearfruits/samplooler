@@ -68,7 +68,8 @@ It writes a WAV of each, `sounds.json` with numbers for each clip (peak, RMS, DC
 while the sound is wrong, so listen too.
 
 On the home Gitea, `.gitea/workflows/sounds.yml` runs it on every push and keeps the result as the artifact
-`sounds-<commit>`. It needs only gcc and Python 3, and takes about two to three minutes on four cores. These are
+`sounds-<commit>`. It needs only gcc and Python 3, and takes about 30 seconds on four cores (two minutes where Python has PIL: the
+simulators then make their GIFs too). These are
 the simulators, not a board: what the board's CPU, DAC and speaker do is not in them.
 
 ## What is where

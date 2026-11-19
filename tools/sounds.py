@@ -283,7 +283,8 @@ def main():
         try:
             commit = subprocess.run(["git", "rev-parse", "--short=9", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
         except OSError:
-            commit = "?"
+            pass
+    commit = commit or "?"
     doc = {"commit": commit, "sample_rate": SR, "silent_below_dbfs": SILENT_DB, "ceiling": CEILING, "click_jump": CLICK,
            "clips": [{"id": r["id"], "name": r["name"], "file": r["id"] + ".wav" if "m" in r else None, **(r.get("m") or {"ok": False, "problems": [r["note"]]})}
                      for r in results]}
