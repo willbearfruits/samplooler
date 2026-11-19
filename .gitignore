@@ -40,3 +40,5 @@ rig/twin/build/
 rig/view/build/
 rig/.venv/
 rig/**/__pycache__/
+# tools/sounds.py: the clips, their numbers and the page
+tools/sounds/out/

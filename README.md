@@ -59,6 +59,18 @@ at the git tag `checkpoint/boards-rev-c`. Firmware 0.2 adds a second knob and a 
 builds still need playing. What comes next is in [ROADMAP.md](ROADMAP.md). Reports of builds, good or bad, are welcome
 in the issues.
 
+## A sound for every commit
+
+`tools/sounds.py` builds the simulators on a PC and plays each program the same way every time: the Samplooler,
+HUFF, WRECK, MANTRA, BAND, PIXEL and SING, 10 to 14 seconds each, with the left knob, a hand over the sensor and REC.
+It writes a WAV of each, `sounds.json` with numbers for each clip (peak, RMS, DC, NaN, clipping, clicks) and an
+`index.html` to listen to them. It fails if a clip has a NaN, is silent or clips hard. The numbers can look fine
+while the sound is wrong, so listen too.
+
+On the home Gitea, `.gitea/workflows/sounds.yml` runs it on every push and keeps the result as the artifact
+`sounds-<commit>`. It needs only gcc and Python 3, and takes about two to three minutes on four cores. These are
+the simulators, not a board: what the board's CPU, DAC and speaker do is not in them.
+
 ## What is where
 
 | Path | What |

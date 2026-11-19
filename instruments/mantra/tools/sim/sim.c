@@ -136,14 +136,19 @@ static void gif_frame(void)
 }
 
 // ---------------------------------------------------------------- the simulation
+// 16-bit, clamped. With SIM_WAV_F32 set (tools/sounds.py), 32-bit float, every sample as it came out: a NaN, an
+// inf or anything past full scale stays in the file for the sound check to count.
 static void wav(const char *fn, const float *x, int n)
 {
     FILE *f = fopen(fn, "wb"); if (!f) return;
-    uint32_t sr = AUDIO_SR, br = sr * 2, ds = (uint32_t)n * 2, rs = 36 + ds; uint16_t one = 1, bits = 16, ba = 2;
+    const bool f32 = getenv("SIM_WAV_F32") != NULL;
+    uint16_t one = 1, fmt = f32 ? 3 : 1, bits = f32 ? 32 : 16, ba = bits / 8;
+    uint32_t sr = AUDIO_SR, br = sr * ba, ds = (uint32_t)n * ba, rs = 36 + ds;
     fwrite("RIFF", 1, 4, f); fwrite(&rs, 4, 1, f); fwrite("WAVEfmt ", 1, 8, f);
-    uint32_t fl = 16; fwrite(&fl, 4, 1, f); fwrite(&one, 2, 1, f); fwrite(&one, 2, 1, f); fwrite(&sr, 4, 1, f);
+    uint32_t fl = 16; fwrite(&fl, 4, 1, f); fwrite(&fmt, 2, 1, f); fwrite(&one, 2, 1, f); fwrite(&sr, 4, 1, f);
     fwrite(&br, 4, 1, f); fwrite(&ba, 2, 1, f); fwrite(&bits, 2, 1, f); fwrite("data", 1, 4, f); fwrite(&ds, 4, 1, f);
-    for (int i = 0; i < n; i++) { float v = x[i]; if (!(v == v)) v = 0; v = v > 1 ? 1 : v < -1 ? -1 : v; int16_t q = (int16_t)(v * 32767.0f); fwrite(&q, 2, 1, f); }
+    if (f32) fwrite(x, 4, (size_t)n, f);
+    else for (int i = 0; i < n; i++) { float v = x[i]; if (!(v == v)) v = 0; v = v > 1 ? 1 : v < -1 ? -1 : v; int16_t q = (int16_t)(v * 32767.0f); fwrite(&q, 2, 1, f); }
     fclose(f);
 }
 void sim_wav(const char *suffix, float t0, float t1)

@@ -209,7 +209,8 @@ flash and MIDI round trips, the whole menu, tilt setup for all 24 mountings, the
 edges for clicks, the screensaver, the factory reset, no NaN, nothing over full scale), then the
 instrument's own (`tools/sim/test_inst.c`). Out: `out/<name>.png` (every screen shot), `out/<name>-*.gif`
 (animations at 25 fps), `out/<name>.wav` (all of it), `out/results.json`. `./run.sh inst` runs only the
-instrument's own scenarios. `tools/sim/take.c` replays recorded motion (below): each instrument's `run.sh`
+instrument's own scenarios. With `SIM_WAV_F32` set the WAVs are 32-bit float, NaN and overs kept: `tools/sounds.py`
+in the Samplooler's repo reads each instrument's `<id>-rev-e.wav` that way, for the sound of every commit. `tools/sim/take.c` replays recorded motion (below): each instrument's `run.sh`
 compiles it with the sim's own files (`sim core_checks main take ...`).
 
 The sim boots as a rev C with a joystick. `sim_rev_e()` turns it into a rev E from then on (no joystick, the left

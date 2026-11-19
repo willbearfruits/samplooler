@@ -1,0 +1,38 @@
+# Every commit gets a sound: on each push to the home Gitea, tools/sounds.py builds the host simulators and renders a
+# short WAV of every program (Samplooler, HUFF, WRECK, MANTRA, BAND, PIXEL, SING) with the same scripted performance
+# each time, and measures each one. The WAVs, sounds.json and index.html (a player per clip, with its numbers) are
+# one artifact, sounds-<short sha>. The job fails if a clip has a NaN or inf, is silent, or clips hard.
+# Gitea only: GitHub's CI is .github/workflows.
+name: sounds
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  sounds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tools
+        run: |
+          S=; [ "$(id -u)" = 0 ] || S=sudo
+          if ! command -v gcc >/dev/null || ! command -v python3 >/dev/null; then
+            $S apt-get update -qq
+            $S env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends gcc libc6-dev python3
+          fi
+          gcc --version | head -1; python3 --version
+      - id: sha
+        run: echo "short=$(echo "${GITHUB_SHA}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+      - name: The sounds
+        run: python3 tools/sounds.py --out sounds
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: sounds-${{ steps.sha.outputs.short }}
+          path: |
+            sounds/*.wav
+            sounds/sounds.json
+            sounds/index.html
+            sounds/logs/
