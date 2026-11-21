@@ -55,7 +55,8 @@ Early. The current Stack is rev C: it has been made and runs the firmware (scree
 line out and USB MIDI/audio work). The board files here are rev D, which has not been built yet; rev C's files are
 at the git tag `checkpoint/boards-rev-c`. Firmware 0.2 adds a second knob and a hand sensor for the next board
 (rev E, the Vessel), a list menu and takes that start at the first sound. It builds and passes its tests on a PC
-(`tools/check.sh`); it has not run on a board. The four other instruments on the list have run on a board, but their latest
+(`tools/check.sh`); it has not run on a board yet. The first rev E boards were ordered in November 2026; built and
+tested, they are sold as the [Vessel](https://willbearfruits.github.io/V1/). The four other instruments on the list have run on a board, but their latest
 builds still need playing. What comes next is in [ROADMAP.md](ROADMAP.md). Reports of builds, good or bad, are welcome
 in the issues.
 
