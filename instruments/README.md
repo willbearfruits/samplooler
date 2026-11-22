@@ -6,12 +6,11 @@ and flash the Samplooler back the same way. Anyone can add an instrument.
 <!-- list -->
 | | What | Status |
 | - | - | - |
-| [BAND](band) | Six players on one board: drums you knock or draw on a grid, bass, lead, keys, ocarina and tuned feedback, in one key and tempo. Syncs with a SING. | Runs on a board |
 | [HUFF](huff) | Blow at the mic, tilt for the notes. Ocarina, flutes, clarinet, brass, a didgeridoo, a guitar, a synth lead and a choir, an amp behind them; links to the other boards. | Runs on a board |
 | [MANTRA](mantra) | A formant voice and a seated Buddha who sings it: monks chanting OM, overtone singing, Daisy Bell, and a wall of amps behind him. Tilt for the vowels, turn it for the overtones. | Runs on a board |
 | [WRECK](wreck) | A breakcore machine that turns into a doom machine: one knob from a chopped, rolled, crushed break at twice the tempo down to one chord held under a break slowed into thunder. | Runs on a board |
 
-Also in this folder, still in progress and not on the list: [PIXEL](pixel), [SING](sing) ([ROADMAP.md](../ROADMAP.md)).
+Also in this folder, still in progress and not on the list: [BAND](band), [PIXEL](pixel), [SING](sing) ([ROADMAP.md](../ROADMAP.md)).
 <!-- /list -->
 
 "Runs on a board" means it has started and kept up on real hardware but has not been played much yet.

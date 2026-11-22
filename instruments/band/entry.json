@@ -12,7 +12,8 @@
     "wifi"
   ],
   "status": "board",
-  "status_note": "Runs on a board: about 45 % CPU idle, 55 % with drums, bass, keys and lead playing, no dropouts (2026-10-15). Not played much yet.",
+  "status_note": "Runs on a board: about 45 % CPU idle, 55 % with drums, bass, keys and lead playing, no dropouts (2026-10-15). Not played much yet. Off the install page since 2026-11-22: its CPU-time checks pass on a desktop but fail on GitHub's shared build machines, which blocked the page. Back on once that is sorted.",
+  "listed": false,
   "image": "images/band-together.gif",
   "more": [
     "images/band-splash.gif",
